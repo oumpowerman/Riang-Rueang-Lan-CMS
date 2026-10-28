@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role-based access in the video production CMS",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Firebase Auth User UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "Display name of the team member" },
+        "role": { "type": "string", "enum": ["ADMIN", "EDITOR", "PRODUCER"], "description": "RBAC user role" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of registration" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "CategoryGroup": {
+      "title": "CategoryGroup",
+      "description": "Tier 0 top-level category group organizing main categories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique group ID (e.g. GRP-PERSON)" },
+        "name": { "type": "string", "description": "Group display name" },
+        "icon": { "type": "string", "description": "Group emoji or icon" },
+        "color": { "type": "string", "description": "Tailwind color token" },
+        "description": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "icon", "color"]
+    },
+    "CategoryTag": {
+      "title": "CategoryTag",
+      "description": "3-tier category tag hierarchy (Tier 1 Main vs Tier 2 Subcategory linked to Tier 0 CategoryGroup)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique tag identifier (e.g. TAG-0004)" },
+        "name": { "type": "string", "description": "Category or entity name" },
+        "groupType": { "type": "string", "enum": ["THEME", "PERSON", "ACTION", "GENERAL"] },
+        "groupId": { "type": "string", "description": "Parent Tier 0 CategoryGroup ID (e.g. GRP-PERSON)" },
+        "color": { "type": "string", "description": "Tailwind color token" },
+        "tier": { "type": "number", "description": "1 for Main Category, 2 for Subcategory" },
+        "parentId": { "type": "string", "description": "Parent category ID if Tier 2" },
+        "entityType": { "type": "string", "enum": ["PERSON", "ANIMAL", "TOPIC", "ACTION", "GENERAL"] },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "tier", "color"]
+    },
+    "Footage": {
+      "title": "Footage",
+      "description": "Individual video clip cut from live or standalone with usage history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique footage identifier" },
+        "title": { "type": "string", "description": "Clip highlight title" },
+        "durationSeconds": { "type": "number", "description": "Duration in seconds" },
+        "sourceLiveDate": { "type": "string" },
+        "sourceLiveTitle": { "type": "string" },
+        "tags": { "type": "array", "description": "Array of assigned category tag IDs" },
+        "primaryCategoryId": { "type": "string" },
+        "subcategoryIds": { "type": "array" },
+        "cooldownStatus": { "type": "string", "enum": ["NEW_UNTOUCHED", "READY_FRESH", "RECENT_COOLDOWN", "HIGH_VELOCITY"] },
+        "usageHistory": { "type": "array", "description": "History of episode usages" },
+        "totalUsageCount": { "type": "number" },
+        "usageLast90Days": { "type": "number" },
+        "daysSinceLastUsed": { "type": "number" },
+        "driveUrl": { "type": "string" },
+        "sourceUrl": { "type": "string" },
+        "mascotNotes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "durationSeconds", "tags"]
+    },
+    "Episode": {
+      "title": "Episode",
+      "description": "Master Episode combining 5 ranked footage slots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique episode ID" },
+        "title": { "type": "string", "description": "Episode title" },
+        "sequenceNumber": { "type": "number" },
+        "categoryGroupId": { "type": "string", "description": "Tier 0 Category Group ID" },
+        "productionTarget": { "type": "string", "enum": ["MAIN_CATEGORY_VARIETY", "SINGLE_SUBCATEGORY_SPECIAL"] },
+        "targetSubcategoryId": { "type": "string" },
+        "mainCategoryTagId": { "type": "string" },
+        "status": { "type": "string", "enum": ["DRAFT_PLANNING", "IN_EDITING", "RENDER_READY", "PUBLISHED", "ARCHIVED"] },
+        "recipeUsed": { "type": "string" },
+        "targetDurationSeconds": { "type": "number" },
+        "rankings": { "type": "array", "description": "5 ranked slots from 1 to 5" },
+        "creatorId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "productionTarget", "rankings", "status"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Global Time-Decay Velocity and cooldown rules",
+      "type": "object",
+      "properties": {
+        "cooldownDays": { "type": "number" },
+        "maxUsagePer90Days": { "type": "number" },
+        "minAvgDaysBetweenUses": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["cooldownDays", "maxUsagePer90Days", "minAvgDaysBetweenUses"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles and RBAC permissions"
+    },
+    "/category_groups/{groupId}": {
+      "schema": "CategoryGroup",
+      "description": "Global Tier 0 category groups"
+    },
+    "/categories/{categoryId}": {
+      "schema": "CategoryTag",
+      "description": "Global Tier 1 and Tier 2 category tags"
+    },
+    "/footages/{footageId}": {
+      "schema": "Footage",
+      "description": "Footage archive with cooldown analytics"
+    },
+    "/episodes/{episodeId}": {
+      "schema": "Episode",
+      "description": "Top 5 Master Episodes and production pipeline"
+    },
+    "/system_settings/{settingId}": {
+      "schema": "SystemSettings",
+      "description": "Global cooldown policy settings"
+    }
+  }
+}

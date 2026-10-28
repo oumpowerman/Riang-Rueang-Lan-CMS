@@ -1,0 +1,6 @@
+{
+  "name": "Riang-Rueang-Lan CMS",
+  "description": "ระบบจัดการคลังฟุตเทจและวางแผนผลิตคลิปจัดอันดับ 5 อันดับ ช่อง เรียงเรื่องลั่น (Universal Content Production Engine)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
