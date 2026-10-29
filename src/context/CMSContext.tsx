@@ -4,6 +4,7 @@ import {
   BuilderPreselectRequest,
   CategoryMatrixStat,
   CMSContextType,
+  QuickSortUndoRecord,
   SplitClipDraft,
   SubcategoryStat,
 } from './cms/cms.types';
@@ -19,6 +20,7 @@ export type {
   BuilderPreselectRequest,
   CategoryMatrixStat,
   CMSContextType,
+  QuickSortUndoRecord,
   SplitClipDraft,
   SubcategoryStat,
 };
@@ -81,6 +83,9 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFootage,
     sources,
     setSources,
+    tagMap: analytics.tagMap,
+    setSelectedFootageIdsForBatch: navigationState.setSelectedFootageIdsForBatch,
+    setActiveDragFootageIds: navigationState.setActiveDragFootageIds,
   });
 
   // 6. Actions: Episodes & Master Archive CRUD

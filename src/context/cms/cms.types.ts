@@ -67,6 +67,15 @@ export interface CategoryMatrixStat {
   specialEpisodeSubcategories: { subcategory: CategoryTag; count: number }[]; // Subcategories with >= 5 usable clips ready for solo EP
 }
 
+export interface QuickSortUndoRecord {
+  id: string;
+  targetTagId: string;
+  targetTagName: string;
+  movedCount: number;
+  previousTagsByFootageId: Record<string, string[]>;
+  timestamp: number;
+}
+
 export interface BuilderPreselectRequest {
   tagId: string;
   recipeId: MixRecipeId;
@@ -99,6 +108,10 @@ export interface CMSContextType {
   setIsBatchAssignCategoryModalOpen: (open: boolean) => void;
   selectedFootageIdsForBatch: string[];
   setSelectedFootageIdsForBatch: React.Dispatch<React.SetStateAction<string[]>>;
+  activeDragFootageIds: string[];
+  setActiveDragFootageIds: React.Dispatch<React.SetStateAction<string[]>>;
+  lastSelectedFootageId: string | null;
+  setLastSelectedFootageId: React.Dispatch<React.SetStateAction<string | null>>;
   isSourceSplitterModalOpen: boolean;
   setIsSourceSplitterModalOpen: (open: boolean) => void;
   activeSourceForSplitting: RawSource | null;
@@ -230,6 +243,10 @@ export interface CMSContextType {
     mode?: 'REPLACE' | 'APPEND'
   ) => void;
   batchDeleteFootage: (footageIds: string[]) => void;
+  lastQuickSortUndoRecord: QuickSortUndoRecord | null;
+  quickAssignCategoryToFootage: (footageIds: string[], targetTagId: string) => void;
+  undoLastQuickSort: () => void;
+  dismissQuickSortUndoRecord: () => void;
 
   // Actions: Episodes & Master Archive
   saveEpisode: (

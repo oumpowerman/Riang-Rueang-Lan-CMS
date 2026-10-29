@@ -1,4 +1,7 @@
+import { QuickSortUndoRecord } from '../../../context/cms/cms.types';
 import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
+
+export type { QuickSortUndoRecord };
 
 export interface MainCategoryOverviewItem {
   mainTag: CategoryTag;

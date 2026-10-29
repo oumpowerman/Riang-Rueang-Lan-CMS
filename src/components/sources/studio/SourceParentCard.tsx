@@ -8,8 +8,7 @@ import {
 } from 'lucide-react';
 import { ComputedFootage } from '../../../types/footage.types';
 import { RawSource } from '../../../types/source.types';
-import { SystemSettings } from '../../../types/settings.types';
-import { CategoryTag } from '../../../types/tag.types';
+import { CategoryTag, SystemSettings } from '../../../types/tag.types';
 import { formatThaiDate } from '../../../utils/fileNameGenerator';
 import { TagPill } from '../../ui/TagPill';
 import { SourceTimelineBar } from '../SourceTimelineBar';

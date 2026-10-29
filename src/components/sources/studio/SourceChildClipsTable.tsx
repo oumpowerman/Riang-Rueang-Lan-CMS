@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { ComputedFootage } from '../../../types/footage.types';
 import { RawSource } from '../../../types/source.types';
-import { SystemSettings } from '../../../types/settings.types';
+import { SystemSettings } from '../../../types/tag.types';
 import { hasRealDriveLink } from '../../../utils/fileNameGenerator';
 import { PaginationBar } from '../../ui/PaginationBar';
 import { StatusBadge } from '../../ui/StatusBadge';

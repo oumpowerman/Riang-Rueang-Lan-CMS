@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, GripVertical } from 'lucide-react';
 import { useCMS } from '../../../context/CMSContext';
 import { STAGING_TAG_ID, isFootageInStaging } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
@@ -25,6 +25,9 @@ export interface VaultFootageResultsSectionProps {
   onPageSizeChange: (size: number) => void;
   onSelectForTraceability: (id: string) => void;
   onQuickTagClick: (tagId: string) => void;
+  onSelectWithRange: (footageId: string, shiftKey?: boolean) => void;
+  onStartDragFootage: (footageId: string) => string[];
+  onEndDragFootage: () => void;
   onResetFilters: () => void;
   onOpenDirectFootageModal: () => void;
 }
@@ -43,10 +46,17 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
   onPageSizeChange,
   onSelectForTraceability,
   onQuickTagClick,
+  onSelectWithRange,
+  onStartDragFootage,
+  onEndDragFootage,
   onResetFilters,
   onOpenDirectFootageModal,
 }) => {
-  const { selectedFootageIdsForBatch, setSelectedFootageIdsForBatch } = useCMS();
+  const {
+    selectedFootageIdsForBatch,
+    setSelectedFootageIdsForBatch,
+    activeDragFootageIds,
+  } = useCMS();
 
   const isAllPaginatedSelected =
     paginatedFootage.length > 0 &&
@@ -66,9 +76,14 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
 
   const handleToggleSelectOne = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setSelectedFootageIdsForBatch((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    onSelectWithRange(id, e?.shiftKey);
+  };
+
+  const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, footageId: string) => {
+    const batchIds = onStartDragFootage(footageId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-footage-ids', JSON.stringify(batchIds));
+    e.dataTransfer.setData('text/plain', batchIds.join(','));
   };
 
   return (
@@ -151,6 +166,9 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                   footage={ft}
                   onSelectForTraceability={onSelectForTraceability}
                   onQuickTagClick={onQuickTagClick}
+                  onSelectWithRange={onSelectWithRange}
+                  onStartDragFootage={onStartDragFootage}
+                  onEndDragFootage={onEndDragFootage}
                 />
               </motion.div>
             ))}
@@ -180,7 +198,7 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-                    <th className="py-3 px-3 w-10 text-center">
+                    <th className="py-3 px-3 w-14 text-center">
                       <input
                         type="checkbox"
                         checked={isAllPaginatedSelected}
@@ -199,9 +217,13 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {paginatedFootage.map((ft, index) => {
                     const isSelected = selectedFootageIdsForBatch.includes(ft.id);
+                    const isBeingDragged = activeDragFootageIds.includes(ft.id);
                     return (
                       <motion.tr
                         key={ft.id}
+                        draggable
+                        onDragStartCapture={(e) => handleRowDragStart(e, ft.id)}
+                        onDragEndCapture={onEndDragFootage}
                         initial={{
                           opacity: 0,
                           y: 14,
@@ -218,23 +240,35 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                           damping: 28,
                           delay: Math.min(index * 0.035, 0.28),
                         }}
-                        onClick={() => onSelectForTraceability(ft.id)}
+                        onClick={(e) => {
+                          if (e.shiftKey) {
+                            handleToggleSelectOne(ft.id, e);
+                            return;
+                          }
+                          onSelectForTraceability(ft.id);
+                        }}
                         className={`cursor-pointer transition-colors group ${
-                          isSelected
+                          isBeingDragged
+                            ? 'bg-indigo-100/80 opacity-65'
+                            : isSelected
                             ? 'bg-indigo-50/70 hover:bg-indigo-100/60'
                             : 'hover:bg-slate-50'
                         }`}
                       >
                         <td
-                          className="py-3 px-3 w-10 text-center"
+                          className="py-3 px-3 w-14 text-center"
                           onClick={(e) => handleToggleSelectOne(ft.id, e)}
                         >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
-                          />
+                          <div className="inline-flex items-center gap-1">
+                            <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 cursor-grab shrink-0" />
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                              title="คลิกเพื่อเลือก หรือกด Shift+คลิก เพื่อเลือกเป็นช่วง"
+                            />
+                          </div>
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
                           {ft.id}

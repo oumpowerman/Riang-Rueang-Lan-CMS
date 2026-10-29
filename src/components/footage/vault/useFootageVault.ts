@@ -33,6 +33,16 @@ export const useFootageVault = () => {
     missingDriveFootages,
     selectedTagFilter,
     setSelectedTagFilter,
+    selectedFootageIdsForBatch,
+    setSelectedFootageIdsForBatch,
+    activeDragFootageIds,
+    setActiveDragFootageIds,
+    lastSelectedFootageId,
+    setLastSelectedFootageId,
+    lastQuickSortUndoRecord,
+    quickAssignCategoryToFootage,
+    undoLastQuickSort,
+    dismissQuickSortUndoRecord,
     setIsDirectFootageModalOpen,
     setIsGoogleDriveBatchModalOpen,
     openSourceSplitterFor,
@@ -518,6 +528,101 @@ export const useFootageVault = () => {
     currentPage,
   ]);
 
+  // ============================================================================
+  // Smart Drag & Drop, Shift+Click Range Selection & Bulk Selection Handlers
+  // ============================================================================
+  const isDraggingClips = activeDragFootageIds.length > 0;
+
+  const handleStartDragFootage = (footageId: string): string[] => {
+    const batchIds = selectedFootageIdsForBatch.includes(footageId)
+      ? selectedFootageIdsForBatch
+      : [footageId];
+    setActiveDragFootageIds(batchIds);
+    return batchIds;
+  };
+
+  const handleEndDragFootage = () => {
+    setActiveDragFootageIds([]);
+  };
+
+  const handleQuickAssignCategory = (footageIds: string[], targetTagId: string) => {
+    if (!footageIds.length) return;
+    quickAssignCategoryToFootage(footageIds, targetTagId);
+  };
+
+  const handleSelectWithRange = (footageId: string, shiftKey = false) => {
+    if (shiftKey && lastSelectedFootageId && lastSelectedFootageId !== footageId) {
+      const startIndex = filteredAndSortedFootage.findIndex(
+        (ft) => ft.id === lastSelectedFootageId
+      );
+      const endIndex = filteredAndSortedFootage.findIndex((ft) => ft.id === footageId);
+
+      if (startIndex !== -1 && endIndex !== -1) {
+        const minIdx = Math.min(startIndex, endIndex);
+        const maxIdx = Math.max(startIndex, endIndex);
+        const rangeIds = filteredAndSortedFootage
+          .slice(minIdx, maxIdx + 1)
+          .map((ft) => ft.id);
+
+        setSelectedFootageIdsForBatch((prev) =>
+          Array.from(new Set([...prev, ...rangeIds]))
+        );
+        setLastSelectedFootageId(footageId);
+        return;
+      }
+    }
+
+    setSelectedFootageIdsForBatch((prev) =>
+      prev.includes(footageId)
+        ? prev.filter((id) => id !== footageId)
+        : [...prev, footageId]
+    );
+    setLastSelectedFootageId(footageId);
+  };
+
+  const isAllPaginatedSelected = useMemo(() => {
+    return (
+      paginatedFootage.length > 0 &&
+      paginatedFootage.every((ft) => selectedFootageIdsForBatch.includes(ft.id))
+    );
+  }, [paginatedFootage, selectedFootageIdsForBatch]);
+
+  const handleToggleSelectAllInPage = () => {
+    if (paginatedFootage.length === 0) return;
+    const pageIds = paginatedFootage.map((f) => f.id);
+    if (isAllPaginatedSelected) {
+      const pageIdSet = new Set(pageIds);
+      setSelectedFootageIdsForBatch((prev) => prev.filter((id) => !pageIdSet.has(id)));
+    } else {
+      setSelectedFootageIdsForBatch((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const isAllStagingSelected = useMemo(() => {
+    return (
+      untaggedFootages.length > 0 &&
+      untaggedFootages.every((ft) => selectedFootageIdsForBatch.includes(ft.id))
+    );
+  }, [untaggedFootages, selectedFootageIdsForBatch]);
+
+  const handleSelectAllInStaging = () => {
+    if (untaggedFootages.length === 0) return;
+    const stagingIds = untaggedFootages.map((f) => f.id);
+    if (isAllStagingSelected) {
+      const stagingSet = new Set(stagingIds);
+      setSelectedFootageIdsForBatch((prev) => prev.filter((id) => !stagingSet.has(id)));
+    } else {
+      setSelectedFootageIdsForBatch((prev) =>
+        Array.from(new Set([...prev, ...stagingIds]))
+      );
+    }
+  };
+
+  const handleClearBatchSelection = () => {
+    setSelectedFootageIdsForBatch([]);
+    setLastSelectedFootageId(null);
+  };
+
   return {
     // Raw & Computed Data
     computedFootage,
@@ -562,6 +667,24 @@ export const useFootageVault = () => {
     setCurrentPage,
     pageSize,
     setPageSize,
+
+    // Multi-Select, Drag & Drop & Quick-Sort States
+    selectedFootageIdsForBatch,
+    setSelectedFootageIdsForBatch,
+    activeDragFootageIds,
+    isDraggingClips,
+    isAllPaginatedSelected,
+    isAllStagingSelected,
+    lastQuickSortUndoRecord,
+    handleStartDragFootage,
+    handleEndDragFootage,
+    handleQuickAssignCategory,
+    undoLastQuickSort,
+    dismissQuickSortUndoRecord,
+    handleSelectWithRange,
+    handleToggleSelectAllInPage,
+    handleSelectAllInStaging,
+    handleClearBatchSelection,
 
     // Handlers & Modal Actions
     isStagingFilterActive,

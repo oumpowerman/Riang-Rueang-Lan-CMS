@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, Folder, FolderOpen, Layers, Rocket, RotateCcw } from 'lucide-react';
-import { isStagingTagId } from '../../../services/seedData';
+import { isStagingGroupId, isStagingTagId } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { MixRecipeId } from '../../../utils/collisionDetector';
 import { CategoryGroupIcon } from '../../ui/CategoryGroupIcon';
@@ -22,6 +22,8 @@ export interface VaultThreeTierExplorerProps {
   activeMainCategory: MainCategoryOverviewItem | null;
   hasHierarchySelection: boolean;
   computedFootage: ComputedFootage[];
+  activeDragFootageIds: string[];
+  onQuickAssignCategory: (footageIds: string[], targetTagId: string) => void;
   onSelectGroup: (groupId: string) => void;
   onSelectMainCategory: (mainTagId: string) => void;
   onSelectSubcategory: (subTagId: string, mainTagId: string) => void;
@@ -43,6 +45,8 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
   activeMainCategory,
   hasHierarchySelection,
   computedFootage,
+  activeDragFootageIds,
+  onQuickAssignCategory,
   onSelectGroup,
   onSelectMainCategory,
   onSelectSubcategory,
@@ -52,6 +56,52 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
   onOpenThreeTierManager,
   onLaunchEpisodeBuilder,
 }) => {
+  const [dragOverTagId, setDragOverTagId] = useState<string | null>(null);
+  const isDragging = activeDragFootageIds.length > 0;
+
+  const extractDraggedFootageIds = (e: React.DragEvent): string[] => {
+    try {
+      const raw = e.dataTransfer.getData('application/x-footage-ids');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Fallback to activeDragFootageIds
+    }
+    return activeDragFootageIds;
+  };
+
+  const handleDragOverTag = (e: React.DragEvent, tagId: string) => {
+    if (isStagingTagId(tagId)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverTagId !== tagId) {
+      setDragOverTagId(tagId);
+    }
+  };
+
+  const handleDragLeaveTag = (e: React.DragEvent, tagId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragOverTagId === tagId) {
+      setDragOverTagId(null);
+    }
+  };
+
+  const handleDropOnTag = (e: React.DragEvent, targetTagId: string) => {
+    if (isStagingTagId(targetTagId)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTagId(null);
+    const ids = extractDraggedFootageIds(e);
+    if (ids.length > 0) {
+      onQuickAssignCategory(ids, targetTagId);
+    }
+  };
   return (
     <div className="bg-white border border-indigo-200/80 rounded-2xl shadow-2xs overflow-hidden">
       <div
@@ -172,6 +222,15 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                           whileTap={{ scale: 0.98 }}
                           transition={{ type: 'spring', stiffness: 420, damping: 28 }}
                           onClick={() => onSelectGroup(groupItem.group.id)}
+                          onDragEnter={() => {
+                            if (
+                              isDragging &&
+                              !isStagingGroupId(groupItem.group.id) &&
+                              selectedGroupId !== groupItem.group.id
+                            ) {
+                              onSelectGroup(groupItem.group.id);
+                            }
+                          }}
                           className={`relative text-left p-3.5 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-2.5 overflow-hidden ${
                             isGroupSelected
                               ? 'text-white border-indigo-600 ring-4 ring-indigo-500/20 shadow-sm'
@@ -294,6 +353,8 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                                 activeMainCategory?.mainTag.id === item.mainTag.id;
                               const isStaging = isStagingTagId(item.mainTag.id);
                               const isReady5 = !isStaging && item.usableCount >= 5;
+                              const isDropHover =
+                                !isStaging && dragOverTagId === item.mainTag.id;
 
                               return (
                                 <motion.button
@@ -310,8 +371,13 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                                   whileHover={{ y: -1.5 }}
                                   whileTap={{ scale: 0.97 }}
                                   onClick={() => onSelectMainCategory(item.mainTag.id)}
-                                  className={`relative text-left p-3 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-2 overflow-hidden ${
-                                    isSelected
+                                  onDragOver={(e) => handleDragOverTag(e, item.mainTag.id)}
+                                  onDragLeave={(e) => handleDragLeaveTag(e, item.mainTag.id)}
+                                  onDrop={(e) => handleDropOnTag(e, item.mainTag.id)}
+                                  className={`relative text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 overflow-hidden ${
+                                    isDropHover
+                                      ? 'bg-emerald-50 border-emerald-500 ring-3 ring-emerald-400/50 text-emerald-950 scale-[1.02] shadow-md'
+                                      : isSelected
                                       ? 'text-white border-sky-600 ring-3 ring-sky-400/30 shadow-xs'
                                       : 'bg-white hover:bg-sky-50/50 hover:border-sky-300 border-slate-200/90 text-slate-900'
                                   }`}
@@ -448,21 +514,33 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                               ft.tags.includes(sub.id)
                             ).length;
                             const isSubSelected = selectedTagFilter.includes(sub.id);
+                            const isSubDropHover = dragOverTagId === sub.id;
 
                             return (
-                              <TagPill
+                              <div
                                 key={sub.id}
-                                tag={sub}
-                                selected={isSubSelected}
-                                activeLayoutId="vault-active-subcat-pill"
-                                onClick={() =>
-                                  onSelectSubcategory(
-                                    sub.id,
-                                    activeMainCategory.mainTag.id
-                                  )
-                                }
-                                count={subCount}
-                              />
+                                onDragOver={(e) => handleDragOverTag(e, sub.id)}
+                                onDragLeave={(e) => handleDragLeaveTag(e, sub.id)}
+                                onDrop={(e) => handleDropOnTag(e, sub.id)}
+                                className={`inline-flex rounded-lg transition-transform ${
+                                  isSubDropHover
+                                    ? 'ring-3 ring-emerald-500 scale-105 bg-emerald-100'
+                                    : ''
+                                }`}
+                              >
+                                <TagPill
+                                  tag={sub}
+                                  selected={isSubSelected}
+                                  activeLayoutId="vault-active-subcat-pill"
+                                  onClick={() =>
+                                    onSelectSubcategory(
+                                      sub.id,
+                                      activeMainCategory.mainTag.id
+                                    )
+                                  }
+                                  count={subCount}
+                                />
+                              </div>
                             );
                           })}
                         </div>
