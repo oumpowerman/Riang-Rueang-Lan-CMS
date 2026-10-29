@@ -26,22 +26,26 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   switch (status) {
     case 'NEW_UNTOUCHED':
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-sky-50/80 border border-sky-200/90 text-sky-800 whitespace-nowrap shrink-0 shadow-2xs">
-          <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-          <span>{compact ? 'ใหม่แกะกล่อง' : 'ใหม่ · ยังไม่เคยใช้ (0 ครั้ง)'}</span>
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-sky-50/80 border border-sky-200/90 text-sky-800 whitespace-nowrap shrink-0"
+          title="คลิปใหม่ ยังไม่เคยใช้งาน"
+        >
+          <Sparkles className="w-3 h-3 text-sky-600 shrink-0" />
+          <span>{compact ? 'ใหม่' : 'คลิปใหม่ (0 ครั้ง)'}</span>
         </span>
       );
 
     case 'READY_FRESH':
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50/80 border border-emerald-200/90 text-emerald-800 whitespace-nowrap shrink-0 shadow-2xs">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50/80 border border-emerald-200/90 text-emerald-800 whitespace-nowrap shrink-0"
+          title={`พร้อมใช้งาน (พักมาแล้ว ${daysSinceLastUse ?? 0} วัน · ใช้แล้ว ${totalUsageCount ?? 0} ครั้ง)`}
+        >
+          <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
           <span>
             {compact
-              ? `พร้อมใช้ (พัก ${daysSinceLastUse ?? 0}วัน${
-                  totalUsageCount !== undefined ? ` · ${totalUsageCount}x` : ''
-                })`
-              : `พร้อมผสมใหม่ · พัก ${daysSinceLastUse ?? 0} วัน`}
+              ? `พร้อมใช้ · ${daysSinceLastUse ?? 0}ว.`
+              : `พร้อมใช้ · พัก ${daysSinceLastUse ?? 0} วัน`}
           </span>
         </span>
       );
@@ -53,16 +57,23 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         daysSinceLastUse < greenReadyDays;
 
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50/80 border border-amber-200/90 text-amber-900 whitespace-nowrap shrink-0 shadow-2xs">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50/80 border border-amber-200/90 text-amber-900 whitespace-nowrap shrink-0"
+          title={
+            isRestingTowardsGreen
+              ? `เพิ่งพ้นระยะพัก (${daysSinceLastUse}/${greenReadyDays} วัน)`
+              : `ใช้ถี่ (${usageLast90Days ?? 3} ครั้งใน 90 วัน)`
+          }
+        >
+          <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
           <span>
             {isRestingTowardsGreen
               ? compact
-                ? `เพิ่งพ้นพัก (${daysSinceLastUse}/${greenReadyDays}วัน)`
-                : `เพิ่งพ้นพัก · พัก ${daysSinceLastUse}/${greenReadyDays} วัน`
+                ? `พัก ${daysSinceLastUse}/${greenReadyDays}ว.`
+                : `เพิ่งพ้นพัก · ${daysSinceLastUse}/${greenReadyDays} วัน`
               : compact
-              ? `ใช้ถี่ (${usageLast90Days ?? 3}x/90วัน)`
-              : `ใช้ถี่ · ${usageLast90Days ?? 3} ครั้งใน 90 วัน`}
+              ? `ใช้ถี่ · ${usageLast90Days ?? 3}x`
+              : `ใช้ถี่ · ${usageLast90Days ?? 3} ครั้ง/90ว.`}
           </span>
         </span>
       );
@@ -76,16 +87,23 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
           ? Math.max(1, cooldownDays - daysSinceLastUse)
           : cooldownDays;
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-50/80 border border-rose-200/90 text-rose-900 whitespace-nowrap shrink-0 shadow-2xs">
-          <Clock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-rose-50/80 border border-rose-200/90 text-rose-900 whitespace-nowrap shrink-0"
+          title={
+            isMaxedOut
+              ? `ใช้ครบโควตาสูงสุด ${totalUsageCount} ครั้ง`
+              : `อยู่ระหว่างพักคูลดาวน์ รออีก ${remaining} วัน`
+          }
+        >
+          <Clock className="w-3 h-3 text-rose-600 shrink-0" />
           <span>
             {isMaxedOut
               ? compact
-                ? `ครบเพดาน (${totalUsageCount} ครั้ง)`
-                : `ห้ามซ้ำ · ใช้ครบ ${totalUsageCount} ครั้ง`
+                ? `ครบโควตา (${totalUsageCount}x)`
+                : `ครบโควตา · ${totalUsageCount} ครั้ง`
               : compact
-              ? `รอพัก ${remaining} วัน`
-              : `ห้ามซ้ำ · รออีก ${remaining} วัน`}
+              ? `พักอีก ${remaining}ว.`
+              : `คูลดาวน์ · รอ ${remaining} วัน`}
           </span>
         </span>
       );

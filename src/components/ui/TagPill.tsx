@@ -81,6 +81,8 @@ export const TagPill: React.FC<TagPillProps> = ({
   const isSubcategory = tag.tier === 2 || Boolean(tag.parentId);
   const paddingClass = size === 'md' ? 'px-3 py-1.5 text-sm' : 'px-2.5 py-1 text-xs';
 
+  const displayLabel = isStaging ? 'ไม่มีหมวดหมู่' : `#${tag.name}`;
+
   if (onClick || onRemove) {
     return (
       <motion.button
@@ -95,7 +97,7 @@ export const TagPill: React.FC<TagPillProps> = ({
               ? 'text-white border-indigo-600 shadow-xs'
               : 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
             : isStaging
-            ? 'bg-amber-50/90 text-amber-950 border-amber-300 hover:bg-amber-100/80'
+            ? 'bg-amber-50/90 text-amber-900 border-amber-200 hover:bg-amber-100/80'
             : isSubcategory
             ? 'bg-amber-50/70 text-amber-900 border-amber-200/90 hover:bg-amber-100/70'
             : 'bg-slate-50/90 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
@@ -113,7 +115,7 @@ export const TagPill: React.FC<TagPillProps> = ({
           {showParent && parentTag && (
             <span className="text-slate-400 font-normal">{parentTag.name} &rsaquo;</span>
           )}
-          <span>#{tag.name}</span>
+          <span>{displayLabel}</span>
           {count !== undefined && (
             <span className="font-mono tabular-nums opacity-85 text-xs">({count})</span>
           )}
@@ -146,7 +148,7 @@ export const TagPill: React.FC<TagPillProps> = ({
     <span
       className={`inline-flex items-center gap-1.5 ${paddingClass} font-semibold ${
         isStaging
-          ? 'bg-amber-50/90 text-amber-950 border border-amber-300 rounded-lg'
+          ? 'bg-amber-50/90 text-amber-900 border border-amber-200 rounded-lg'
           : isSubcategory
           ? 'bg-amber-50/70 text-amber-900 border border-amber-200/70 rounded-lg'
           : `${textColor} bg-slate-50 border border-slate-200/80 rounded-lg`
@@ -156,7 +158,7 @@ export const TagPill: React.FC<TagPillProps> = ({
       {showParent && parentTag && (
         <span className="text-slate-400 font-normal">{parentTag.name} &rsaquo;</span>
       )}
-      <span>#{tag.name}</span>
+      <span>{displayLabel}</span>
       {count !== undefined && (
         <span className="font-mono tabular-nums text-slate-500 text-xs">({count})</span>
       )}

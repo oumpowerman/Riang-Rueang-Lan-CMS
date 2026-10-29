@@ -39,6 +39,7 @@ export function useCMSFootageActions({
     originalUrl: string;
     tags: string[];
     driveFileUrl: string;
+    thumbnailUrl?: string;
     mascotNotes: string;
     durationSec?: number;
   }): Footage => {
@@ -54,6 +55,7 @@ export function useCMSFootageActions({
       durationSec: payload.durationSec || 25,
       tags: normalizeFootageTags(payload.tags),
       driveFileUrl: payload.driveFileUrl.trim(),
+      ...(payload.thumbnailUrl ? { thumbnailUrl: payload.thumbnailUrl.trim() } : {}),
       standardFileName,
       mascotNotes: payload.mascotNotes.trim(),
       createdAt: getReferenceTodayDate(),
@@ -234,6 +236,7 @@ export function useCMSFootageActions({
       title: string;
       driveFileUrl?: string;
       originalUrl?: string;
+      thumbnailUrl?: string;
       mascotNotes?: string;
       tags?: string[];
       durationSec?: number;
@@ -263,6 +266,7 @@ export function useCMSFootageActions({
           item.tags && item.tags.length > 0 ? item.tags : [STAGING_TAG_ID]
         ),
         driveFileUrl: (item.driveFileUrl || '').trim(),
+        ...(item.thumbnailUrl ? { thumbnailUrl: item.thumbnailUrl.trim() } : {}),
         standardFileName,
         mascotNotes: (item.mascotNotes || '').trim(),
         createdAt: getReferenceTodayDate(),

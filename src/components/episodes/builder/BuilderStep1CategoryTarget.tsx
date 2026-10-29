@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowRight, ChevronDown, ChevronRight, Folder, FolderTree, Target, Layers, Sparkles, CheckCircle2, Plus } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, Folder, Target, Layers, Sparkles, CheckCircle2 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { EpisodeProductionTarget } from '../../../types/episode.types';
 import { ComputedFootage } from '../../../types/footage.types';
@@ -31,7 +31,6 @@ interface BuilderStep1CategoryTargetProps {
   onSelectSoloMode: () => void;
   onSelectSubcategory: (subId: string, subName: string) => void;
   onOpenStatusRuleModal: () => void;
-  onOpenThreeTierManager: () => void;
 }
 
 const SLIDE_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -59,7 +58,6 @@ export const BuilderStep1CategoryTarget: React.FC<BuilderStep1CategoryTargetProp
   onSelectSoloMode,
   onSelectSubcategory,
   onOpenStatusRuleModal,
-  onOpenThreeTierManager,
 }) => {
   return (
     <motion.section
@@ -215,19 +213,10 @@ export const BuilderStep1CategoryTarget: React.FC<BuilderStep1CategoryTargetProp
             >
               {/* TIER 0: Compact Segmented Group Selector */}
               <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold text-slate-700">
-                    1. กลุ่มหมวดหมู่:
+                    1. กลุ่มหมวดหมู่
                   </span>
-
-                  <button
-                    type="button"
-                    onClick={onOpenThreeTierManager}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-900 text-[11px] font-bold transition-colors cursor-pointer"
-                  >
-                    <FolderTree className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>จัดการหมวดหมู่</span>
-                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -285,18 +274,10 @@ export const BuilderStep1CategoryTarget: React.FC<BuilderStep1CategoryTargetProp
                     transition={{ duration: 0.2, ease: 'easeOut' }}
                   >
                     {categoriesInSelectedGroup.length === 0 ? (
-                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-2">
-                        <p className="text-xs font-bold text-slate-700">
+                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                        <p className="text-xs text-slate-500">
                           ยังไม่มีหมวดหมู่หลักในกลุ่ม &ldquo;{activeGroup?.name}&rdquo;
                         </p>
-                        <button
-                          type="button"
-                          onClick={onOpenThreeTierManager}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>เพิ่มหมวดหมู่หลัก</span>
-                        </button>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -409,16 +390,8 @@ export const BuilderStep1CategoryTarget: React.FC<BuilderStep1CategoryTargetProp
                     >
                       <div className="pt-1.5">
                         {currentSubcategories.length === 0 ? (
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-2.5">
-                            <span>หมวดหลักนี้ยังไม่มีหมวดหมู่ย่อย</span>
-                            <button
-                              type="button"
-                              onClick={onOpenThreeTierManager}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>เพิ่มหมวดหมู่ย่อย</span>
-                            </button>
+                          <div className="text-xs text-amber-800 bg-amber-50/80 border border-amber-200 rounded-xl p-2.5">
+                            หมวดหลักนี้ยังไม่มีหมวดหมู่ย่อย
                           </div>
                         ) : (
                           <div className="flex flex-wrap gap-1.5">

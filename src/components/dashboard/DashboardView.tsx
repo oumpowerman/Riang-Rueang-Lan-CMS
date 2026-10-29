@@ -1,5 +1,5 @@
 import React from 'react';
-import { QuickStartGuideBanner } from '../workflow/QuickStartGuideBanner';
+import { AnimatePresence } from 'motion/react';
 import { DashboardStepNav } from './overview/DashboardStepNav';
 import { DashboardStep1Ingestion } from './overview/DashboardStep1Ingestion';
 import { DashboardStep2HealthExplorer } from './overview/DashboardStep2HealthExplorer';
@@ -26,6 +26,7 @@ export const DashboardView: React.FC = () => {
     launchEpisodeBuilderForCategory,
 
     activeWorkflowStep,
+    stepDirection,
     viewMode,
     setViewMode,
     handleSelectStep,
@@ -73,10 +74,7 @@ export const DashboardView: React.FC = () => {
   } = useDashboardOverview();
 
   return (
-    <div className="space-y-6">
-      {/* Quick-Start 4-Step Collapsible Guide Banner */}
-      <QuickStartGuideBanner />
-
+    <div className="space-y-5">
       {/* Step-by-Step Guided Focus Bar (Navigation Controller) */}
       <DashboardStepNav
         activeWorkflowStep={activeWorkflowStep}
@@ -89,99 +87,109 @@ export const DashboardView: React.FC = () => {
         episodesCount={episodes.length}
       />
 
-      {/* Main Workflow Content Container */}
-      <div className="space-y-6">
-        {(viewMode === 'ALL' || activeWorkflowStep === 1) && (
-          <DashboardStep1Ingestion
-            activeWorkflowStep={activeWorkflowStep}
-            viewMode={viewMode}
-            handleSelectStep={handleSelectStep}
-            sources={sources}
-            filteredSources={filteredSources}
-            sourceSearch={sourceSearch}
-            setSourceSearch={setSourceSearch}
-            metrics={metrics}
-            untaggedFootages={untaggedFootages}
-            missingDriveFootages={missingDriveFootages}
-            openSourceSplitterFor={openSourceSplitterFor}
-            setIsDirectFootageModalOpen={setIsDirectFootageModalOpen}
-            setActiveTab={setActiveTab}
-          />
-        )}
+      {/* Main Workflow Content Container with Directional Step Transitions */}
+      <div className="space-y-5 overflow-x-hidden">
+        <AnimatePresence mode="wait" custom={stepDirection} initial={false}>
+          {(viewMode === 'ALL' || activeWorkflowStep === 1) && (
+            <DashboardStep1Ingestion
+              key="step-1"
+              activeWorkflowStep={activeWorkflowStep}
+              stepDirection={stepDirection}
+              viewMode={viewMode}
+              handleSelectStep={handleSelectStep}
+              sources={sources}
+              filteredSources={filteredSources}
+              sourceSearch={sourceSearch}
+              setSourceSearch={setSourceSearch}
+              metrics={metrics}
+              untaggedFootages={untaggedFootages}
+              missingDriveFootages={missingDriveFootages}
+              openSourceSplitterFor={openSourceSplitterFor}
+              setIsDirectFootageModalOpen={setIsDirectFootageModalOpen}
+              setActiveTab={setActiveTab}
+            />
+          )}
 
-        {(viewMode === 'ALL' || activeWorkflowStep === 2) && (
-          <DashboardStep2HealthExplorer
-            activeWorkflowStep={activeWorkflowStep}
-            viewMode={viewMode}
-            handleSelectStep={handleSelectStep}
-            globalSearchQuery={globalSearchQuery}
-            setGlobalSearchQuery={setGlobalSearchQuery}
-            activeStatusFilter={activeStatusFilter}
-            setActiveStatusFilter={setActiveStatusFilter}
-            activeFlowFilter={activeFlowFilter}
-            setActiveFlowFilter={setActiveFlowFilter}
-            setActiveCategoryIdFilter={setActiveCategoryIdFilter}
-            footageSortMode={footageSortMode}
-            setFootageSortMode={setFootageSortMode}
-            footageLimit={footageLimit}
-            setFootageLimit={setFootageLimit}
-            metrics={metrics}
-            settings={settings}
-            isStatusRulesExpanded={isStatusRulesExpanded}
-            setIsStatusRulesExpanded={setIsStatusRulesExpanded}
-            setIsStatusRuleModalOpen={setIsStatusRuleModalOpen}
-            hasAnyActiveFilter={hasAnyActiveFilter}
-            resetAllFilters={resetAllFilters}
-            filteredFootages={filteredFootages}
-            tagMap={tagMap}
-            copiedId={copiedId}
-            handleCopyText={handleCopyText}
-            setTraceabilityFootageId={setTraceabilityFootageId}
-          />
-        )}
+          {(viewMode === 'ALL' || activeWorkflowStep === 2) && (
+            <DashboardStep2HealthExplorer
+              key="step-2"
+              activeWorkflowStep={activeWorkflowStep}
+              stepDirection={stepDirection}
+              viewMode={viewMode}
+              handleSelectStep={handleSelectStep}
+              globalSearchQuery={globalSearchQuery}
+              setGlobalSearchQuery={setGlobalSearchQuery}
+              activeStatusFilter={activeStatusFilter}
+              setActiveStatusFilter={setActiveStatusFilter}
+              activeFlowFilter={activeFlowFilter}
+              setActiveFlowFilter={setActiveFlowFilter}
+              setActiveCategoryIdFilter={setActiveCategoryIdFilter}
+              footageSortMode={footageSortMode}
+              setFootageSortMode={setFootageSortMode}
+              footageLimit={footageLimit}
+              setFootageLimit={setFootageLimit}
+              metrics={metrics}
+              settings={settings}
+              isStatusRulesExpanded={isStatusRulesExpanded}
+              setIsStatusRulesExpanded={setIsStatusRulesExpanded}
+              setIsStatusRuleModalOpen={setIsStatusRuleModalOpen}
+              hasAnyActiveFilter={hasAnyActiveFilter}
+              resetAllFilters={resetAllFilters}
+              filteredFootages={filteredFootages}
+              tagMap={tagMap}
+              copiedId={copiedId}
+              handleCopyText={handleCopyText}
+              setTraceabilityFootageId={setTraceabilityFootageId}
+            />
+          )}
 
-        {(viewMode === 'ALL' || activeWorkflowStep === 3) && (
-          <DashboardStep3CategoryAssembly
-            activeWorkflowStep={activeWorkflowStep}
-            viewMode={viewMode}
-            handleSelectStep={handleSelectStep}
-            productionRadar={productionRadar}
-            isRadarExpanded={isRadarExpanded}
-            setIsRadarExpanded={setIsRadarExpanded}
-            categoryMatrix={categoryMatrix}
-            filteredCategories={filteredCategories}
-            categoryFilterMode={categoryFilterMode}
-            setCategoryFilterMode={setCategoryFilterMode}
-            categorySearch={categorySearch}
-            setCategorySearch={setCategorySearch}
-            categorySortMode={categorySortMode}
-            setCategorySortMode={setCategorySortMode}
-            activeCategoryIdFilter={activeCategoryIdFilter}
-            setActiveCategoryIdFilter={setActiveCategoryIdFilter}
-            tagMap={tagMap}
-            setIsTagManagerOpen={setIsTagManagerOpen}
-            setIsDirectFootageModalOpen={setIsDirectFootageModalOpen}
-            setTraceabilityFootageId={setTraceabilityFootageId}
-            handleOpenCategoryInVault={handleOpenCategoryInVault}
-            launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
-          />
-        )}
+          {(viewMode === 'ALL' || activeWorkflowStep === 3) && (
+            <DashboardStep3CategoryAssembly
+              key="step-3"
+              activeWorkflowStep={activeWorkflowStep}
+              stepDirection={stepDirection}
+              viewMode={viewMode}
+              handleSelectStep={handleSelectStep}
+              productionRadar={productionRadar}
+              isRadarExpanded={isRadarExpanded}
+              setIsRadarExpanded={setIsRadarExpanded}
+              categoryMatrix={categoryMatrix}
+              filteredCategories={filteredCategories}
+              categoryFilterMode={categoryFilterMode}
+              setCategoryFilterMode={setCategoryFilterMode}
+              categorySearch={categorySearch}
+              setCategorySearch={setCategorySearch}
+              categorySortMode={categorySortMode}
+              setCategorySortMode={setCategorySortMode}
+              activeCategoryIdFilter={activeCategoryIdFilter}
+              setActiveCategoryIdFilter={setActiveCategoryIdFilter}
+              tagMap={tagMap}
+              setIsTagManagerOpen={setIsTagManagerOpen}
+              setIsDirectFootageModalOpen={setIsDirectFootageModalOpen}
+              setTraceabilityFootageId={setTraceabilityFootageId}
+              handleOpenCategoryInVault={handleOpenCategoryInVault}
+              launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
+            />
+          )}
 
-        {(viewMode === 'ALL' || activeWorkflowStep === 4) && (
-          <DashboardStep4ArchiveRoi
-            activeWorkflowStep={activeWorkflowStep}
-            viewMode={viewMode}
-            handleSelectStep={handleSelectStep}
-            episodes={episodes}
-            filteredEpisodes={filteredEpisodes}
-            episodeSearch={episodeSearch}
-            setEpisodeSearch={setEpisodeSearch}
-            metrics={metrics}
-            setActiveTab={setActiveTab}
-            setSelectedEpisodeDetailId={setSelectedEpisodeDetailId}
-            setTraceabilityFootageId={setTraceabilityFootageId}
-          />
-        )}
+          {(viewMode === 'ALL' || activeWorkflowStep === 4) && (
+            <DashboardStep4ArchiveRoi
+              key="step-4"
+              activeWorkflowStep={activeWorkflowStep}
+              stepDirection={stepDirection}
+              viewMode={viewMode}
+              handleSelectStep={handleSelectStep}
+              episodes={episodes}
+              filteredEpisodes={filteredEpisodes}
+              episodeSearch={episodeSearch}
+              setEpisodeSearch={setEpisodeSearch}
+              metrics={metrics}
+              setActiveTab={setActiveTab}
+              setSelectedEpisodeDetailId={setSelectedEpisodeDetailId}
+              setTraceabilityFootageId={setTraceabilityFootageId}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

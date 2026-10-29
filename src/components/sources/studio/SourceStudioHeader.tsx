@@ -1,5 +1,6 @@
 import React from 'react';
-import { HardDrive, Scissors } from 'lucide-react';
+import { Scissors, Sparkles } from 'lucide-react';
+import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 
 interface SourceStudioHeaderProps {
   onOpenDrive1ToN: () => void;
@@ -11,36 +12,31 @@ export const SourceStudioHeader: React.FC<SourceStudioHeaderProps> = ({
   onOpenSourceSplitter,
 }) => {
   return (
-    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="space-y-1">
-        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-          <Scissors className="w-5 h-5 text-indigo-600" />
-          <span>
-            สตูดิโอวางแผนขุดทองจากไลฟ์สด (Flow B: 1-to-Many Source Mining Studio)
-          </span>
-        </h1>
-        <p className="text-xs text-slate-500">
-          บริหารคลิปต้นฉบับยาว (`SRC-XXXX`) วิเคราะห์ช่วงเวลาที่ยังขุดไม่ครบ ดึงโฟลเดอร์ไลฟ์จาก Google Drive แบบ 1:N และส่งช็อตเด็ดเข้าหน้าจัด 5 อันดับได้ทันที
-        </p>
+    <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-indigo-50/70 via-white to-sky-50/60 border border-indigo-200/70 rounded-2xl px-4 py-3 shadow-2xs">
+      <div className="flex items-center gap-2 text-xs font-bold text-indigo-950">
+        <span className="w-7 h-7 rounded-xl bg-indigo-100/90 text-indigo-700 flex items-center justify-center shrink-0">
+          <Sparkles className="w-3.5 h-3.5" />
+        </span>
+        <span>จัดการไลฟ์ต้นฉบับ & หั่นคลิปย่อย (1:N)</span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         <button
           type="button"
           onClick={onOpenDrive1ToN}
-          className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
+          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-800 bg-white hover:bg-indigo-50/60 border border-indigo-200/90 rounded-xl shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
         >
-          <HardDrive className="w-4 h-4" />
-          <span>+ ดึงโฟลเดอร์ไลฟ์จาก Google Drive (1:N)</span>
+          <GoogleDriveIcon className="w-4 h-4 shrink-0" />
+          <span>ดึงไลฟ์จากไดร์ฟ</span>
         </button>
 
         <button
           type="button"
           onClick={onOpenSourceSplitter}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
         >
-          <Scissors className="w-4 h-4" />
-          <span>+ ลงทะเบียนคลิปยาว & หั่นหลายฟุต (Flow 1:N)</span>
+          <Scissors className="w-3.5 h-3.5" />
+          <span>+ หั่นคลิปจากไลฟ์</span>
         </button>
       </div>
     </div>

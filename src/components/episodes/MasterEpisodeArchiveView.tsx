@@ -6,7 +6,6 @@ import {
   ChevronRight,
   LayoutGrid,
   List,
-  Plus,
   RotateCcw,
   Search,
   Package,
@@ -29,7 +28,6 @@ export const MasterEpisodeArchiveView: React.FC = () => {
     tags,
     tagMap,
     setSelectedEpisodeDetailId,
-    setActiveTab,
     launchEpisodeBuilderForCategory,
   } = useCMS();
 
@@ -192,72 +190,64 @@ export const MasterEpisodeArchiveView: React.FC = () => {
   const hasActiveFilters = searchQuery.trim() !== '' || categoryFilter !== 'ALL';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* =====================================================================
-          1. HEADER & REAL FOOTAGE UTILIZATION OVERVIEW (LIGHT & BRIGHT THEME)
+          1. HEADER & 4 CONCISE KPI CARDS (LIGHT PASTEL THEME WITH TOOLTIPS)
          ===================================================================== */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-5 shadow-2xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <Package className="w-5 h-5 text-indigo-600 shrink-0" />
-              <span>ภาพรวมคลังคลิปหลัก & ความคุ้มค่าการใช้ฟุตเทจ (Master Archive Overview)</span>
-            </h1>
-            <p className="text-xs text-slate-500">
-              เปรียบเทียบสัดส่วนการผลิตคลิปหลักแต่ละหมวดหมู่จากมากไปน้อย พร้อมตรวจสอบว่าฟุตเทจในคลังถูกหยิบมาใช้งานอย่างคุ้มค่าแล้วหรือยัง
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('EPISODE_BUILDER')}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>จัดชุดคลิป 5 อันดับใหม่</span>
-          </button>
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+        <div>
+          <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <Package className="w-5 h-5 text-indigo-600 shrink-0" />
+            <span>คลังคลิปหลัก (Master Archive)</span>
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            ประวัติคลิปหลักที่จัดทำเสร็จ และอัตราการหยิบฟุตเทจมาใช้งานจริง
+          </p>
         </div>
 
-        {/* 4 Bright Utilization & Category Balance KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+        {/* 4 Concise KPI Cards with Distinct Color Tints & Tooltips */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Card 1: Total Episodes */}
           <button
             type="button"
             onClick={() => setCategoryFilter('ALL')}
-            className={`text-left p-4 rounded-xl border transition-all cursor-pointer ${
+            title="จำนวนคลิปหลักที่จัดทำเสร็จทั้งหมดในระบบ (คลิกเพื่อแสดงทุกหมวดหมู่)"
+            className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
               categoryFilter === 'ALL'
                 ? 'bg-indigo-50/90 text-indigo-950 border-indigo-400 ring-1 ring-indigo-300 shadow-2xs'
                 : 'bg-slate-50/70 hover:bg-indigo-50/40 border-slate-200/90 text-slate-900'
             }`}
           >
-            <div className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
-              <Package className="w-3.5 h-3.5 text-indigo-600" />
-              <span>คลิปหลักทั้งหมดในคลัง</span>
+            <div className="text-xs font-bold text-indigo-700 flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>คลังทั้งหมด</span>
             </div>
-            <div className="mt-1.5 flex items-baseline justify-between">
+            <div className="mt-1 flex items-baseline justify-between">
               <span className="text-2xl font-mono font-extrabold tabular-nums text-slate-900">
                 {overviewMetrics.totalEpisodes}
                 <span className="text-xs font-sans font-bold text-slate-500 ml-1">ตอน</span>
               </span>
-              <span className="text-[11px] font-mono text-slate-600">
-                รวม {overviewMetrics.totalEpisodes * 5} ช็อตอันดับ
+              <span className="text-[11px] font-mono text-slate-500">
+                รวม {overviewMetrics.totalEpisodes * 5} ช็อต
               </span>
             </div>
           </button>
 
           {/* Card 2: Footage Utilization Rate */}
-          <div className="p-4 rounded-xl border border-emerald-200/90 bg-emerald-50/60 text-slate-900">
-            <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
-              <Repeat className="w-3.5 h-3.5 text-emerald-600" />
-              <span>อัตราหยิบฟุตเทจมาใช้งานจริง</span>
+          <div
+            title="สัดส่วนฟุตเทจในคลังที่ถูกนำมาผลิตคลิปหลักแล้วอย่างน้อย 1 ครั้ง"
+            className="p-3.5 rounded-xl border border-emerald-200/90 bg-emerald-50/60 text-slate-900 cursor-default"
+          >
+            <div className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+              <Repeat className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>อัตราการใช้ฟุต</span>
             </div>
-            <div className="mt-1.5 flex items-baseline justify-between">
+            <div className="mt-1 flex items-baseline justify-between">
               <span className="text-2xl font-mono font-extrabold tabular-nums text-emerald-700">
                 {overviewMetrics.utilizationRate}%
               </span>
               <span className="text-[11px] font-mono text-emerald-800">
-                ใช้แล้ว {overviewMetrics.usedFootage}/{overviewMetrics.totalFootage} ฟุต (วนซ้ำ{' '}
-                {overviewMetrics.reusedMoreThanOnce})
+                ใช้แล้ว {overviewMetrics.usedFootage}/{overviewMetrics.totalFootage} ฟุต (ซ้ำ {overviewMetrics.reusedMoreThanOnce})
               </span>
             </div>
           </div>
@@ -273,23 +263,23 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                     : overviewMetrics.topCategory!.mainTag.id
                 )
               }
-              className={`text-left p-4 rounded-xl border transition-all cursor-pointer ${
+              title={`หมวดหมู่ที่มีการผลิตคลิปหลักมากที่สุดในคลัง: #${overviewMetrics.topCategory.mainTag.name} (คลิกเพื่อกรอง)`}
+              className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
                 categoryFilter === overviewMetrics.topCategory.mainTag.id
                   ? 'bg-sky-100/90 text-sky-950 border-sky-400 ring-1 ring-sky-300 shadow-2xs'
                   : 'bg-sky-50/60 hover:bg-sky-100/60 border-sky-200/90 text-slate-900'
               }`}
             >
-              <div className="text-xs font-semibold text-sky-800 flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5 text-sky-600" />
-                <span>หมวดหมู่ที่ผลิตมากที่สุด</span>
+              <div className="text-xs font-bold text-sky-800 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>ผลิตสูงสุด</span>
               </div>
-              <div className="mt-1.5 flex items-baseline justify-between gap-2">
-                <span className="text-sm sm:text-base font-extrabold text-slate-900 truncate">
+              <div className="mt-1 flex items-baseline justify-between gap-2">
+                <span className="text-sm font-extrabold text-slate-900 truncate">
                   #{overviewMetrics.topCategory.mainTag.name}
                 </span>
                 <span className="text-xs font-mono font-extrabold tabular-nums text-sky-800 shrink-0">
-                  {overviewMetrics.topCategory.episodeCount} EP (
-                  {overviewMetrics.topCategory.episodeSharePercent}%)
+                  {overviewMetrics.topCategory.episodeCount} EP ({overviewMetrics.topCategory.episodeSharePercent}%)
                 </span>
               </div>
             </button>
@@ -306,23 +296,23 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                     : overviewMetrics.leastCategory!.mainTag.id
                 )
               }
-              className={`text-left p-4 rounded-xl border transition-all cursor-pointer ${
+              title={`หมวดที่ผลิตน้อยที่สุด: #${overviewMetrics.leastCategory.mainTag.name} (แนะนำจัดทำเพิ่มจากฟุตเทจที่ยังว่าง ${overviewMetrics.leastCategory.usableFootageInCat} ฟุต)`}
+              className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
                 categoryFilter === overviewMetrics.leastCategory.mainTag.id
                   ? 'bg-amber-100/90 text-amber-950 border-amber-400 ring-1 ring-amber-300 shadow-2xs'
                   : 'bg-amber-50/60 hover:bg-amber-100/60 border-amber-200/90 text-slate-900'
               }`}
             >
-              <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-                <TrendingDown className="w-3.5 h-3.5 text-amber-600" />
-                <span>หมวดหมู่ที่ผลิตน้อยที่สุด (น่าปั้นเพิ่ม)</span>
+              <div className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                <TrendingDown className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>ผลิตน้อยสุด</span>
               </div>
-              <div className="mt-1.5 flex items-baseline justify-between gap-2">
-                <span className="text-sm sm:text-base font-extrabold text-slate-900 truncate">
+              <div className="mt-1 flex items-baseline justify-between gap-2">
+                <span className="text-sm font-extrabold text-slate-900 truncate">
                   #{overviewMetrics.leastCategory.mainTag.name}
                 </span>
                 <span className="text-xs font-mono font-extrabold tabular-nums text-amber-900 shrink-0">
-                  {overviewMetrics.leastCategory.episodeCount} EP · ว่าง{' '}
-                  {overviewMetrics.leastCategory.usableFootageInCat} ฟุต
+                  {overviewMetrics.leastCategory.episodeCount} EP · ว่าง {overviewMetrics.leastCategory.usableFootageInCat}
                 </span>
               </div>
             </button>
@@ -331,28 +321,28 @@ export const MasterEpisodeArchiveView: React.FC = () => {
       </div>
 
       {/* =====================================================================
-          2. CATEGORY COMPARISON BARS (DEFAULT COLLAPSED WITH FRAMER MOTION)
+          2. CATEGORY COMPARISON BARS (COLLAPSIBLE DRAWER WITH CONCISE COPY)
          ===================================================================== */}
       <div className="bg-white border border-indigo-200/80 rounded-2xl shadow-2xs overflow-hidden">
         <div
           onClick={() => setIsComparisonExpanded((prev) => !prev)}
-          className="p-4 sm:p-5 bg-gradient-to-r from-indigo-50/70 via-white to-emerald-50/60 hover:from-indigo-50/95 hover:to-emerald-50/85 transition-colors cursor-pointer flex flex-wrap items-center justify-between gap-3"
+          className="p-3.5 sm:p-4 bg-gradient-to-r from-indigo-50/60 via-white to-emerald-50/50 hover:from-indigo-50/90 hover:to-emerald-50/80 transition-colors cursor-pointer flex flex-wrap items-center justify-between gap-3"
         >
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <motion.div
               whileHover={{ rotate: 8, scale: 1.05 }}
-              className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs"
+              className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs"
             >
               <BarChart3 className="w-4 h-4" />
             </motion.div>
             <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-extrabold text-slate-900">
-                เปรียบเทียบสัดส่วนหมวดหมู่จากมากไปน้อย & อัตราความคุ้มค่าการใช้ฟุตเทจ
+              <h2 className="text-sm font-extrabold text-slate-900">
+                สัดส่วนการผลิตตามหมวดหมู่ & อัตราใช้ฟุต
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500">
                 {isComparisonExpanded
-                  ? 'คลิกที่แถวหมวดหมู่เพื่อกรองดูเฉพาะคลิปหลักในหมวดนั้น หรือกดปุ่ม "+ จัดเพิ่ม" เพื่อนำฟุตเทจที่ว่างไปสร้างตอนใหม่'
-                  : 'พับเก็บอยู่ · คลิกเพื่อกางดูกราฟเปรียบเทียบสัดส่วนหมวดหมู่และอัตราการใช้ฟุตเทจ'}
+                  ? 'คลิกแถวเพื่อกรองคลิปหลัก หรือกด "+ จัดเพิ่ม" เพื่อนำฟุตเทจที่ว่างไปสร้างตอนใหม่'
+                  : 'คลิกเพื่อกางดูกราฟเปรียบเทียบสัดส่วนตอนและฟุตเทจพร้อมใช้'}
               </p>
             </div>
           </div>
@@ -365,28 +355,28 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                   e.stopPropagation();
                   setCategoryFilter('ALL');
                 }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>แสดงทุกหมวดหมู่ ({episodes.length} ตอน)</span>
+                <RotateCcw className="w-3 h-3" />
+                <span>แสดงทั้งหมด</span>
               </button>
             )}
 
             <motion.button
               type="button"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={(e) => {
                 e.stopPropagation();
                 setIsComparisonExpanded((prev) => !prev);
               }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 isComparisonExpanded
                   ? 'bg-slate-900 text-white border-slate-900'
                   : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
               }`}
             >
-              <span>{isComparisonExpanded ? 'พับเก็บตารางเปรียบเทียบ' : 'กางดูกราฟเปรียบเทียบหมวดหมู่'}</span>
+              <span>{isComparisonExpanded ? 'ย่อกราฟ' : 'ดูกราฟเปรียบเทียบ'}</span>
               <motion.span
                 animate={{ rotate: isComparisonExpanded ? 180 : 0 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 22 }}
@@ -404,143 +394,143 @@ export const MasterEpisodeArchiveView: React.FC = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="overflow-hidden"
             >
-              <div className="border-t border-slate-200/80 p-4 sm:p-5 space-y-2.5 bg-white">
-              {categoryRanking.map((row, idx) => {
-                const isSelected = categoryFilter === row.mainTag.id;
-                const barWidthPercent = Math.max(
-                  6,
-                  Math.round((row.episodeCount / maxEpisodesInAnyCategory) * 100)
-                );
-                const isTop = idx === 0 && row.episodeCount > 0;
-                const isLeast =
-                  idx === categoryRanking.length - 1 && categoryRanking.length > 1;
+              <div className="border-t border-slate-200/80 p-3 sm:p-4 space-y-2 bg-white">
+                {categoryRanking.map((row, idx) => {
+                  const isSelected = categoryFilter === row.mainTag.id;
+                  const barWidthPercent = Math.max(
+                    6,
+                    Math.round((row.episodeCount / maxEpisodesInAnyCategory) * 100)
+                  );
+                  const isTop = idx === 0 && row.episodeCount > 0;
+                  const isLeast =
+                    idx === categoryRanking.length - 1 && categoryRanking.length > 1;
 
-                return (
-                  <motion.div
-                    key={row.mainTag.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: idx * 0.03 }}
-                    whileHover={{ y: -1 }}
-                    onClick={() =>
-                      setCategoryFilter(isSelected ? 'ALL' : row.mainTag.id)
-                    }
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-50/80 border-indigo-400 ring-1 ring-indigo-300 shadow-2xs'
-                        : 'bg-slate-50/50 hover:bg-white hover:border-indigo-200 border-slate-200/80'
-                    }`}
-                  >
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
-                      {/* Col 1-3: Rank + Category Name */}
-                      <div className="lg:col-span-3 flex items-center gap-2.5 min-w-0">
-                        <span
-                          className={`w-6 h-6 rounded-lg font-mono text-xs font-extrabold flex items-center justify-center shrink-0 ${
-                            isSelected
-                              ? 'bg-indigo-600 text-white'
-                              : isTop
-                              ? 'bg-sky-100 text-sky-800 border border-sky-200'
-                              : 'bg-white text-slate-600 border border-slate-200'
-                          }`}
-                        >
-                          {idx + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
-                              #{row.mainTag.name}
-                            </span>
-                            {isTop && (
-                              <span className="text-[10px] font-bold text-sky-700 shrink-0">
-                                · มากสุด
+                  return (
+                    <motion.div
+                      key={row.mainTag.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18, delay: idx * 0.02 }}
+                      whileHover={{ y: -1 }}
+                      onClick={() =>
+                        setCategoryFilter(isSelected ? 'ALL' : row.mainTag.id)
+                      }
+                      className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-50/80 border-indigo-400 ring-1 ring-indigo-300 shadow-2xs'
+                          : 'bg-slate-50/50 hover:bg-white hover:border-indigo-200 border-slate-200/80'
+                      }`}
+                    >
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-center">
+                        {/* Col 1-3: Rank + Category Name */}
+                        <div className="lg:col-span-3 flex items-center gap-2 min-w-0">
+                          <span
+                            className={`w-5 h-5 rounded-md font-mono text-[11px] font-extrabold flex items-center justify-center shrink-0 ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white'
+                                : isTop
+                                ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                : 'bg-white text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {idx + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
+                                #{row.mainTag.name}
                               </span>
-                            )}
-                            {isLeast && (
-                              <span className="text-[10px] font-bold text-amber-700 shrink-0">
-                                · น้อยสุด
-                              </span>
-                            )}
+                              {isTop && (
+                                <span className="text-[10px] font-bold text-sky-700 shrink-0">
+                                  · มากสุด
+                                </span>
+                              )}
+                              {isLeast && (
+                                <span className="text-[10px] font-bold text-amber-700 shrink-0">
+                                  · น้อยสุด
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Col 4-8: Horizontal Comparison Bar (Episode Count & Share) */}
-                      <div className="lg:col-span-5 space-y-1">
-                        <div className="flex items-center justify-between text-xs font-mono tabular-nums">
-                          <span className="font-bold text-slate-900">
-                            ผลิตแล้ว {row.episodeCount} ตอน
-                          </span>
-                          <span className="text-slate-500">
-                            สัดส่วน {row.episodeSharePercent}% ของคลังคลิปหลัก
-                          </span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-200/70 rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{
-                              width: row.episodeCount === 0 ? '0%' : `${barWidthPercent}%`,
-                            }}
-                            transition={{ duration: 0.5, ease: 'easeOut' }}
-                            className={`h-full rounded-full ${
-                              isSelected
-                                ? 'bg-indigo-600'
-                                : isTop
-                                ? 'bg-sky-500'
-                                : 'bg-indigo-400'
-                            }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Col 9-12: Footage Utilization Efficiency in this Category + Quick Action */}
-                      <div className="lg:col-span-4 flex items-center justify-between gap-3 pl-0 lg:pl-3 lg:border-l lg:border-slate-200/80">
-                        <div className="flex-1 space-y-1">
+                        {/* Col 4-8: Horizontal Comparison Bar (Episode Count & Share) */}
+                        <div className="lg:col-span-5 space-y-1">
                           <div className="flex items-center justify-between text-xs font-mono tabular-nums">
-                            <span className="text-slate-600">
-                              อัตราใช้ฟุต:{' '}
-                              <strong className="text-emerald-700">
-                                {row.utilizationPercent}%
-                              </strong>{' '}
-                              ({row.usedFootageInCat}/{row.totalFootageInCat} ฟุต)
+                            <span className="font-bold text-slate-900">
+                              {row.episodeCount} ตอน
                             </span>
-                            <span className="text-sky-700 font-bold">
-                              ว่างพร้อมใช้ {row.usableFootageInCat}
+                            <span className="text-slate-500">
+                              {row.episodeSharePercent}% ของคลัง
                             </span>
                           </div>
                           <div className="h-2 w-full bg-slate-200/70 rounded-full overflow-hidden">
                             <motion.div
                               initial={{ width: 0 }}
-                              animate={{ width: `${row.utilizationPercent}%` }}
-                              transition={{ duration: 0.5, ease: 'easeOut' }}
-                              className="h-full bg-emerald-500 rounded-full"
+                              animate={{
+                                width: row.episodeCount === 0 ? '0%' : `${barWidthPercent}%`,
+                              }}
+                              transition={{ duration: 0.45, ease: 'easeOut' }}
+                              className={`h-full rounded-full ${
+                                isSelected
+                                  ? 'bg-indigo-600'
+                                  : isTop
+                                  ? 'bg-sky-500'
+                                  : 'bg-indigo-400'
+                              }`}
                             />
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            launchEpisodeBuilderForCategory(
-                              row.mainTag.id,
-                              row.untouchedFootageInCat >= 5
-                                ? 'FORMULA_ALL_NEW'
-                                : 'FORMULA_2_NEW_3_FRESH'
-                            );
-                          }}
-                          className="px-2.5 py-1.5 text-[11px] font-bold text-indigo-700 bg-white hover:bg-indigo-600 hover:text-white border border-indigo-200 rounded-lg transition-colors shrink-0 cursor-pointer"
-                          title={`นำฟุตเทจหมวด #${row.mainTag.name} ไปจัดชุด 5 อันดับ`}
-                        >
-                          + จัดเพิ่ม
-                        </button>
+                        {/* Col 9-12: Footage Utilization Efficiency in this Category + Quick Action */}
+                        <div className="lg:col-span-4 flex items-center justify-between gap-2.5 pl-0 lg:pl-3 lg:border-l lg:border-slate-200/80">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between text-xs font-mono tabular-nums">
+                              <span className="text-slate-600">
+                                ใช้จริง{' '}
+                                <strong className="text-emerald-700 font-bold">
+                                  {row.utilizationPercent}%
+                                </strong>{' '}
+                                ({row.usedFootageInCat}/{row.totalFootageInCat})
+                              </span>
+                              <span className="text-sky-700 font-bold">
+                                ว่าง {row.usableFootageInCat}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-200/70 rounded-full overflow-hidden">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${row.utilizationPercent}%` }}
+                                transition={{ duration: 0.45, ease: 'easeOut' }}
+                                className="h-full bg-emerald-500 rounded-full"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              launchEpisodeBuilderForCategory(
+                                row.mainTag.id,
+                                row.untouchedFootageInCat >= 5
+                                  ? 'FORMULA_ALL_NEW'
+                                  : 'FORMULA_2_NEW_3_FRESH'
+                              );
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-white hover:bg-indigo-600 hover:text-white border border-indigo-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+                            title={`นำฟุตเทจหมวด #${row.mainTag.name} ไปจัดชุด 5 อันดับ`}
+                          >
+                            + จัดเพิ่ม
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    </motion.div>
+                  );
+                })}
               </div>
             </motion.div>
           )}
@@ -548,17 +538,17 @@ export const MasterEpisodeArchiveView: React.FC = () => {
       </div>
 
       {/* =====================================================================
-          3. STREAMLINED SEARCH & FILTER BAR (BRIGHT THEME, NO STATUS/VIEWS)
+          3. STREAMLINED SEARCH & FILTER BAR
          ===================================================================== */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 shadow-2xs">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-3 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5 shadow-2xs">
         <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ค้นหารหัส EP-XXXX, ชื่อคลิป หรือรหัสฟุตเทจ FT-XXXX ที่ใช้ในตอน..."
-            className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-colors"
+            placeholder="ค้นหารหัส EP, ชื่อคลิป หรือรหัสฟุตเทจ..."
+            className="w-full pl-9 pr-3.5 py-1.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-colors"
           />
         </div>
 
@@ -566,12 +556,12 @@ export const MasterEpisodeArchiveView: React.FC = () => {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
           >
-            <option value="ALL">หมวดหมู่หลัก: ทุกหมวด ({episodes.length} ตอน)</option>
+            <option value="ALL">ทุกหมวดหมู่ ({episodes.length} ตอน)</option>
             {categoryRanking.map((item) => (
               <option key={item.mainTag.id} value={item.mainTag.id}>
-                #{item.mainTag.name} ({item.episodeCount} ตอน)
+                #{item.mainTag.name} ({item.episodeCount})
               </option>
             ))}
           </select>
@@ -579,11 +569,11 @@ export const MasterEpisodeArchiveView: React.FC = () => {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
           >
-            <option value="DATE_DESC">เรียง: วันที่สร้างล่าสุด</option>
-            <option value="NEW_MIX_DESC">เรียง: สัดส่วนฟุตใหม่มากสุด</option>
-            <option value="ID_ASC">เรียง: รหัส EP-XXXX</option>
+            <option value="DATE_DESC">วันที่ล่าสุด</option>
+            <option value="NEW_MIX_DESC">ฟุตใหม่มากสุด</option>
+            <option value="ID_ASC">รหัส EP</option>
           </select>
 
           {hasActiveFilters && (
@@ -593,9 +583,9 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                 setSearchQuery('');
                 setCategoryFilter('ALL');
               }}
-              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3 h-3" />
               <span>ล้างตัวกรอง</span>
             </button>
           )}
@@ -603,45 +593,41 @@ export const MasterEpisodeArchiveView: React.FC = () => {
       </div>
 
       {/* =====================================================================
-          4. VIEW MODE BAR & CLEAN EPISODE LIST (FOCUSED ON FOOTAGE MIX)
+          4. VIEW MODE BAR & EPISODE LIST / TABLE
          ===================================================================== */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs text-slate-600">
-          แสดงรายการคลิปหลัก{' '}
+          รายการคลิปหลัก{' '}
           <span className="font-mono font-bold text-slate-900">
             {sortedEpisodes.length}
           </span>{' '}
-          จากทั้งหมด{' '}
-          <span className="font-mono font-bold text-slate-900">
-            {episodes.length}
-          </span>{' '}
-          ตอน (คลิกที่รายการเพื่อดูส่วนผสมฟุตเทจทั้ง 5 อันดับ)
+          / {episodes.length} ตอน
         </div>
 
-        <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-xl shrink-0">
+        <div className="flex items-center gap-1 p-0.5 bg-slate-200/70 rounded-xl shrink-0">
           <button
             type="button"
             onClick={() => setViewMode('CARDS')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
               viewMode === 'CARDS'
-                ? 'bg-white text-indigo-950 shadow-xs'
+                ? 'bg-white text-indigo-950 shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
-            <span>การ์ดย่อ</span>
+            <span>การ์ด</span>
           </button>
           <button
             type="button"
             onClick={() => setViewMode('TABLE')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
               viewMode === 'TABLE'
-                ? 'bg-white text-indigo-950 shadow-xs'
+                ? 'bg-white text-indigo-950 shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <List className="w-3.5 h-3.5" />
-            <span>ตารางมาตรฐาน</span>
+            <span>ตาราง</span>
           </button>
         </div>
       </div>
@@ -655,32 +641,32 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         </div>
       ) : viewMode === 'CARDS' ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {paginatedEpisodes.map((ep) => {
               const mix = getEpisodeFootageMix(ep);
               return (
                 <div
                   key={ep.id}
                   onClick={() => setSelectedEpisodeDetailId(ep.id)}
-                  className="group bg-white border border-slate-200/90 rounded-2xl p-4 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between gap-3.5"
+                  className="group bg-white border border-slate-200/90 rounded-2xl p-3.5 hover:border-indigo-300 hover:shadow-2xs transition-all cursor-pointer flex flex-col justify-between gap-3"
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {/* Top Row: ID + Date + Footage Mix Ratio */}
                     <div className="flex items-center justify-between gap-2 text-xs font-mono">
-                      <div className="flex items-center gap-2 text-slate-500">
+                      <div className="flex items-center gap-1.5 text-slate-500">
                         <span className="font-bold text-indigo-700">{ep.id}</span>
                         <span>·</span>
                         <span>{formatThaiDate(ep.publishDate)}</span>
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-600">
-                        <span className="inline-flex items-center gap-1 text-sky-700 font-bold bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
-                          <Sparkles className="w-3 h-3 text-sky-600" />
+                      <div className="flex items-center gap-1.5 text-xs font-mono tabular-nums text-slate-600">
+                        <span className="inline-flex items-center gap-1 text-sky-700 font-bold bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 text-[11px]">
+                          <Sparkles className="w-2.5 h-2.5 text-sky-600" />
                           <span>ใหม่ {mix.newCount}</span>
                         </span>
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span className="text-slate-300">·</span>
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[11px]">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                           <span>วนใช้ {mix.recycledCount}</span>
                         </span>
                       </div>
@@ -693,8 +679,8 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                   </div>
 
                   {/* Bottom Row: Category + Open 5 Footages */}
-                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <TagPill tag={tagMap[ep.mainCategoryTagId]} />
                       {ep.targetSubcategoryId && tagMap[ep.targetSubcategoryId] && (
                         <TagPill tag={tagMap[ep.targetSubcategoryId]} />
@@ -702,7 +688,7 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                     </div>
 
                     <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-indigo-600 group-hover:text-indigo-800 transition-colors shrink-0">
-                      <span>ดูฟุตเทจทั้ง 5 อันดับ</span>
+                      <span>ดู 5 อันดับ</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </span>
                   </div>
@@ -728,12 +714,12 @@ export const MasterEpisodeArchiveView: React.FC = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
-                    <th className="py-3 px-4 w-28">รหัส EP</th>
-                    <th className="py-3 px-4">ชื่อคลิปหลัก</th>
-                    <th className="py-3 px-4">หมวดหมู่</th>
-                    <th className="py-3 px-4 w-48">สัดส่วนการใช้ฟุตเทจ</th>
-                    <th className="py-3 px-4 w-36">วันที่สร้าง</th>
-                    <th className="py-3 px-4 w-32 text-right">ฟุตเทจ 5 อันดับ</th>
+                    <th className="py-2.5 px-3.5 w-24">รหัส EP</th>
+                    <th className="py-2.5 px-3.5">ชื่อคลิปหลัก</th>
+                    <th className="py-2.5 px-3.5">หมวดหมู่</th>
+                    <th className="py-2.5 px-3.5 w-44">สัดส่วนฟุตเทจ</th>
+                    <th className="py-2.5 px-3.5 w-32">วันที่สร้าง</th>
+                    <th className="py-2.5 px-3.5 w-28 text-right">5 อันดับ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -745,15 +731,15 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                         onClick={() => setSelectedEpisodeDetailId(ep.id)}
                         className="hover:bg-indigo-50/40 cursor-pointer transition-colors group"
                       >
-                        <td className="py-3 px-4 font-mono font-bold text-indigo-700 whitespace-nowrap tabular-nums">
+                        <td className="py-2.5 px-3.5 font-mono font-bold text-indigo-700 whitespace-nowrap tabular-nums">
                           {ep.id}
                         </td>
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 text-sm line-clamp-1 group-hover:text-indigo-700">
+                        <td className="py-2.5 px-3.5">
+                          <div className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-1 group-hover:text-indigo-700">
                             {ep.title}
                           </div>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-3.5">
                           <div className="flex flex-wrap gap-1.5">
                             <TagPill tag={tagMap[ep.mainCategoryTagId]} />
                             {ep.targetSubcategoryId &&
@@ -762,21 +748,21 @@ export const MasterEpisodeArchiveView: React.FC = () => {
                               )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 font-mono tabular-nums whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1 text-sky-700 font-bold bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 text-xs">
-                            <Sparkles className="w-3 h-3 text-sky-600" />
+                        <td className="py-2.5 px-3.5 font-mono tabular-nums whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 text-sky-700 font-bold bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 text-[11px]">
+                            <Sparkles className="w-2.5 h-2.5 text-sky-600" />
                             <span>ใหม่ {mix.newCount}</span>
                           </span>
-                          <span className="text-slate-400 mx-1.5">·</span>
-                          <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-xs">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span className="text-slate-300 mx-1">·</span>
+                          <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[11px]">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                             <span>วนใช้ {mix.recycledCount}</span>
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-mono tabular-nums text-slate-600 whitespace-nowrap">
+                        <td className="py-2.5 px-3.5 font-mono tabular-nums text-slate-600 whitespace-nowrap">
                           {formatThaiDate(ep.publishDate)}
                         </td>
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                           <span className="inline-flex items-center gap-1 font-semibold text-indigo-600 group-hover:text-indigo-800">
                             <span>ดู 5 อันดับ</span>
                             <ChevronRight className="w-3.5 h-3.5" />

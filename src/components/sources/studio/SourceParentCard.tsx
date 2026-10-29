@@ -5,6 +5,7 @@ import {
   Film,
   Plus,
   Rocket,
+  Zap,
 } from 'lucide-react';
 import { ComputedFootage } from '../../../types/footage.types';
 import { RawSource } from '../../../types/source.types';
@@ -68,9 +69,7 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
 
   const isUnderMined = childFootages.length < underMinedThreshold;
   const primaryTagId = source.tags[0] || defaultFallbackTagId;
-  const primaryTag = tagMap[primaryTagId];
 
-  // Collect unique child tags that aren't already on the parent source
   const extraChildTagIds = Array.from(
     new Set(
       childFootages
@@ -80,38 +79,43 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
   );
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-2xs">
+    <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
       {/* Source Top Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 border-b border-slate-100 pb-4">
-        <div className="space-y-2">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+        <div className="space-y-1.5 min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="font-mono font-bold text-slate-900 text-sm">
+            <span className="font-mono font-bold text-indigo-700 text-xs bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/70">
               {source.id}
             </span>
+            <span className="font-semibold text-slate-700">{source.platform}</span>
             <span aria-hidden="true">·</span>
-            <span className="font-semibold text-indigo-700">{source.platform}</span>
+            <span className="truncate">{source.channelOrCreator}</span>
+            {source.totalDuration && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono tabular-nums">{source.totalDuration}</span>
+              </>
+            )}
             <span aria-hidden="true">·</span>
-            <span>ช่องต้นทาง: {source.channelOrCreator}</span>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono tabular-nums">
-              ความยาวรวม {source.totalDuration || '-'}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>เพิ่มเมื่อ {formatThaiDate(source.createdAt)}</span>
+            <span>{formatThaiDate(source.createdAt)}</span>
 
             {isUnderMined && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-bold text-[11px]">
                 <AlertTriangle className="w-3 h-3 text-amber-600" />
-                <span>รอขุดมุกเพิ่ม (เพิ่งหั่น {childFootages.length} ฟุต)</span>
+                <span>หั่นน้อย ({childFootages.length})</span>
               </span>
             )}
           </div>
 
-          <h2 className="text-lg font-bold text-slate-900">{source.title}</h2>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+            {source.title}
+          </h2>
 
-          {source.notes && <p className="text-xs text-slate-600">{source.notes}</p>}
+          {source.notes && (
+            <p className="text-xs text-slate-500 line-clamp-1">{source.notes}</p>
+          )}
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             {source.tags.map((tid) => (
               <TagPill key={tid} tag={tagMap[tid]} />
             ))}
@@ -121,49 +125,52 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <div className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-right">
-            <div className="text-[11px] text-slate-500">
-              หั่นเป็นฟุตย่อยแล้ว (พร้อมใช้ {usableChildrenCount})
-            </div>
-            <div className="text-base font-extrabold font-mono tabular-nums text-slate-900 inline-flex items-center gap-1.5">
-              <Film className="w-4 h-4 text-indigo-600" />
-              <span>{childFootages.length} ฟุต</span>
-            </div>
+        {/* Right Side Badges & Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-mono tabular-nums">
+            <span className="inline-flex items-center gap-1 font-bold text-slate-800">
+              <Film className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{childFootages.length} คลิป</span>
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
+              <Zap className="w-3 h-3 text-emerald-600" />
+              <span>พร้อมใช้ {usableChildrenCount}</span>
+            </span>
           </div>
 
           <a
             href={source.originalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors whitespace-nowrap"
+            title="เปิดคลิปต้นฉบับ"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            <span>เปิดคลิปต้นฉบับ</span>
+            <span>ต้นฉบับ</span>
           </a>
 
           <button
             type="button"
             onClick={() => onLaunchEpisodeForCategory(primaryTagId)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
-            title="ส่งหมวดหมู่ของไลฟ์นี้ไปจัด 5 อันดับอัตโนมัติ"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
           >
             <Rocket className="w-3.5 h-3.5" />
-            <span>ส่งหมวด #{primaryTag?.name || 'หลัก'} ไปจัด 5 อันดับ</span>
+            <span>จัด 5 อันดับ</span>
           </button>
 
           <button
             type="button"
             onClick={() => onOpenSourceSplitter(source)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>หั่นฟุตที่ #{childFootages.length + 1} เพิ่ม</span>
+            <span>หั่นเพิ่ม</span>
           </button>
         </div>
       </div>
 
-      {/* Dimension 3: Visual Timestamp Timeline Bar */}
+      {/* Visual Timestamp Timeline Bar */}
       <SourceTimelineBar
         totalDuration={source.totalDuration}
         childFootages={childFootages}
@@ -171,7 +178,7 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
         onSplitMore={() => onOpenSourceSplitter(source)}
       />
 
-      {/* Dimension 5: Episode Builder Selection Action Bar + Child Split Footages Table */}
+      {/* Child Split Footages Table */}
       <SourceChildClipsTable
         source={source}
         childFootages={childFootages}

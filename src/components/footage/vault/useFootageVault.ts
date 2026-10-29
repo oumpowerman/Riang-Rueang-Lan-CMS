@@ -65,6 +65,9 @@ export const useFootageVault = () => {
   const [isCategoryInventoryExpanded, setIsCategoryInventoryExpanded] = useState(true);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
+  // Fullscreen 2-Pane Staging Triage Studio State
+  const [isFullscreenStudioOpen, setIsFullscreenStudioOpen] = useState(false);
+
   // Pagination State (9 items fits a 3-column grid cleanly)
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
@@ -279,7 +282,7 @@ export const useFootageVault = () => {
     if (activeSubcategory && activeMainCategory) {
       return {
         key: `SUB_${activeSubcategory.id}`,
-        level: 'หมวดหมู่ย่อย (ชั้นที่ 3)',
+        level: 'หมวดย่อย',
         label: `${getEntityIcon(activeSubcategory)} ${activeSubcategory.name}`,
         trail: `${
           activeGroupOverview
@@ -291,7 +294,7 @@ export const useFootageVault = () => {
     if (activeMainCategory) {
       return {
         key: `MAIN_${activeMainCategory.mainTag.id}`,
-        level: 'หมวดหมู่หลัก (ชั้นที่ 2)',
+        level: 'หมวดหลัก',
         label: `#${activeMainCategory.mainTag.name}`,
         trail: `${
           activeGroupOverview
@@ -303,16 +306,16 @@ export const useFootageVault = () => {
     if (activeGroupOverview) {
       return {
         key: `GRP_${activeGroupOverview.group.id}`,
-        level: 'กลุ่มหมวดหมู่ (ชั้นที่ 1)',
+        level: 'กลุ่มหมวด',
         label: `${activeGroupOverview.group.icon} ${activeGroupOverview.group.name}`,
         trail: `${activeGroupOverview.group.icon} ${activeGroupOverview.group.name}`,
       };
     }
     return {
       key: 'ALL_VAULT',
-      level: 'ทั้งคลังฟุตเทจ',
-      label: 'ฟุตเทจทั้งหมดในคลัง',
-      trail: 'รวมทุกกลุ่มและทุกหมวดหมู่',
+      level: 'ทั้งคลัง',
+      label: 'ทั้งหมด',
+      trail: 'ทุกหมวดหมู่',
     };
   }, [activeSubcategory, activeMainCategory, activeGroupOverview]);
 
@@ -667,6 +670,8 @@ export const useFootageVault = () => {
     setCurrentPage,
     pageSize,
     setPageSize,
+    isFullscreenStudioOpen,
+    setIsFullscreenStudioOpen,
 
     // Multi-Select, Drag & Drop & Quick-Sort States
     selectedFootageIdsForBatch,

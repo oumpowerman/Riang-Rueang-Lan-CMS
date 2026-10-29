@@ -28,38 +28,13 @@ export function useCMSCloudAndStorageSync(
   const [isSeedingToCloud, setIsSeedingToCloud] = useState(false);
   const [isClearingClips, setIsClearingClips] = useState(false);
 
-  const isWipingCloudRef = useRef<boolean>(!cmsRepository.hasWipedCloudClips());
+  const isWipingCloudRef = useRef<boolean>(false);
 
   // Firestore Realtime Subscriptions
   useEffect(() => {
-    let isMounted = true;
     let hasSeededCategories = false;
     let hasMigratedLocalSources = false;
-
-    // One-time automatic cloud wipe of old demo clips on transition to production mode
-    if (!cmsRepository.hasWipedCloudClips()) {
-      isWipingCloudRef.current = true;
-      setSources([]);
-      setFootage([]);
-      setEpisodes([]);
-      cmsRepository.clearAllClips();
-
-      firestoreService
-        .clearAllClipsFromCloud()
-        .then(() => {
-          cmsRepository.markCloudClipsWiped();
-        })
-        .catch((err) => {
-          console.warn('Initial production cloud clip wipe warning:', err);
-          cmsRepository.markCloudClipsWiped();
-        })
-        .finally(() => {
-          if (isMounted) {
-            isWipingCloudRef.current = false;
-          }
-        });
-    }
-
+    let hasMigratedLocalFootages = false;
     let isRepairingCloudCategories = false;
 
     const unsubCategoryGroups = firestoreService.subscribeCategoryGroups(
@@ -160,6 +135,20 @@ export function useCMSCloudAndStorageSync(
         if (isWipingCloudRef.current) {
           return;
         }
+
+        if (cloudFootages.length === 0 && !hasMigratedLocalFootages) {
+          hasMigratedLocalFootages = true;
+          const localFootages = cmsRepository.getFootage();
+          if (localFootages.length > 0) {
+            firestoreService
+              .batchSaveFootages(localFootages)
+              .catch((err) =>
+                console.warn('Auto-migrate local footages to Firestore warning:', err)
+              );
+            return;
+          }
+        }
+
         setFootage(cloudFootages);
         setIsCloudConnected(true);
         setIsCloudSynced(true);
@@ -191,7 +180,6 @@ export function useCMSCloudAndStorageSync(
     );
 
     return () => {
-      isMounted = false;
       unsubCategoryGroups();
       unsubCategories();
       unsubSources();

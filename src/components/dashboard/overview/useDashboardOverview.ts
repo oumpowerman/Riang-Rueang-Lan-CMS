@@ -35,8 +35,9 @@ export const useDashboardOverview = () => {
     launchEpisodeBuilderForCategory,
   } = useCMS();
 
-  // 1. Step Navigation & View Mode States
+  // 1. Step Navigation, Direction & View Mode States
   const [activeWorkflowStep, setActiveWorkflowStep] = useState<WorkflowStep>(2);
+  const [stepDirection, setStepDirection] = useState<1 | -1>(1);
   const [viewMode, setViewMode] = useState<DashboardViewMode>('FOCUS');
 
   // 2. Global & Section Search / Filter States
@@ -328,6 +329,9 @@ export const useDashboardOverview = () => {
     categoryFilterMode !== 'ALL';
 
   const handleSelectStep = (step: WorkflowStep) => {
+    if (step !== activeWorkflowStep) {
+      setStepDirection(step > activeWorkflowStep ? 1 : -1);
+    }
     setActiveWorkflowStep(step);
     if (viewMode === 'ALL') {
       const el = document.getElementById(`step-section-${step}`);
@@ -357,6 +361,7 @@ export const useDashboardOverview = () => {
 
     // Navigation & View Mode
     activeWorkflowStep,
+    stepDirection,
     viewMode,
     setViewMode,
     handleSelectStep,

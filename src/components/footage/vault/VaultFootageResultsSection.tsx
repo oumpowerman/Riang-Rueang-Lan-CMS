@@ -95,28 +95,18 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
           animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
           exit={{ opacity: 0, y: -8, scale: 0.98, filter: 'blur(3px)' }}
           transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-          className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3"
+          className="bg-white border border-slate-200 rounded-2xl p-10 text-center space-y-2.5"
         >
-          <p className="text-base font-bold text-slate-900">
-            ไม่พบฟุตเทจที่ตรงกับเงื่อนไขตัวกรองใน {activeScopeDescription.label}
+          <p className="text-sm sm:text-base font-bold text-slate-900">
+            ไม่พบคลิปที่ตรงกับตัวกรอง
           </p>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            ลองกดล้างตัวกรองทั้งหมด หรือเพิ่มฟุตเทจใหม่เข้าคลัง
-          </p>
-          <div className="pt-2 flex items-center justify-center gap-3">
+          <div className="pt-1 flex items-center justify-center gap-2.5">
             <button
               type="button"
               onClick={onResetFilters}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer"
+              className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer"
             >
-              ล้างตัวกรองทั้งหมด
-            </button>
-            <button
-              type="button"
-              onClick={onOpenDirectFootageModal}
-              className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 cursor-pointer"
-            >
-              + เพิ่มฟุตเดี่ยว (Flow 1:1)
+              ล้างตัวกรอง
             </button>
           </div>
         </motion.div>
@@ -181,7 +171,7 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
             onPageChange={onPageChange}
             onPageSizeChange={onPageSizeChange}
             pageSizeOptions={[9, 18, 27, 45]}
-            itemLabel="ฟุตเทจ"
+            itemLabel="คลิป"
           />
         </motion.div>
       ) : (
@@ -198,20 +188,20 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-                    <th className="py-3 px-3 w-14 text-center">
+                    <th className="py-2.5 px-3 w-14 text-center">
                       <input
                         type="checkbox"
                         checked={isAllPaginatedSelected}
                         onChange={handleToggleSelectAllPaginated}
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
-                        title="เลือกทั้งหมดในหน้านี้"
+                        title="เลือกหน้านี้"
                       />
                     </th>
-                    <th className="py-3 px-4 w-28">รหัส</th>
-                    <th className="py-3 px-4">ชื่อคลิป</th>
-                    <th className="py-3 px-4">หมวดหมู่</th>
-                    <th className="py-3 px-4 w-44">สถานะความพร้อมใช้</th>
-                    <th className="py-3 px-4 w-28 text-right">การจัดการ</th>
+                    <th className="py-2.5 px-4 w-24">รหัส</th>
+                    <th className="py-2.5 px-4">ชื่อคลิป</th>
+                    <th className="py-2.5 px-4">หมวดหมู่</th>
+                    <th className="py-2.5 px-4 w-36">สถานะ</th>
+                    <th className="py-2.5 px-3 w-12 text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -256,7 +246,7 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                         }`}
                       >
                         <td
-                          className="py-3 px-3 w-14 text-center"
+                          className="py-2.5 px-3 w-14 text-center"
                           onClick={(e) => handleToggleSelectOne(ft.id, e)}
                         >
                           <div className="inline-flex items-center gap-1">
@@ -266,48 +256,44 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                               checked={isSelected}
                               onChange={() => {}}
                               className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
-                              title="คลิกเพื่อเลือก หรือกด Shift+คลิก เพื่อเลือกเป็นช่วง"
                             />
                           </div>
                         </td>
-                        <td className="py-3 px-4 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
+                        <td className="py-2.5 px-4 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
                           {ft.id}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-2.5 px-4">
                           <div className="font-bold text-slate-900 text-sm line-clamp-1">
                             {ft.title}
                           </div>
                         </td>
-                      <td className="py-3 px-4">
-                        {isFootageInStaging(ft.tags) ? (
-                          <TagPill tag={tagMap[STAGING_TAG_ID]} />
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {ft.tags.map((tid) => (
-                              <TagPill key={tid} tag={tagMap[tid]} />
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <StatusBadge
-                          status={ft.cooldownStatus}
-                          daysSinceLastUse={ft.daysSinceLastUsed}
-                          cooldownDays={settings.cooldownDays}
-                          greenReadyDays={settings.greenReadyDays}
-                          usageLast90Days={ft.usageLast90Days}
-                          totalUsageCount={ft.totalUsageCount}
-                          maxTotalUsageCount={settings.maxTotalUsageCount}
-                          compact
-                        />
-                      </td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 font-semibold text-slate-500 group-hover:text-slate-900">
-                          <span>รายละเอียด</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
-                      </td>
-                    </motion.tr>
+                        <td className="py-2.5 px-4">
+                          {isFootageInStaging(ft.tags) ? (
+                            <TagPill tag={tagMap[STAGING_TAG_ID]} />
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {ft.tags.map((tid) => (
+                                <TagPill key={tid} tag={tagMap[tid]} />
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 whitespace-nowrap">
+                          <StatusBadge
+                            status={ft.cooldownStatus}
+                            daysSinceLastUse={ft.daysSinceLastUsed}
+                            cooldownDays={settings.cooldownDays}
+                            greenReadyDays={settings.greenReadyDays}
+                            usageLast90Days={ft.usageLast90Days}
+                            totalUsageCount={ft.totalUsageCount}
+                            maxTotalUsageCount={settings.maxTotalUsageCount}
+                            compact
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 inline-block" />
+                        </td>
+                      </motion.tr>
                     );
                   })}
                 </tbody>

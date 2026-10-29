@@ -18,90 +18,74 @@ export const SourceMiningKpiGrid: React.FC<SourceMiningKpiGridProps> = ({
   onUnderMinedThresholdChange,
 }) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-      {/* KPI 1: Total Sources */}
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      {/* KPI 1: Total Sources (Light Pastel Indigo) */}
       <button
         type="button"
         onClick={() => onMiningFilterChange('ALL')}
-        className={`text-left p-4 rounded-2xl border transition-all cursor-pointer ${
+        className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
           miningFilter === 'ALL'
-            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-            : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+            ? 'bg-indigo-50/90 border-indigo-400 ring-2 ring-indigo-500/20 shadow-xs'
+            : 'bg-white hover:bg-indigo-50/40 border-slate-200/90 hover:border-indigo-200 shadow-2xs'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span
-            className={`text-xs font-bold ${
-              miningFilter === 'ALL' ? 'text-slate-300' : 'text-slate-500'
-            }`}
-          >
-            คลิปยาวต้นฉบับทั้งหมด (Total Sources)
+          <span className="text-xs font-bold text-indigo-950 inline-flex items-center gap-1.5">
+            <Video className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <span>ไลฟ์ทั้งหมด</span>
           </span>
-          <Video
-            className={`w-4 h-4 ${
-              miningFilter === 'ALL' ? 'text-indigo-400' : 'text-indigo-600'
-            }`}
-          />
-        </div>
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-2xl font-extrabold font-mono tabular-nums">
-            {miningKpis.totalSources}
-          </span>
-          <span
-            className={`text-xs font-medium ${
-              miningFilter === 'ALL' ? 'text-slate-300' : 'text-slate-500'
-            }`}
-          >
-            ไลฟ์ต้นฉบับในคลัง
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white/90 text-indigo-700 border border-indigo-200/80">
+            ต้นฉบับ
           </span>
         </div>
-        <div
-          className={`mt-1.5 text-[11px] ${
-            miningFilter === 'ALL' ? 'text-indigo-300 font-semibold' : 'text-slate-400'
-          }`}
-        >
-          คลิกเพื่อดูคลิปยาวต้นฉบับทั้งหมด
+
+        <div className="flex items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-extrabold font-mono tabular-nums text-indigo-950">
+              {miningKpis.totalSources}
+            </span>
+            <span className="text-xs font-medium text-indigo-700/80">ไลฟ์</span>
+          </div>
         </div>
       </button>
 
-      {/* KPI 2: Average Yield Rate */}
-      <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between">
+      {/* KPI 2: Average Yield Rate (Light Pastel Sky) */}
+      <div className="p-3.5 rounded-2xl bg-sky-50/50 border border-sky-200/80 flex flex-col justify-between gap-2 shadow-2xs">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-slate-500">
-            อัตราการขุดช็อตฮา (Average Yield Rate)
+          <span className="text-xs font-bold text-sky-950 inline-flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+            <span>เฉลี่ยต่อไลฟ์</span>
           </span>
-          <TrendingUp className="w-4 h-4 text-emerald-600" />
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white/90 text-sky-700 border border-sky-200/80 tabular-nums">
+            รวม {miningKpis.totalSplitClips} คลิป
+          </span>
         </div>
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-2xl font-extrabold font-mono tabular-nums text-slate-900">
+
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl font-extrabold font-mono tabular-nums text-sky-950">
             {miningKpis.avgYield}
           </span>
-          <span className="text-xs font-semibold text-emerald-700">
-            ฟุตย่อย / 1 ไลฟ์
-          </span>
-        </div>
-        <div className="mt-1.5 text-[11px] text-slate-500 font-mono tabular-nums">
-          หั่นช็อตย่อยสะสมแล้วรวม {miningKpis.totalSplitClips} ฟุต
+          <span className="text-xs font-medium text-sky-700">คลิป/ไลฟ์</span>
         </div>
       </div>
 
-      {/* KPI 3: Under-mined Sources */}
+      {/* KPI 3: Under-mined Sources (Light Pastel Amber) */}
       <div
         onClick={() =>
           onMiningFilterChange((prev) =>
             prev === 'UNDER_MINED' ? 'ALL' : 'UNDER_MINED'
           )
         }
-        className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
           miningFilter === 'UNDER_MINED'
-            ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20'
-            : 'bg-white border-slate-200 hover:border-amber-300'
+            ? 'bg-amber-50/90 border-amber-400 ring-2 ring-amber-500/20 shadow-xs'
+            : 'bg-white hover:bg-amber-50/40 border-slate-200/90 hover:border-amber-200 shadow-2xs'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-amber-800 inline-flex items-center gap-1">
-            <Pickaxe className="w-3.5 h-3.5 text-amber-600" />
-            <span>ไลฟ์ที่ยังขุดไม่คุ้ม (Under-mined)</span>
+          <span className="text-xs font-bold text-amber-950 inline-flex items-center gap-1.5 whitespace-nowrap">
+            <Pickaxe className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span>หั่นน้อย</span>
           </span>
           <select
             value={underMinedThreshold}
@@ -110,29 +94,23 @@ export const SourceMiningKpiGrid: React.FC<SourceMiningKpiGridProps> = ({
               onUnderMinedThresholdChange(Number(e.target.value));
               onMiningFilterChange('UNDER_MINED');
             }}
-            className="text-[11px] font-mono font-bold bg-amber-100/80 text-amber-900 border border-amber-300 rounded-md px-1.5 py-0.5 cursor-pointer"
+            className="text-[11px] font-mono font-bold bg-amber-100/70 text-amber-900 border border-amber-300/80 rounded-lg px-2 py-0.5 cursor-pointer outline-none"
           >
-            <option value={3}>&lt; 3 ฟุต (0–2 ช็อต)</option>
-            <option value={5}>&lt; 5 ฟุต (0–4 ช็อต)</option>
-            <option value={1}>0 ฟุต (ยังไม่หั่น)</option>
+            <option value={3}>&lt; 3 คลิป</option>
+            <option value={5}>&lt; 5 คลิป</option>
+            <option value={1}>0 คลิป</option>
           </select>
         </div>
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-2xl font-extrabold font-mono tabular-nums text-amber-900">
+
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl font-extrabold font-mono tabular-nums text-amber-950">
             {miningKpis.underMinedSourcesCount}
           </span>
-          <span className="text-xs font-semibold text-amber-700">
-            ไลฟ์ที่รอขุดมุกเพิ่ม
-          </span>
-        </div>
-        <div className="mt-1.5 text-[11px] text-amber-700 font-medium">
-          {miningFilter === 'UNDER_MINED'
-            ? 'กำลังกรองเฉพาะไลฟ์ที่ยังขุดไม่คุ้ม (คลิกเพื่อยกเลิก)'
-            : 'คลิกเพื่อกรองไลฟ์ที่หั่นน้อยกว่าเกณฑ์'}
+          <span className="text-xs font-medium text-amber-800">ไลฟ์</span>
         </div>
       </div>
 
-      {/* KPI 4: Ready Split Clips */}
+      {/* KPI 4: Ready Split Clips (Light Pastel Emerald) */}
       <button
         type="button"
         onClick={() =>
@@ -140,28 +118,27 @@ export const SourceMiningKpiGrid: React.FC<SourceMiningKpiGridProps> = ({
             prev === 'HAS_READY_CLIPS' ? 'ALL' : 'HAS_READY_CLIPS'
           )
         }
-        className={`text-left p-4 rounded-2xl border transition-all cursor-pointer ${
+        className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
           miningFilter === 'HAS_READY_CLIPS'
-            ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20'
-            : 'bg-white border-slate-200 hover:border-emerald-300'
+            ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
+            : 'bg-white hover:bg-emerald-50/40 border-slate-200/90 hover:border-emerald-200 shadow-2xs'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-emerald-800">
-            ฟุตย่อยพร้อมใช้งาน (Ready Split Clips)
+          <span className="text-xs font-bold text-emerald-950 inline-flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>คลิปย่อยพร้อมใช้</span>
           </span>
-          <Zap className="w-4 h-4 text-emerald-600" />
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white/90 text-emerald-700 border border-emerald-200/80 tabular-nums">
+            จาก {miningKpis.sourcesWithReadyClipsCount} ไลฟ์
+          </span>
         </div>
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-2xl font-extrabold font-mono tabular-nums text-emerald-900">
+
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl font-extrabold font-mono tabular-nums text-emerald-950">
             {miningKpis.totalReadySplitClips}
           </span>
-          <span className="text-xs font-semibold text-emerald-700">
-            ช็อตสดใหม่พร้อมจัด 5 อันดับ
-          </span>
-        </div>
-        <div className="mt-1.5 text-[11px] text-emerald-700 font-medium">
-          กระจายอยู่ใน {miningKpis.sourcesWithReadyClipsCount} ไลฟ์ต้นฉบับ (คลิกเพื่อกรอง)
+          <span className="text-xs font-medium text-emerald-700">คลิป</span>
         </div>
       </button>
     </div>

@@ -20,6 +20,7 @@ export function useCMSNavigationState() {
   const [isSourceSplitterModalOpen, setIsSourceSplitterModalOpen] = useState(false);
   const [activeSourceForSplitting, setActiveSourceForSplitting] = useState<RawSource | null>(null);
   const [traceabilityFootageId, setTraceabilityFootageId] = useState<string | null>(null);
+  const [previewFootageId, setPreviewFootageId] = useState<string | null>(null);
   const [selectedEpisodeDetailId, setSelectedEpisodeDetailId] = useState<string | null>(null);
   const [builderPreselectRequest, setBuilderPreselectRequest] =
     useState<BuilderPreselectRequest | null>(null);
@@ -95,6 +96,8 @@ export function useCMSNavigationState() {
     openSourceSplitterFor,
     traceabilityFootageId,
     setTraceabilityFootageId,
+    previewFootageId,
+    setPreviewFootageId,
     selectedEpisodeDetailId,
     setSelectedEpisodeDetailId,
     builderPreselectRequest,

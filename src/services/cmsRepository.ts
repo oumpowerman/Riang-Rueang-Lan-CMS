@@ -31,19 +31,12 @@ const STORAGE_KEYS = {
  */
 export const cmsRepository = {
   /**
-   * Ensures a one-time immediate wipe of demo clips in localStorage when switching to production mode,
-   * while preserving 3-tier categories and system settings.
+   * Safe production state check — never wipes user clips automatically on startup.
    */
   ensureProductionCleanSlate(): boolean {
     try {
-      const alreadyCleared = localStorage.getItem(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE) === 'true';
-      if (!alreadyCleared) {
-        localStorage.setItem(STORAGE_KEYS.SOURCES, JSON.stringify([]));
-        localStorage.setItem(STORAGE_KEYS.FOOTAGE, JSON.stringify([]));
-        localStorage.setItem(STORAGE_KEYS.EPISODES, JSON.stringify([]));
-        localStorage.setItem(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE, 'true');
-        return true;
-      }
+      localStorage.setItem(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE, 'true');
+      localStorage.setItem(STORAGE_KEYS.CLOUD_CLIPS_WIPED, 'true');
       return false;
     } catch {
       return false;
@@ -51,11 +44,7 @@ export const cmsRepository = {
   },
 
   hasWipedCloudClips(): boolean {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.CLOUD_CLIPS_WIPED) === 'true';
-    } catch {
-      return false;
-    }
+    return true;
   },
 
   markCloudClipsWiped(): void {
@@ -222,7 +211,13 @@ export const cmsRepository = {
         t.groupId ||
         (t.parentId ? parentGroupMap[t.parentId] : undefined) ||
         `GRP-${t.groupType || 'GENERAL'}`;
-      return t.groupId === expectedGroupId ? t : { ...t, groupId: expectedGroupId };
+      const normalizedName =
+        t.id === STAGING_TAG_ID && t.name === 'พื้นที่พักรอจัดหมวดหมู่'
+          ? 'ไม่มีหมวดหมู่'
+          : t.name;
+      return t.groupId === expectedGroupId && t.name === normalizedName
+        ? t
+        : { ...t, groupId: expectedGroupId, name: normalizedName };
     });
   },
 

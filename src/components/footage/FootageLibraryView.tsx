@@ -1,5 +1,6 @@
 import React from 'react';
 import { SearchFilterBar } from '../ui/SearchFilterBar';
+import { FullscreenStagingStudioModal } from './stagingStudio/FullscreenStagingStudioModal';
 import { useFootageVault } from './vault/useFootageVault';
 import { VaultFootageResultsSection } from './vault/VaultFootageResultsSection';
 import { VaultHeaderKpiSection } from './vault/VaultHeaderKpiSection';
@@ -25,11 +26,8 @@ export const FootageLibraryView: React.FC = () => {
         onToggleStagingFilter={vault.handleToggleStagingFilter}
         onStatusFilterChange={vault.setStatusFilter}
         onClearHierarchySelection={vault.handleClearHierarchySelection}
-        onOpenStatusRuleModal={() => vault.setIsStatusRuleModalOpen(true)}
-        onOpenThreeTierManager={() => vault.setIsThreeTierManagerOpen(true)}
-        onOpenSourceSplitter={() => vault.openSourceSplitterFor(null)}
-        onOpenDirectFootageModal={() => vault.setIsDirectFootageModalOpen(true)}
         onOpenGoogleDriveBatchModal={() => vault.setIsGoogleDriveBatchModalOpen(true)}
+        onOpenFullscreenStudio={() => vault.setIsFullscreenStudioOpen(true)}
       />
 
       {/* 2. Progressive 3-Tier Category Explorer (Group -> Main Category -> Subcategory) */}
@@ -97,6 +95,7 @@ export const FootageLibraryView: React.FC = () => {
         onSelectAllInStaging={vault.handleSelectAllInStaging}
         isAllStagingSelected={vault.isAllStagingSelected}
         onClearSelection={vault.handleClearBatchSelection}
+        onOpenFullscreenStudio={() => vault.setIsFullscreenStudioOpen(true)}
       />
 
       {/* 4. Animated Scope Results Summary, Multi-Select Toolbar & View Mode Switcher */}
@@ -137,6 +136,21 @@ export const FootageLibraryView: React.FC = () => {
         onEndDragFootage={vault.handleEndDragFootage}
         onResetFilters={vault.handleResetFilters}
         onOpenDirectFootageModal={() => vault.setIsDirectFootageModalOpen(true)}
+      />
+
+      {/* 6. Fullscreen Dual-Pane Staging Triage Studio Modal */}
+      <FullscreenStagingStudioModal
+        isOpen={vault.isFullscreenStudioOpen}
+        onClose={() => vault.setIsFullscreenStudioOpen(false)}
+        categoryGroupsOverview={vault.categoryGroupsOverview}
+        mainCategoriesOverview={vault.mainCategoriesOverview}
+        lastUndoRecord={vault.lastQuickSortUndoRecord}
+        onQuickAssignCategory={vault.handleQuickAssignCategory}
+        onUndoLastQuickSort={vault.undoLastQuickSort}
+        onDismissUndoRecord={vault.dismissQuickSortUndoRecord}
+        onStartDragFootage={vault.handleStartDragFootage}
+        onEndDragFootage={vault.handleEndDragFootage}
+        onSelectWithRange={vault.handleSelectWithRange}
       />
     </div>
   );

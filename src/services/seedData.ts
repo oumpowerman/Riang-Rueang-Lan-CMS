@@ -20,22 +20,21 @@ export const STAGING_TAG_ID = 'TAG-STAGING';
 
 export const STAGING_CATEGORY_GROUP: CategoryGroup = {
   id: STAGING_GROUP_ID,
-  name: 'พื้นที่พักรอจัดหมวดหมู่',
+  name: 'ไม่มีหมวดหมู่',
   icon: 'inbox',
   color: 'amber',
-  description: 'พื้นที่พักฟุตเทจที่บันทึกด่วน รอคัดแยกเข้าหมวดหมู่จริงภายหลัง (ไม่นับโควตา 5 ฟุต = 1 EP)',
+  description: 'คลิปที่ยังไม่ได้จัดหมวดหมู่',
   order: 0,
   createdAt: '2025-01-01',
 };
 
 export const STAGING_CATEGORY_TAG: CategoryTag = {
   id: STAGING_TAG_ID,
-  name: 'พื้นที่พักรอจัดหมวดหมู่',
+  name: 'ไม่มีหมวดหมู่',
   color: 'amber',
   groupType: 'STAGING',
   groupId: STAGING_GROUP_ID,
-  description:
-    'หมวดหมู่พักฟุตเทจชั่วคราวสำหรับคลิปที่เพิ่งเก็บมาใหม่และยังไม่ได้ระบุหมวดหมู่จริง (ไม่นับรวมโควตา 5 ฟุต = 1 EP)',
+  description: 'คลิปที่ยังไม่ได้จัดหมวดหมู่',
   createdAt: '2025-01-01',
   tier: 1,
   parentId: null,

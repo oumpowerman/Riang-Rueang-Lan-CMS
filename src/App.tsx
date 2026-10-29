@@ -15,6 +15,7 @@ import { BatchAssignCategoryModal } from './components/footage/BatchAssignCatego
 import { BatchCategorizeFloatingBar } from './components/footage/BatchCategorizeFloatingBar';
 import { FootageLibraryView } from './components/footage/FootageLibraryView';
 import { FootageTraceabilityModal } from './components/footage/FootageTraceabilityModal';
+import { VideoPreviewModal } from './components/footage/VideoPreviewModal';
 import { MobileNavigation } from './components/layout/MobileNavigation';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
@@ -76,6 +77,7 @@ const MainWorkspace: React.FC = () => {
       <DirectFootageModal />
       <SourceSplitterModal />
       <FootageTraceabilityModal />
+      <VideoPreviewModal />
       <EpisodeDetailModal />
       <CategoryTagManagerModal />
       <ThreeTierCategoryManagerModal />

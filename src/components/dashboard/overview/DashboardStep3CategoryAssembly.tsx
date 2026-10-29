@@ -9,13 +9,11 @@ import {
   Clapperboard,
   Clock,
   FolderOpen,
-  Plus,
   Rocket,
   Search,
   Sparkles,
   Trophy,
   X,
-  Zap,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { CategoryTag } from '../../../types/tag.types';
@@ -24,12 +22,15 @@ import {
   CategorySortMode,
   DashboardProductionRadarData,
   DashboardViewMode,
+  stepSectionVariants,
+  StepTransitionDirection,
   WorkflowStep,
 } from './dashboard.types';
 import { DashboardProductionRadar } from './DashboardProductionRadar';
 
 interface DashboardStep3CategoryAssemblyProps {
   activeWorkflowStep: WorkflowStep;
+  stepDirection?: StepTransitionDirection;
   viewMode: DashboardViewMode;
   handleSelectStep: (step: WorkflowStep) => void;
   productionRadar: DashboardProductionRadarData;
@@ -46,7 +47,7 @@ interface DashboardStep3CategoryAssemblyProps {
   activeCategoryIdFilter: string | null;
   setActiveCategoryIdFilter: React.Dispatch<React.SetStateAction<string | null>>;
   tagMap: Record<string, CategoryTag>;
-  setIsTagManagerOpen: (open: boolean) => void;
+  setIsTagManagerOpen?: (open: boolean) => void;
   setIsDirectFootageModalOpen: (open: boolean) => void;
   setTraceabilityFootageId: (id: string | null) => void;
   handleOpenCategoryInVault: (tagId: string) => void;
@@ -57,6 +58,7 @@ export const DashboardStep3CategoryAssembly: React.FC<
   DashboardStep3CategoryAssemblyProps
 > = ({
   activeWorkflowStep,
+  stepDirection = 1,
   viewMode,
   handleSelectStep,
   productionRadar,
@@ -73,7 +75,6 @@ export const DashboardStep3CategoryAssembly: React.FC<
   activeCategoryIdFilter,
   setActiveCategoryIdFilter,
   tagMap,
-  setIsTagManagerOpen,
   setIsDirectFootageModalOpen,
   setTraceabilityFootageId,
   handleOpenCategoryInVault,
@@ -82,30 +83,27 @@ export const DashboardStep3CategoryAssembly: React.FC<
   return (
     <motion.section
       id="step-section-3"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className={`bg-white border rounded-2xl p-4 sm:p-5 space-y-5 transition-all ${
+      custom={stepDirection}
+      variants={stepSectionVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      className={`bg-white border rounded-2xl p-4 sm:p-5 space-y-4 transition-colors ${
         activeWorkflowStep === 3 && viewMode === 'FOCUS'
           ? 'border-indigo-300/90 shadow-[0_8px_30px_rgba(99,102,241,0.08)] ring-1 ring-indigo-500/20'
           : 'border-slate-200/90 shadow-2xs'
       }`}
     >
       {/* Step 3 Header & Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white text-sm font-bold flex items-center justify-center shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
             3
           </span>
-          <div>
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-500" />
-              <span>สเต็ปที่ 3: ชี้เป้าหมวด & จัดคลิป 5 อันดับพร้อมผลิต</span>
-            </h2>
-            <p className="text-xs text-slate-500">
-              เลือกหมวดหมู่ที่มีฟุตเทจพร้อมใช้ครบ 5 ฟุต แล้วกดส่งเข้าห้องจัดอันดับได้ทันที
-            </p>
-          </div>
+          <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5">
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <span>จัด 5 อันดับตามหมวดหมู่</span>
+          </h2>
         </div>
 
         {viewMode === 'FOCUS' && (
@@ -113,17 +111,17 @@ export const DashboardStep3CategoryAssembly: React.FC<
             <button
               type="button"
               onClick={() => handleSelectStep(2)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
-              <span>กลับสเต็ป 2</span>
+              <span>ก่อนหน้า</span>
             </button>
             <button
               type="button"
               onClick={() => handleSelectStep(4)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-2xs transition-colors cursor-pointer"
             >
-              <span>ไปสเต็ป 4: ตรวจคลิปหลัก</span>
+              <span>ถัดไป: คลัง EP</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -143,7 +141,7 @@ export const DashboardStep3CategoryAssembly: React.FC<
       {/* Filter, Search & Sort for Category Matrix */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* Category Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl w-fit">
+        <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100/90 rounded-xl w-fit">
           {(
             [
               { id: 'ALL', label: `ทั้งหมด (${categoryMatrix.length})` },
@@ -153,17 +151,17 @@ export const DashboardStep3CategoryAssembly: React.FC<
               },
               {
                 id: 'ALMOST_READY',
-                label: `ใกล้ครบ 5 ฟุต (${productionRadar.almostReadyCategories.length})`,
+                label: `ใกล้ครบ 5 (${productionRadar.almostReadyCategories.length})`,
               },
-              { id: 'TIER_1', label: 'หมวดหลัก (Tier 1)' },
-              { id: 'TIER_2', label: 'หมวดย่อย (Tier 2)' },
+              { id: 'TIER_1', label: 'หมวดหลัก' },
+              { id: 'TIER_2', label: 'หมวดย่อย' },
             ] as { id: CategoryFilterMode; label: string }[]
           ).map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setCategoryFilterMode(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
                 categoryFilterMode === tab.id
                   ? 'bg-white text-indigo-950 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -175,13 +173,13 @@ export const DashboardStep3CategoryAssembly: React.FC<
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[190px] flex-1 sm:flex-initial">
+          <div className="relative min-w-[180px] flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={categorySearch}
               onChange={(e) => setCategorySearch(e.target.value)}
-              placeholder="ค้นหาชื่อหมวดหมู่..."
+              placeholder="ค้นหาหมวดหมู่..."
               className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:bg-white focus:border-indigo-400"
             />
             {categorySearch && (
@@ -202,31 +200,20 @@ export const DashboardStep3CategoryAssembly: React.FC<
               onChange={(e) => setCategorySortMode(e.target.value as CategorySortMode)}
               className="bg-transparent text-slate-800 font-semibold outline-none cursor-pointer"
             >
-              <option value="USABLE_DESC">เรียง: ฟุตพร้อมใช้ (มาก → น้อย)</option>
-              <option value="EP_QUOTA_DESC">เรียง: จำนวน EP ที่ทำได้ทันที</option>
-              <option value="ALMOST_5_ASC">เรียง: ใกล้ครบ 5 ฟุตที่สุด</option>
-              <option value="TOTAL_DESC">เรียง: ฟุตทั้งหมดในหมวด</option>
-              <option value="NAME_ASC">เรียง: ชื่อหมวดหมู่ (ก-ฮ)</option>
+              <option value="USABLE_DESC">พร้อมใช้มากสุด</option>
+              <option value="EP_QUOTA_DESC">ทำ EP ได้มากสุด</option>
+              <option value="ALMOST_5_ASC">ใกล้ครบ 5 คลิป</option>
+              <option value="TOTAL_DESC">คลิปทั้งหมด</option>
+              <option value="NAME_ASC">ชื่อ ก-ฮ</option>
             </select>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsTagManagerOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl cursor-pointer shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>จัดการหมวดหมู่</span>
-          </button>
         </div>
       </div>
 
       {/* Category Cards Grid */}
       {filteredCategories.length === 0 ? (
         <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200/70 space-y-2">
-          <div className="text-sm font-bold text-slate-700">
-            ไม่พบหมวดหมู่ที่ตรงกับเงื่อนไข
-          </div>
+          <div className="text-sm font-bold text-slate-700">ไม่พบหมวดหมู่</div>
           <button
             type="button"
             onClick={() => {
@@ -235,7 +222,7 @@ export const DashboardStep3CategoryAssembly: React.FC<
             }}
             className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-white border border-indigo-200 rounded-xl cursor-pointer"
           >
-            แสดงหมวดหมู่ทั้งหมด
+            แสดงทั้งหมด
           </button>
         </div>
       ) : (
@@ -254,72 +241,62 @@ export const DashboardStep3CategoryAssembly: React.FC<
                     prev === stat.tag.id ? null : stat.tag.id
                   )
                 }
-                className={`rounded-2xl p-4 cursor-pointer transition-all flex flex-col justify-between gap-3 border ${
+                className={`rounded-2xl p-3.5 cursor-pointer transition-all flex flex-col justify-between gap-3 border ${
                   isSelectedOnDashboard
-                    ? 'bg-gradient-to-br from-indigo-50/90 via-white to-sky-50/80 border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm'
+                    ? 'bg-indigo-50/40 border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm'
                     : 'bg-white hover:bg-slate-50/70 border-slate-200/90 shadow-2xs'
                 }`}
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-1.5 text-[11px] font-mono">
                     <span className="text-slate-400 truncate">
-                      {stat.tag.id}
-                      {parentTag ? ` · ↳ ${parentTag.name}` : ''}
+                      {parentTag ? `↳ ${parentTag.name}` : stat.tag.id}
                     </span>
                     {stat.producibleEpisodesCount > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 text-white font-bold shrink-0">
                         <Clapperboard className="w-3 h-3" />
-                        <span>ทำได้ {stat.producibleEpisodesCount} EP</span>
+                        <span>{stat.producibleEpisodesCount} EP</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-bold shrink-0">
                         <Clock className="w-3 h-3 text-amber-700" />
-                        <span>มี {availableToUse}/5 ฟุต</span>
+                        <span>{availableToUse}/5</span>
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-bold text-slate-900 truncate">
-                      #{stat.tag.name}
-                    </h3>
-                    {isSelectedOnDashboard && (
-                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md shrink-0">
-                        กำลังกรอง
-                      </span>
-                    )}
-                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 truncate">
+                    #{stat.tag.name}
+                  </h3>
 
                   {/* Readiness Bar */}
-                  <div className="space-y-1">
-                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        style={{ width: `${readinessPercent}%` }}
-                        className={`h-full rounded-full ${
-                          stat.producibleEpisodesCount > 0
-                            ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                            : 'bg-gradient-to-r from-amber-400 to-orange-400'
-                        }`}
-                      />
-                    </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${readinessPercent}%` }}
+                      className={`h-full rounded-full ${
+                        stat.producibleEpisodesCount > 0
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          : 'bg-gradient-to-r from-amber-400 to-orange-400'
+                      }`}
+                    />
                   </div>
                 </div>
 
                 {/* 4-Color Status Counts */}
                 <div className="grid grid-cols-4 gap-1 text-center font-mono tabular-nums text-xs bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/60">
-                  <div title="ฟ้า ใหม่" className="flex flex-col items-center">
+                  <div title="คลิปใหม่" className="flex flex-col items-center">
                     <Sparkles className="w-3 h-3 text-sky-600 mb-0.5" />
                     <div className="font-bold text-sky-700">{stat.newCount}</div>
                   </div>
-                  <div title="เขียว สด" className="flex flex-col items-center">
+                  <div title="พร้อมใช้" className="flex flex-col items-center">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600 mb-0.5" />
                     <div className="font-bold text-emerald-700">{stat.readyCount}</div>
                   </div>
-                  <div title="เหลือง ถี่" className="flex flex-col items-center">
+                  <div title="ใช้ถี่" className="flex flex-col items-center">
                     <AlertTriangle className="w-3 h-3 text-amber-600 mb-0.5" />
                     <div className="font-bold text-amber-700">{stat.frequentCount}</div>
                   </div>
-                  <div title="แดง พัก" className="flex flex-col items-center">
+                  <div title="ติดคูลดาวน์" className="flex flex-col items-center">
                     <Clock className="w-3 h-3 text-rose-600 mb-0.5" />
                     <div className="font-bold text-rose-700">{stat.cooldownCount}</div>
                   </div>
@@ -353,7 +330,7 @@ export const DashboardStep3CategoryAssembly: React.FC<
                     </button>
                   ) : (
                     <span className="text-[11px] font-mono text-slate-400">
-                      ขาดอีก {5 - availableToUse} ฟุต
+                      ขาด {5 - availableToUse} คลิป
                     </span>
                   )}
                 </div>

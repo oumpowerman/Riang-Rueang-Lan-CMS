@@ -29,6 +29,7 @@ export interface Footage {
   durationSec?: number;
   tags: string[]; // Multi-tag IDs
   driveFileUrl: string;
+  thumbnailUrl?: string; // Optional direct thumbnail URL from Google Drive API or YouTube
   standardFileName: string; // e.g., FT-0003_ชื่อคลิป.mp4
   mascotNotes: string; // Punchline / reaction guidance for the mascot narrator
   createdAt: string; // YYYY-MM-DD

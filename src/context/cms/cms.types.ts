@@ -118,6 +118,8 @@ export interface CMSContextType {
   openSourceSplitterFor: (source: RawSource | null) => void;
   traceabilityFootageId: string | null;
   setTraceabilityFootageId: (id: string | null) => void;
+  previewFootageId: string | null;
+  setPreviewFootageId: (id: string | null) => void;
   selectedEpisodeDetailId: string | null;
   setSelectedEpisodeDetailId: (id: string | null) => void;
 
@@ -188,6 +190,7 @@ export interface CMSContextType {
     originalUrl: string;
     tags: string[];
     driveFileUrl: string;
+    thumbnailUrl?: string;
     mascotNotes: string;
     durationSec?: number;
   }) => Footage;
@@ -231,6 +234,7 @@ export interface CMSContextType {
       title: string;
       driveFileUrl?: string;
       originalUrl?: string;
+      thumbnailUrl?: string;
       mascotNotes?: string;
       tags?: string[];
       durationSec?: number;

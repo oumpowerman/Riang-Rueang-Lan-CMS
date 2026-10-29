@@ -428,6 +428,7 @@ export const useGoogleDriveBatchImport = () => {
             title: item.cleanTitle,
             driveFileUrl: item.webViewLink,
             originalUrl: item.webViewLink,
+            thumbnailUrl: item.thumbnailUrl,
             tags: [assignedTagId],
             mascotNotes: isStaged
               ? `พักรอจัดหมวดหมู่ (จากโฟลเดอร์ "${folderName}")`

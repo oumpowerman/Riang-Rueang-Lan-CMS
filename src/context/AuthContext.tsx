@@ -44,13 +44,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('Failed to load user profile:', err);
         }
       } else {
-        // Automatically provide a convenient default guest session as Editor if not logged in
-        // so user isn't blocked by an annoying mandatory login screen
+        const savedRole = authService.getPersistedRole();
         setUserProfile({
-          id: 'guest-editor',
-          email: 'editor@studio.local',
-          displayName: 'ผู้ตัดต่อคลิป (Team Editor)',
-          role: 'EDITOR',
+          id: `session-${savedRole.toLowerCase()}`,
+          email: savedRole === 'ADMIN' ? 'admin@studio.local' : 'editor@studio.local',
+          displayName:
+            savedRole === 'ADMIN'
+              ? 'หัวหน้าโปรดิวเซอร์ (Admin)'
+              : 'ผู้ตัดต่อคลิป (Team Editor)',
+          role: savedRole,
         });
       }
       setIsLoading(false);
@@ -73,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     pass: string,
     name: string,
-    role: UserRole = 'EDITOR'
+    role: UserRole = 'ADMIN'
   ) => {
     setIsLoading(true);
     try {
@@ -99,7 +101,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async (): Promise<string> => {
     setIsLoading(true);
     try {
-      const { accessToken } = await authService.signInWithGoogle();
+      const { user, accessToken, profile } = await authService.signInWithGoogle();
+      setCurrentUser(user);
+      setUserProfile(profile);
       setDriveAccessToken(accessToken);
       return accessToken;
     } finally {
@@ -110,11 +114,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     await authService.logout();
     setDriveAccessToken(null);
+    const savedRole = authService.getPersistedRole();
     setUserProfile({
-      id: 'guest-editor',
-      email: 'guest@studio.local',
-      displayName: 'ผู้ตัดต่อ (Guest)',
-      role: 'EDITOR',
+      id: `session-${savedRole.toLowerCase()}`,
+      email: savedRole === 'ADMIN' ? 'admin@studio.local' : 'editor@studio.local',
+      displayName:
+        savedRole === 'ADMIN' ? 'หัวหน้าโปรดิวเซอร์ (Admin)' : 'ผู้ตัดต่อ (Editor)',
+      role: savedRole,
     });
   };
 

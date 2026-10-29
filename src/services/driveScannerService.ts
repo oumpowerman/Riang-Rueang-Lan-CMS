@@ -14,6 +14,7 @@ export interface DiscoveredDriveVideo {
   cleanTitle: string; // Cleaned Thai/English title without extension
   mimeType: string;
   webViewLink: string;
+  thumbnailUrl?: string;
   sizeBytes: number;
   createdTime: string;
   durationSec?: number;
@@ -289,7 +290,7 @@ export async function scanGoogleDriveFolderRecursive({
           supportsAllDrives: 'true',
           includeItemsFromAllDrives: 'true',
           fields:
-            'nextPageToken,files(id,name,mimeType,size,createdTime,videoMediaMetadata,webViewLink,shortcutDetails)',
+            'nextPageToken,files(id,name,mimeType,size,createdTime,videoMediaMetadata,webViewLink,thumbnailLink,shortcutDetails)',
           ...(pageToken ? { pageToken } : {}),
         },
         effectiveAccessToken ? null : effectiveApiKey
@@ -340,6 +341,9 @@ export async function scanGoogleDriveFolderRecursive({
             cleanTitle,
             mimeType: file.mimeType || 'video/mp4',
             webViewLink: driveFileUrl,
+            thumbnailUrl:
+              file.thumbnailLink ||
+              `https://drive.google.com/thumbnail?id=${targetId}&sz=w320`,
             sizeBytes: Number(file.size || 0),
             createdTime: file.createdTime || new Date().toISOString(),
             durationSec: durationSec || 25,

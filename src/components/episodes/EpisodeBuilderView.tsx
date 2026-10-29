@@ -18,7 +18,6 @@ export const EpisodeBuilderView: React.FC = () => {
     settings,
     setActiveTab,
     setIsStatusRuleModalOpen,
-    setIsThreeTierManagerOpen,
 
     nextEpisodeId,
     activeBuilderStep,
@@ -106,7 +105,7 @@ export const EpisodeBuilderView: React.FC = () => {
 
   return (
     <div className="space-y-3.5">
-      {/* Studio Header & Single Source of Truth 3-Tier Context Bar */}
+      {/* Studio Header & Interactive 4-Step Stepper Bar */}
       <BuilderStudioHeader
         nextEpisodeId={nextEpisodeId}
         selectedCount={selectedFootageIds.length}
@@ -114,10 +113,8 @@ export const EpisodeBuilderView: React.FC = () => {
         activeCategoryStat={activeCategoryStat}
         productionTarget={productionTarget}
         activeSubcategory={activeSubcategory}
-        onOpenThreeTierManager={() => setIsThreeTierManagerOpen(true)}
-        onFocusStep1={
-          activeBuilderStep !== 1 ? () => setActiveBuilderStep(1) : undefined
-        }
+        activeBuilderStep={activeBuilderStep}
+        onSelectStep={setActiveBuilderStep}
         preselectNotice={preselectNotice}
         onDismissPreselectNotice={() => setPreselectNotice(null)}
         savedBannerMessage={savedBannerMessage}
@@ -148,7 +145,6 @@ export const EpisodeBuilderView: React.FC = () => {
         onSelectSoloMode={handleSelectSoloMode}
         onSelectSubcategory={handleSelectSubcategory}
         onOpenStatusRuleModal={() => setIsStatusRuleModalOpen(true)}
-        onOpenThreeTierManager={() => setIsThreeTierManagerOpen(true)}
       />
 
       {/* Step 2: 1-Click Smart Mix Recipe Selector */}

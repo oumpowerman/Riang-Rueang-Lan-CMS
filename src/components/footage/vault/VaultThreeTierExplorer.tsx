@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, Folder, FolderOpen, Layers, Rocket, RotateCcw } from 'lucide-react';
+import { ChevronDown, FolderOpen, Rocket, RotateCcw } from 'lucide-react';
 import { isStagingGroupId, isStagingTagId } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { MixRecipeId } from '../../../utils/collisionDetector';
@@ -102,29 +102,27 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
       onQuickAssignCategory(ids, targetTagId);
     }
   };
+
   return (
-    <div className="bg-white border border-indigo-200/80 rounded-2xl shadow-2xs overflow-hidden">
+    <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">
+      {/* Compact Explorer Header */}
       <div
         onClick={onToggleExpand}
-        className="p-4 sm:p-5 bg-gradient-to-r from-indigo-50/70 via-white to-sky-50/60 hover:from-indigo-50/95 hover:to-sky-50/90 transition-colors cursor-pointer flex flex-wrap items-center justify-between gap-3"
+        className="px-4 py-3 bg-slate-50/70 hover:bg-slate-100/60 transition-colors cursor-pointer flex flex-wrap items-center justify-between gap-2"
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-            <FolderOpen className="w-4 h-4" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+            <FolderOpen className="w-3.5 h-3.5" />
           </div>
-          <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <span>
-                สำรวจตามลำดับขั้น: กลุ่มหมวดหมู่ ({categoryGroupsOverview.length} กลุ่ม) ➔ หมวดหลัก ({mainCategoriesCount} หมวด)
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500">
-              คลิกเลือกกลุ่มหมวดหมู่ก่อน เพื่อกางดูหมวดหมู่หลักและหมวดหมู่ย่อยตามลำดับ
-            </p>
-          </div>
+          <span className="text-sm font-extrabold text-slate-900">
+            สำรวจหมวดหมู่
+          </span>
+          <span className="text-xs font-mono text-slate-500 tabular-nums">
+            {categoryGroupsOverview.length} กลุ่ม · {mainCategoriesCount} หมวด
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {hasHierarchySelection && (
             <button
               type="button"
@@ -132,10 +130,10 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                 e.stopPropagation();
                 onClearHierarchySelection();
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>ล้างกลุ่ม/หมวดที่เลือก</span>
+              <RotateCcw className="w-3 h-3" />
+              <span>ล้างตัวกรอง</span>
             </button>
           )}
 
@@ -145,13 +143,9 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
               e.stopPropagation();
               onToggleExpand();
             }}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-              isExpanded
-                ? 'bg-slate-900 text-white border-slate-900'
-                : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
-            }`}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
           >
-            <span>{isExpanded ? 'พับเก็บแผงสำรวจ' : 'กางแผงสำรวจหมวดหมู่'}</span>
+            <span>{isExpanded ? 'ซ่อน' : 'กางดู'}</span>
             <motion.span
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
@@ -169,72 +163,61 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden p-0 m-0 border-none"
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
           >
-            <div className="border-t border-slate-200/80 p-4 sm:p-5 space-y-4 bg-white">
-              {/* =================================================================
-                  STAGE 1 (Always Visible): Category Group Cards (Cluster Groups)
-                 ================================================================= */}
-              <div className="space-y-2.5">
+            <div className="border-t border-slate-200/80 p-4 space-y-3.5 bg-white">
+              {/* STAGE 1: Category Groups */}
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[11px] font-mono font-bold flex items-center justify-center">
+                  <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">
                       1
                     </span>
-                    <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>
-                      ขั้นที่ 1 — เลือกกลุ่มหมวดหมู่ (คลิกการ์ดกลุ่มเพื่อกรองคลิปและกางหมวดหมู่หลัก):
-                    </span>
+                    <span>กลุ่มหมวดหมู่</span>
                   </span>
-                  {activeGroupOverview && (
-                    <span className="text-xs font-semibold text-indigo-700 inline-flex items-center gap-1.5">
-                      <span>กำลังเลือกกลุ่ม:</span>
-                      <CategoryGroupIcon icon={activeGroupOverview.group.icon} className="w-3.5 h-3.5" />
-                      <span>{activeGroupOverview.group.name}</span>
-                    </span>
-                  )}
                 </div>
 
                 {categoryGroupsOverview.length === 0 ? (
                   <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center space-y-2">
-                    <p className="text-xs text-slate-500">
-                      ยังไม่มีกลุ่มหมวดหมู่ในระบบ สามารถสร้างโครงสร้างกลุ่มและหมวดหมู่ได้ทันที
-                    </p>
+                    <p className="text-xs text-slate-500">ยังไม่มีกลุ่มหมวดหมู่</p>
                     <button
                       type="button"
                       onClick={onOpenThreeTierManager}
-                      className="px-3.5 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 cursor-pointer"
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 cursor-pointer"
                     >
-                      + จัดการหมวดหมู่ 3 ชั้น
+                      + จัดการหมวดหมู่
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                     {categoryGroupsOverview.map((groupItem) => {
                       const isGroupSelected = selectedGroupId === groupItem.group.id;
+                      const isStagingGrp = isStagingGroupId(groupItem.group.id);
 
                       return (
                         <motion.button
                           key={groupItem.group.id}
                           type="button"
-                          whileHover={{ y: -2 }}
+                          whileHover={{ y: -1.5 }}
                           whileTap={{ scale: 0.98 }}
                           transition={{ type: 'spring', stiffness: 420, damping: 28 }}
                           onClick={() => onSelectGroup(groupItem.group.id)}
                           onDragEnter={() => {
                             if (
                               isDragging &&
-                              !isStagingGroupId(groupItem.group.id) &&
+                              !isStagingGrp &&
                               selectedGroupId !== groupItem.group.id
                             ) {
                               onSelectGroup(groupItem.group.id);
                             }
                           }}
-                          className={`relative text-left p-3.5 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-2.5 overflow-hidden ${
+                          className={`relative text-left p-3 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-2 overflow-hidden ${
                             isGroupSelected
-                              ? 'text-white border-indigo-600 ring-4 ring-indigo-500/20 shadow-sm'
-                              : 'bg-slate-50/80 hover:bg-indigo-50/40 hover:border-indigo-300 border-slate-200/90 text-slate-900'
+                              ? 'text-white border-indigo-600 shadow-xs'
+                              : isStagingGrp
+                              ? 'bg-amber-50/60 hover:bg-amber-50 border-amber-200/90 text-slate-900'
+                              : 'bg-slate-50/70 hover:bg-indigo-50/40 hover:border-indigo-300 border-slate-200/90 text-slate-900'
                           }`}
                         >
                           {isGroupSelected && (
@@ -244,48 +227,56 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                               className="absolute inset-0 bg-indigo-600 z-0"
                             />
                           )}
-                          <div className="relative z-10 flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
+                          <div className="relative z-10 flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <CategoryGroupIcon
                                 icon={groupItem.group.icon}
-                                className={`w-4 h-4 shrink-0 ${
-                                  isGroupSelected ? 'text-white' : 'text-indigo-600'
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isGroupSelected
+                                    ? 'text-white'
+                                    : isStagingGrp
+                                    ? 'text-amber-600'
+                                    : 'text-indigo-600'
                                 }`}
                               />
-                              <span className="text-xs sm:text-sm font-bold truncate">
-                                {groupItem.group.name}
+                              <span className="text-xs font-bold truncate">
+                                {isStagingGrp ? 'ไม่มีหมวดหมู่' : groupItem.group.name}
                               </span>
                             </div>
-                            <span
-                              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0 tabular-nums ${
-                                isGroupSelected
-                                  ? 'bg-indigo-800 text-indigo-100'
-                                  : 'bg-slate-200/80 text-slate-700'
-                              }`}
-                            >
-                              {groupItem.mainCatCount} หมวดหลัก
-                            </span>
+                            {!isStagingGrp && (
+                              <span
+                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums ${
+                                  isGroupSelected
+                                    ? 'bg-indigo-800 text-indigo-100'
+                                    : 'bg-slate-200/80 text-slate-600'
+                                }`}
+                              >
+                                {groupItem.mainCatCount}
+                              </span>
+                            )}
                           </div>
 
                           <div
-                            className={`relative z-10 flex items-baseline justify-between pt-2 border-t text-xs font-mono tabular-nums ${
+                            className={`relative z-10 flex items-baseline justify-between pt-1.5 border-t text-[11px] font-mono tabular-nums ${
                               isGroupSelected
                                 ? 'border-indigo-500/60 text-indigo-100'
-                                : 'border-slate-200/80 text-slate-500'
+                                : 'border-slate-200/70 text-slate-500'
                             }`}
                           >
-                            <span>รวม {groupItem.totalCount} คลิป</span>
-                            <span
-                              className={`font-bold ${
-                                isGroupSelected
-                                  ? 'text-emerald-300'
-                                  : groupItem.usableCount > 0
-                                  ? 'text-emerald-700'
-                                  : 'text-slate-500'
-                              }`}
-                            >
-                              พร้อมใช้ {groupItem.usableCount}
-                            </span>
+                            <span>{groupItem.totalCount} คลิป</span>
+                            {!isStagingGrp && (
+                              <span
+                                className={`font-bold ${
+                                  isGroupSelected
+                                    ? 'text-emerald-300'
+                                    : groupItem.usableCount > 0
+                                    ? 'text-emerald-700'
+                                    : 'text-slate-400'
+                                }`}
+                              >
+                                พร้อม {groupItem.usableCount}
+                              </span>
+                            )}
                           </div>
                         </motion.button>
                       );
@@ -294,33 +285,24 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                 )}
               </div>
 
-              {/* =================================================================
-                  STAGE 2 (Framer Motion Progressive Reveal): Main Categories under Selected Group
-                 ================================================================= */}
+              {/* STAGE 2: Main Categories under Selected Group */}
               <AnimatePresence initial={false}>
-                {activeGroupOverview && (
+                {activeGroupOverview && !isStagingGroupId(activeGroupOverview.group.id) && (
                   <motion.div
                     key="vault-tier2-main-cats"
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                    className="overflow-hidden p-0 m-0 border-none"
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
                   >
-                    <div className="pt-3 border-t border-slate-200/80 space-y-2.5 bg-sky-50/40 p-3.5 rounded-xl border border-sky-200/80">
+                    <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-sky-600 text-white text-[11px] font-mono font-bold flex items-center justify-center">
+                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-sky-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">
                             2
                           </span>
-                          <span>
-                            ขั้นที่ 2 — เลือกหมวดหมู่หลักในกลุ่ม{' '}
-                            <span className="text-sky-800 font-bold">
-                              {activeGroupOverview.group.icon}{' '}
-                              {activeGroupOverview.group.name}
-                            </span>
-                            :
-                          </span>
+                          <span>หมวดหลักใน {activeGroupOverview.group.name}</span>
                         </span>
 
                         {activeMainCategory && (
@@ -329,185 +311,138 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                             onClick={onClearMainCategoryFilter}
                             className="text-[11px] font-semibold text-sky-700 hover:text-sky-900 cursor-pointer"
                           >
-                            ดูทุกหมวดหลักในกลุ่มนี้ ({activeGroupOverview.totalCount} คลิป)
+                            ดูทั้งกลุ่ม ({activeGroupOverview.totalCount})
                           </button>
                         )}
                       </div>
 
                       {activeGroupOverview.mainCategories.length === 0 ? (
                         <div className="p-3 text-center text-xs text-slate-500 bg-white rounded-lg border border-dashed border-slate-200">
-                          ยังไม่มีหมวดหมู่หลักในกลุ่มนี้
+                          ยังไม่มีหมวดหลักในกลุ่มนี้
                         </div>
                       ) : (
-                        <AnimatePresence mode="popLayout" initial={false}>
-                          <motion.div
-                            key={`maincats-grid-${activeGroupOverview.group.id}`}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.18 }}
-                            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5"
-                          >
-                            {activeGroupOverview.mainCategories.map((item, idx) => {
-                              const isSelected =
-                                activeMainCategory?.mainTag.id === item.mainTag.id;
-                              const isStaging = isStagingTagId(item.mainTag.id);
-                              const isReady5 = !isStaging && item.usableCount >= 5;
-                              const isDropHover =
-                                !isStaging && dragOverTagId === item.mainTag.id;
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {activeGroupOverview.mainCategories.map((item) => {
+                            const isSelected =
+                              activeMainCategory?.mainTag.id === item.mainTag.id;
+                            const isStaging = isStagingTagId(item.mainTag.id);
+                            const isReady5 = !isStaging && item.usableCount >= 5;
+                            const isDropHover =
+                              !isStaging && dragOverTagId === item.mainTag.id;
 
-                              return (
-                                <motion.button
-                                  key={item.mainTag.id}
-                                  type="button"
-                                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
-                                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  transition={{
-                                    type: 'spring',
-                                    stiffness: 420,
-                                    damping: 28,
-                                    delay: idx * 0.03,
-                                  }}
-                                  whileHover={{ y: -1.5 }}
-                                  whileTap={{ scale: 0.97 }}
-                                  onClick={() => onSelectMainCategory(item.mainTag.id)}
-                                  onDragOver={(e) => handleDragOverTag(e, item.mainTag.id)}
-                                  onDragLeave={(e) => handleDragLeaveTag(e, item.mainTag.id)}
-                                  onDrop={(e) => handleDropOnTag(e, item.mainTag.id)}
-                                  className={`relative text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 overflow-hidden ${
-                                    isDropHover
-                                      ? 'bg-emerald-50 border-emerald-500 ring-3 ring-emerald-400/50 text-emerald-950 scale-[1.02] shadow-md'
-                                      : isSelected
-                                      ? 'text-white border-sky-600 ring-3 ring-sky-400/30 shadow-xs'
-                                      : 'bg-white hover:bg-sky-50/50 hover:border-sky-300 border-slate-200/90 text-slate-900'
-                                  }`}
-                                >
-                                  {isSelected && (
-                                    <motion.span
-                                      layoutId="vault-active-maincat-bg"
-                                      transition={{
-                                        type: 'spring',
-                                        stiffness: 420,
-                                        damping: 32,
-                                      }}
-                                      className="absolute inset-0 bg-sky-600 z-0"
-                                    />
-                                  )}
-                                  <div className="relative z-10 flex items-start justify-between gap-1.5">
-                                    <span className="text-xs sm:text-sm font-bold leading-snug line-clamp-1">
-                                      {item.mainTag.name}
-                                    </span>
-                                    {isStaging ? (
-                                      <span
-                                        className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                                          isSelected
-                                            ? 'bg-amber-300 text-slate-950'
-                                            : 'bg-amber-100 text-amber-900'
-                                        }`}
-                                      >
-                                        ไม่นับโควตา EP
-                                      </span>
-                                    ) : (
-                                      isReady5 && (
-                                        <span
-                                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums ${
-                                            isSelected
-                                              ? 'bg-emerald-400 text-slate-950'
-                                              : 'bg-emerald-100 text-emerald-800'
-                                          }`}
-                                        >
-                                          {item.producibleEpisodes} EP
-                                        </span>
-                                      )
-                                    )}
-                                  </div>
-
-                                  <div
-                                    className={`relative z-10 flex items-baseline justify-between pt-1.5 border-t text-xs font-mono tabular-nums ${
-                                      isSelected
-                                        ? 'border-sky-500/60 text-sky-100'
-                                        : 'border-slate-100 text-slate-500'
-                                    }`}
-                                  >
-                                    <span>รวม {item.totalCount} คลิป</span>
+                            return (
+                              <motion.button
+                                key={item.mainTag.id}
+                                type="button"
+                                whileHover={{ y: -1 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => onSelectMainCategory(item.mainTag.id)}
+                                onDragOver={(e) => handleDragOverTag(e, item.mainTag.id)}
+                                onDragLeave={(e) => handleDragLeaveTag(e, item.mainTag.id)}
+                                onDrop={(e) => handleDropOnTag(e, item.mainTag.id)}
+                                className={`relative text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 overflow-hidden ${
+                                  isDropHover
+                                    ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 scale-[1.02]'
+                                    : isSelected
+                                    ? 'text-white border-sky-600 shadow-2xs'
+                                    : 'bg-white hover:border-sky-300 border-slate-200/90 text-slate-900'
+                                }`}
+                              >
+                                {isSelected && (
+                                  <motion.span
+                                    layoutId="vault-active-maincat-bg"
+                                    transition={{
+                                      type: 'spring',
+                                      stiffness: 420,
+                                      damping: 32,
+                                    }}
+                                    className="absolute inset-0 bg-sky-600 z-0"
+                                  />
+                                )}
+                                <div className="relative z-10 flex items-center justify-between gap-1.5">
+                                  <span className="text-xs font-bold truncate">
+                                    #{item.mainTag.name}
+                                  </span>
+                                  {isReady5 && (
                                     <span
-                                      className={`font-bold ${
+                                      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums ${
                                         isSelected
-                                          ? 'text-emerald-300'
-                                          : isReady5
-                                          ? 'text-emerald-700'
-                                          : 'text-slate-600'
+                                          ? 'bg-emerald-400 text-slate-950'
+                                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                       }`}
                                     >
-                                      พร้อมใช้ {item.usableCount}
+                                      {item.producibleEpisodes} EP
                                     </span>
-                                  </div>
-                                </motion.button>
-                              );
-                            })}
-                          </motion.div>
-                        </AnimatePresence>
+                                  )}
+                                </div>
+
+                                <div
+                                  className={`relative z-10 flex items-baseline justify-between pt-1 border-t text-[11px] font-mono tabular-nums ${
+                                    isSelected
+                                      ? 'border-sky-500/60 text-sky-100'
+                                      : 'border-slate-100 text-slate-500'
+                                  }`}
+                                >
+                                  <span>{item.totalCount} คลิป</span>
+                                  <span
+                                    className={`font-bold ${
+                                      isSelected
+                                        ? 'text-emerald-300'
+                                        : isReady5
+                                        ? 'text-emerald-700'
+                                        : 'text-slate-500'
+                                    }`}
+                                  >
+                                    พร้อม {item.usableCount}
+                                  </span>
+                                </div>
+                              </motion.button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* =================================================================
-                  STAGE 3 (Framer Motion Progressive Reveal): Subcategory Drill-down Drawer
-                 ================================================================= */}
+              {/* STAGE 3: Subcategories under Selected Main Category */}
               <AnimatePresence initial={false}>
-                {activeMainCategory && (
+                {activeMainCategory && !isStagingTagId(activeMainCategory.mainTag.id) && (
                   <motion.div
                     key="vault-tier3-subcats"
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                    className="overflow-hidden p-0 m-0 border-none"
+                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
                   >
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-200/80">
-                      <div className="space-y-2 flex-1">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-emerald-50/40 p-3 rounded-xl border border-emerald-200/80">
+                      <div className="space-y-1.5 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-mono font-bold flex items-center justify-center">
+                          <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">
                             3
                           </span>
                           <span className="text-xs font-bold text-emerald-950">
-                            ขั้นที่ 3 — เลือกหมวดหมู่ย่อย / บุคคลใน #{activeMainCategory.mainTag.name}:
+                            หมวดย่อยใน #{activeMainCategory.mainTag.name}
                           </span>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <motion.button
+                          <button
                             type="button"
-                            whileHover={{ y: -1 }}
-                            whileTap={{ scale: 0.96 }}
                             onClick={() =>
                               onSelectAllInMainCategory(activeMainCategory.mainTag.id)
                             }
-                            className={`relative px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer overflow-hidden ${
+                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
                               selectedTagFilter.length === 1 &&
                               selectedTagFilter[0] === activeMainCategory.mainTag.id
-                                ? 'text-white border-indigo-600 shadow-2xs'
+                                ? 'bg-indigo-600 text-white border-indigo-600'
                                 : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
                             }`}
                           >
-                            {selectedTagFilter.length === 1 &&
-                              selectedTagFilter[0] === activeMainCategory.mainTag.id && (
-                                <motion.span
-                                  layoutId="vault-active-subcat-pill"
-                                  transition={{
-                                    type: 'spring',
-                                    stiffness: 420,
-                                    damping: 32,
-                                  }}
-                                  className="absolute inset-0 bg-indigo-600 rounded-[7px] z-0"
-                                />
-                              )}
-                            <span className="relative z-10">
-                              ทั้งหมดในหมวด ({activeMainCategory.totalCount})
-                            </span>
-                          </motion.button>
+                            ทั้งหมด ({activeMainCategory.totalCount})
+                          </button>
 
                           {activeMainCategory.subTags.map((sub) => {
                             const subCount = computedFootage.filter((ft) =>
@@ -524,7 +459,7 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                                 onDrop={(e) => handleDropOnTag(e, sub.id)}
                                 className={`inline-flex rounded-lg transition-transform ${
                                   isSubDropHover
-                                    ? 'ring-3 ring-emerald-500 scale-105 bg-emerald-100'
+                                    ? 'ring-2 ring-emerald-500 scale-105 bg-emerald-100'
                                     : ''
                                 }`}
                               >
@@ -546,27 +481,21 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                         </div>
                       </div>
 
-                      {isStagingTagId(activeMainCategory.mainTag.id) ? (
-                        <span className="inline-flex items-center px-3 py-2 text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 rounded-xl whitespace-nowrap shrink-0">
-                          คลิกที่การ์ดคลิปเพื่อจัดเข้าหมวดหมู่จริงก่อนนำไปสร้าง EP
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onLaunchEpisodeBuilder(
-                              activeMainCategory.mainTag.id,
-                              activeMainCategory.newCount >= 5
-                                ? 'FORMULA_ALL_NEW'
-                                : 'FORMULA_2_NEW_3_FRESH'
-                            )
-                          }
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
-                        >
-                          <Rocket className="w-3.5 h-3.5 text-white" />
-                          <span>นำหมวดนี้ไปจัด 5 อันดับ →</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onLaunchEpisodeBuilder(
+                            activeMainCategory.mainTag.id,
+                            activeMainCategory.newCount >= 5
+                              ? 'FORMULA_ALL_NEW'
+                              : 'FORMULA_2_NEW_3_FRESH'
+                          )
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <Rocket className="w-3.5 h-3.5 text-white" />
+                        <span>จัด 5 อันดับ →</span>
+                      </button>
                     </div>
                   </motion.div>
                 )}

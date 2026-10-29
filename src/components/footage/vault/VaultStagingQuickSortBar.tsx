@@ -8,6 +8,7 @@ import {
   GripHorizontal,
   Inbox,
   Layers,
+  Maximize2,
   RotateCcw,
   Search,
   Sparkles,
@@ -39,6 +40,7 @@ export interface VaultStagingQuickSortBarProps {
   onSelectAllInStaging: () => void;
   isAllStagingSelected: boolean;
   onClearSelection: () => void;
+  onOpenFullscreenStudio?: () => void;
 }
 
 export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> = ({
@@ -56,6 +58,7 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
   onSelectAllInStaging,
   isAllStagingSelected,
   onClearSelection,
+  onOpenFullscreenStudio,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeGroupTab, setActiveGroupTab] = useState<string>('ALL');
@@ -68,14 +71,12 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
   const shouldShowWorkspace =
     isStagingFilterActive || selectedCount > 0 || isDragging;
 
-  // Automatically expand dock when user starts dragging clips
   useEffect(() => {
     if (isDragging) {
       setIsExpanded(true);
     }
   }, [isDragging]);
 
-  // Filter out the Staging Group so only real destination groups/categories appear
   const realCategoryGroups = useMemo(() => {
     return categoryGroupsOverview.filter((g) => !isStagingGroupId(g.group.id));
   }, [categoryGroupsOverview]);
@@ -84,7 +85,6 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
     return mainCategoriesOverview.filter((m) => !isStagingTagId(m.mainTag.id));
   }, [mainCategoriesOverview]);
 
-  // Filter main categories by active group tab and search query
   const visibleMainCategories = useMemo(() => {
     let list = realMainCategories;
 
@@ -114,7 +114,6 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
     return list;
   }, [realMainCategories, realCategoryGroups, activeGroupTab, categorySearch]);
 
-  // Extract footage IDs from native HTML5 drag event or fallback to activeDragFootageIds
   const extractDraggedFootageIds = (e: React.DragEvent): string[] => {
     try {
       const raw = e.dataTransfer.getData('application/x-footage-ids');
@@ -125,7 +124,7 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
         }
       }
     } catch {
-      // Fallback to activeDragFootageIds state
+      // Fallback
     }
     return activeDragFootageIds;
   };
@@ -177,7 +176,7 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
 
   return (
     <div className="sticky top-2 z-30 space-y-2">
-      {/* 1. Undo Notification Banner after Quick-Sort / Drag-and-Drop */}
+      {/* 1. Compact Undo Notification Toast */}
       <AnimatePresence>
         {lastUndoRecord && (
           <motion.div
@@ -186,40 +185,32 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-            className="bg-emerald-950/95 text-white backdrop-blur-md border border-emerald-500/50 rounded-2xl px-4 py-2.5 shadow-lg flex flex-wrap items-center justify-between gap-3"
+            className="bg-emerald-50 text-emerald-950 border border-emerald-200 rounded-2xl px-3.5 py-2 shadow-xs flex flex-wrap items-center justify-between gap-2"
           >
-            <div className="flex items-center gap-2.5 text-xs">
-              <div className="w-7 h-7 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shrink-0">
-                <CheckCircle2 className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="font-bold text-emerald-200">
-                  ย้ายฟุตเทจ {lastUndoRecord.movedCount} คลิป
-                </span>{' '}
-                <span>เข้าสู่หมวดหมู่</span>{' '}
-                <span className="font-extrabold text-amber-300 underline decoration-amber-400/60 underline-offset-2">
+            <div className="flex items-center gap-2 text-xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                ย้าย <strong>{lastUndoRecord.movedCount} คลิป</strong> ➔{' '}
+                <strong className="text-indigo-700">
                   {lastUndoRecord.targetTagName}
-                </span>{' '}
-                <span className="text-emerald-300/90">
-                  และนำออกจากพื้นที่พักเรียบร้อยแล้ว
-                </span>
-              </div>
+                </strong>
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={onUndoLastQuickSort}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>ย้อนกลับ (Undo)</span>
+                <RotateCcw className="w-3 h-3" />
+                <span>เลิกทำ</span>
               </button>
               <button
                 type="button"
                 onClick={onDismissUndoRecord}
-                className="p-1.5 rounded-lg bg-emerald-900/70 hover:bg-emerald-800 text-emerald-300 hover:text-white transition-colors cursor-pointer"
-                title="ปิดแจ้งเตือน"
+                className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+                title="ปิด"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -228,95 +219,76 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
         )}
       </AnimatePresence>
 
-      {/* 2. Sticky Top Quick-Sort & Drop Workspace */}
+      {/* 2. Streamlined Quick-Sort & Drop Workspace */}
       {shouldShowWorkspace && (
         <motion.div
           layout
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`rounded-2xl border backdrop-blur-md transition-all overflow-hidden ${
+          className={`rounded-2xl border transition-all overflow-hidden ${
             isDragging
-              ? 'bg-indigo-950/95 text-white border-indigo-400 ring-4 ring-indigo-500/30 shadow-2xl'
+              ? 'bg-indigo-50/95 text-slate-900 border-indigo-300 ring-2 ring-indigo-200 shadow-md'
               : selectedCount > 0
-              ? 'bg-slate-900/95 text-white border-indigo-500/70 shadow-xl'
-              : 'bg-white/95 text-slate-900 border-amber-300/90 shadow-md ring-2 ring-amber-400/20'
+              ? 'bg-white text-slate-900 border-indigo-300 shadow-sm'
+              : 'bg-white text-slate-900 border-slate-200/90 shadow-2xs'
           }`}
         >
-          {/* Dock Header Bar */}
-          <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200/20">
-            <div className="flex items-center gap-2.5 min-w-0">
+          {/* Compact Dock Header Bar */}
+          <div className="px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70">
+            <div className="flex items-center gap-2 min-w-0">
               <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                   isDragging
-                    ? 'bg-emerald-500 text-slate-950 animate-pulse'
+                    ? 'bg-indigo-600 text-white animate-pulse'
                     : selectedCount > 0
                     ? 'bg-indigo-600 text-white'
                     : 'bg-amber-500 text-white'
                 }`}
               >
                 {isDragging ? (
-                  <ArrowDownToDot className="w-4 h-4" />
+                  <ArrowDownToDot className="w-3.5 h-3.5" />
                 ) : selectedCount > 0 ? (
-                  <FolderInput className="w-4 h-4" />
+                  <FolderInput className="w-3.5 h-3.5" />
                 ) : (
-                  <Inbox className="w-4 h-4" />
+                  <Inbox className="w-3.5 h-3.5" />
                 )}
               </div>
 
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs sm:text-sm font-extrabold tracking-tight">
-                    แผงคัดแยกหมวดหมู่ด่วน (Staging Quick-Sort Dock)
-                  </span>
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                จัดหมวดหมู่ด่วน
+              </span>
 
-                  {isDragging ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-400 text-slate-950 shadow-2xs">
-                      <GripHorizontal className="w-3.5 h-3.5" />
-                      <span>
-                        กำลังลาก {activeDragFootageIds.length} คลิป — วางลงบนหมวดหมู่ด้านล่างได้เลย!
-                      </span>
-                    </span>
-                  ) : selectedCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-indigo-500 text-white">
-                      <Sparkles className="w-3 h-3 text-amber-300" />
-                      <span>
-                        เลือกไว้ {selectedCount} คลิป — คลิกหมวดหมู่ด้านล่างเพื่อย้ายเข้าทันที หรือลากคลิปมาวาง
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                      <span>รอจัดหมวดหมู่ {stagingCount} คลิป</span>
-                    </span>
-                  )}
-                </div>
-                <p
-                  className={`text-[11px] truncate ${
-                    isDragging || selectedCount > 0
-                      ? 'text-slate-300'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  ลากการ์ดคลิปมาวาง หรือติ๊กเลือกหลายคลิปแล้วคลิกปุ่มหมวดหมู่เพื่อแทนที่หมวดเดิมและนำออกจากพื้นที่พักทันที
-                </p>
-              </div>
+              {isDragging ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                  <GripHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>กำลังลาก {activeDragFootageIds.length} คลิป</span>
+                </span>
+              ) : selectedCount > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                  <Sparkles className="w-3 h-3 text-indigo-600" />
+                  <span>เลือก {selectedCount} คลิป</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 tabular-nums">
+                  <span>ไม่มีหมวด {stagingCount}</span>
+                </span>
+              )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
               {stagingCount > 0 && (
                 <button
                   type="button"
                   onClick={onSelectAllInStaging}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                     isAllStagingSelected
-                      ? 'bg-amber-400 text-slate-950 border-amber-300'
-                      : isDragging || selectedCount > 0
-                      ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                      ? 'bg-amber-400 text-slate-950 border-amber-400'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
                   }`}
                 >
                   {isAllStagingSelected
-                    ? `ยกเลิกเลือกพื้นที่พัก (${stagingCount})`
-                    : `เลือกทั้งหมดในพื้นที่พัก (${stagingCount})`}
+                    ? `ยกเลิกเลือก (${stagingCount})`
+                    : `เลือกไม่มีหมวด (${stagingCount})`}
                 </button>
               )}
 
@@ -324,22 +296,30 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                 <button
                   type="button"
                   onClick={onClearSelection}
-                  className="px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer"
                 >
-                  ล้างที่เลือก ({selectedCount})
+                  ล้าง ({selectedCount})
+                </button>
+              )}
+
+              {onOpenFullscreenStudio && (
+                <button
+                  type="button"
+                  onClick={onOpenFullscreenStudio}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
+                  title="เปิดโหมดคัดแยกเต็มจอ"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  <span>เต็มจอ</span>
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => setIsExpanded((prev) => !prev)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                  isDragging || selectedCount > 0
-                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                }`}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
               >
-                <span>{isExpanded ? 'ย่อแผง' : 'กางแผงหมวดหมู่'}</span>
+                <span>{isExpanded ? 'ย่อ' : 'กาง'}</span>
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform ${
                     isExpanded ? 'rotate-180' : ''
@@ -359,20 +339,11 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="p-3 sm:p-4 space-y-3">
-                  {/* Top Filter Row: Tier 0 Group Tabs + Quick Search */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                      <span
-                        className={`text-[11px] font-bold shrink-0 flex items-center gap-1 mr-1 ${
-                          isDragging || selectedCount > 0
-                            ? 'text-slate-300'
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        <Layers className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>กลุ่มปลายทาง:</span>
-                      </span>
+                <div className="p-3 space-y-2.5 bg-white">
+                  {/* Top Filter Row: Group Tabs + Search */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                      <Layers className="w-3.5 h-3.5 text-indigo-600 shrink-0 mr-1" />
 
                       <button
                         type="button"
@@ -380,13 +351,11 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                         onDragEnter={() => setActiveGroupTab('ALL')}
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                           activeGroupTab === 'ALL'
-                            ? 'bg-indigo-600 text-white shadow-2xs'
-                            : isDragging || selectedCount > 0
-                            ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                         }`}
                       >
-                        ทุกกลุ่ม ({realMainCategories.length})
+                        ทั้งหมด ({realMainCategories.length})
                       </button>
 
                       {realCategoryGroups.map((grp) => {
@@ -397,12 +366,10 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                             type="button"
                             onClick={() => setActiveGroupTab(grp.group.id)}
                             onDragEnter={() => setActiveGroupTab(grp.group.id)}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                               isTabActive
-                                ? 'bg-indigo-600 text-white shadow-2xs'
-                                : isDragging || selectedCount > 0
-                                ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                             }`}
                           >
                             <CategoryGroupIcon
@@ -410,7 +377,7 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                               className="w-3.5 h-3.5"
                             />
                             <span>{grp.group.name}</span>
-                            <span className="text-[10px] font-mono opacity-80">
+                            <span className="text-[10px] font-mono opacity-80 tabular-nums">
                               ({grp.mainCatCount})
                             </span>
                           </button>
@@ -418,31 +385,21 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                       })}
                     </div>
 
-                    {/* Quick Search Input for Categories */}
-                    <div className="relative w-full sm:w-60 shrink-0">
-                      <Search
-                        className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${
-                          isDragging || selectedCount > 0
-                            ? 'text-slate-400'
-                            : 'text-slate-400'
-                        }`}
-                      />
+                    {/* Quick Search Input */}
+                    <div className="relative w-full sm:w-52 shrink-0">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
                         value={categorySearch}
                         onChange={(e) => setCategorySearch(e.target.value)}
-                        placeholder="ค้นหาหมวดหลัก / หมวดย่อย..."
-                        className={`w-full pl-8 pr-7 py-1 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                          isDragging || selectedCount > 0
-                            ? 'bg-slate-800/90 border-slate-700 text-white placeholder:text-slate-400'
-                            : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'
-                        }`}
+                        placeholder="ค้นหาหมวด..."
+                        className="w-full pl-8 pr-7 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-colors"
                       />
                       {categorySearch && (
                         <button
                           type="button"
                           onClick={() => setCategorySearch('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -450,19 +407,13 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                     </div>
                   </div>
 
-                  {/* Destination Category Cards (Drop Zones + 1-Click Assign) */}
+                  {/* Destination Category Cards */}
                   {visibleMainCategories.length === 0 ? (
-                    <div
-                      className={`p-4 rounded-xl border border-dashed text-center text-xs ${
-                        isDragging || selectedCount > 0
-                          ? 'border-slate-700 text-slate-400'
-                          : 'border-slate-200 text-slate-500'
-                      }`}
-                    >
-                      ไม่พบหมวดหมู่ที่ตรงกับคำค้นหา
+                    <div className="p-3 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-500 bg-slate-50">
+                      ไม่พบหมวดหมู่
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-52 overflow-y-auto pr-1">
                       {visibleMainCategories.map((item) => {
                         const isMainDragOver = dragOverTagId === item.mainTag.id;
                         const isSubDrawerOpen =
@@ -478,10 +429,8 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                             onDrop={(e) => handleDropOnTarget(e, item.mainTag.id)}
                             className={`rounded-xl border p-2.5 transition-all flex flex-col justify-between gap-2 ${
                               isMainDragOver
-                                ? 'bg-emerald-500/25 border-emerald-400 ring-2 ring-emerald-400 scale-[1.01] shadow-md'
-                                : isDragging || selectedCount > 0
-                                ? 'bg-slate-800/90 border-slate-700/90 hover:border-indigo-400'
-                                : 'bg-slate-50/90 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/30'
+                                ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 scale-[1.01] shadow-xs'
+                                : 'bg-slate-50/70 hover:bg-indigo-50/30 border-slate-200 hover:border-indigo-300'
                             }`}
                           >
                             {/* Tier 1 Main Category Target Row */}
@@ -495,42 +444,22 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                                   )
                                 }
                                 className="flex items-center gap-1.5 min-w-0 text-left flex-1 cursor-pointer group"
-                                title={
-                                  selectedCount > 0
-                                    ? `คลิกเพื่อย้าย ${selectedCount} คลิปเข้าหมวด #${item.mainTag.name}`
-                                    : `ลากคลิปมาวางที่นี่เพื่อย้ายเข้า #${item.mainTag.name}`
-                                }
                               >
                                 <Tag
                                   className={`w-3.5 h-3.5 shrink-0 ${
                                     isMainDragOver
-                                      ? 'text-emerald-300'
-                                      : isDragging || selectedCount > 0
-                                      ? 'text-sky-400'
+                                      ? 'text-emerald-600'
                                       : 'text-indigo-600'
                                   }`}
                                 />
-                                <span
-                                  className={`text-xs font-extrabold truncate ${
-                                    isDragging || selectedCount > 0
-                                      ? 'text-white group-hover:text-amber-300'
-                                      : 'text-slate-900 group-hover:text-indigo-700'
-                                  }`}
-                                >
+                                <span className="text-xs font-bold text-slate-900 group-hover:text-indigo-700 truncate">
                                   #{item.mainTag.name}
                                 </span>
-                                <span
-                                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded shrink-0 tabular-nums ${
-                                    isDragging || selectedCount > 0
-                                      ? 'bg-slate-700 text-slate-300'
-                                      : 'bg-slate-200/80 text-slate-700'
-                                  }`}
-                                >
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded shrink-0 tabular-nums bg-slate-200/80 text-slate-700">
                                   {item.totalCount}
                                 </span>
                               </button>
 
-                              {/* Action Trigger Button for Tier 1 */}
                               {selectedCount > 0 ? (
                                 <button
                                   type="button"
@@ -540,13 +469,13 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                                       item.mainTag.id
                                     )
                                   }
-                                  className="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-indigo-600 hover:bg-emerald-500 text-white hover:text-slate-950 transition-colors shrink-0 cursor-pointer"
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shrink-0 cursor-pointer"
                                 >
-                                  + ย้ายเข้าหมวดหลัก
+                                  + ย้าย
                                 </button>
                               ) : isMainDragOver ? (
-                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-400 text-slate-950 shrink-0">
-                                  ปล่อยเพื่อวาง ({effectiveMoveCount})
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-600 text-white shrink-0">
+                                  วาง ({effectiveMoveCount})
                                 </span>
                               ) : (
                                 item.subTags.length > 4 && (
@@ -557,23 +486,19 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                                         prev === item.mainTag.id ? null : item.mainTag.id
                                       )
                                     }
-                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer ${
-                                      isDragging || selectedCount > 0
-                                        ? 'text-slate-300 hover:bg-slate-700'
-                                        : 'text-indigo-700 hover:bg-indigo-100'
-                                    }`}
+                                    className="text-[10px] font-bold px-1.5 py-0.5 rounded text-indigo-700 hover:bg-indigo-100 cursor-pointer"
                                   >
                                     {isSubDrawerOpen
-                                      ? 'ย่อหมวดย่อย'
-                                      : `+${item.subTags.length} หมวดย่อย`}
+                                      ? 'ย่อ'
+                                      : `+${item.subTags.length}`}
                                   </button>
                                 )
                               )}
                             </div>
 
-                            {/* Tier 2 Subcategory Chips (Each is an independent Drop Target & 1-Click Button) */}
+                            {/* Tier 2 Subcategory Chips */}
                             {item.subTags.length > 0 && isSubDrawerOpen && (
-                              <div className="flex flex-wrap gap-1 pt-1.5 border-t border-slate-500/20">
+                              <div className="flex flex-wrap gap-1 pt-1.5 border-t border-slate-200/80">
                                 {item.subTags.map((sub) => {
                                   const isSubDragOver = dragOverTagId === sub.id;
                                   const subCount = computedFootage.filter((ft) =>
@@ -595,26 +520,19 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                                           );
                                         }
                                       }}
-                                      title={
-                                        selectedCount > 0
-                                          ? `คลิกเพื่อย้าย ${selectedCount} คลิปเข้า #${item.mainTag.name} ➔ ${sub.name}`
-                                          : `ลากคลิปมาวางใส่ ${sub.name} (ระบบจะผูกหมวดหลัก #${item.mainTag.name} ให้อัตโนมัติ)`
-                                      }
-                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
                                         isSubDragOver
-                                          ? 'bg-emerald-400 text-slate-950 border-emerald-300 ring-2 ring-emerald-300 scale-105 shadow-xs'
+                                          ? 'bg-emerald-100 text-emerald-950 border-2 border-emerald-500 scale-105 font-bold'
                                           : selectedCount > 0
-                                          ? 'bg-slate-900 hover:bg-emerald-400 text-amber-200 hover:text-slate-950 border-slate-600 hover:border-emerald-300'
-                                          : isDragging
-                                          ? 'bg-slate-900/90 text-amber-200 border-slate-600 hover:border-emerald-400'
-                                          : 'bg-white hover:bg-amber-50 text-slate-800 border-slate-200/90 hover:border-amber-300'
+                                          ? 'bg-white hover:bg-indigo-50 text-indigo-900 border-indigo-200 hover:border-indigo-400'
+                                          : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                                       }`}
                                     >
                                       {getEntityIconNode(sub)}
-                                      <span className="truncate max-w-[120px]">
+                                      <span className="truncate max-w-[115px]">
                                         {sub.name}
                                       </span>
-                                      <span className="font-mono text-[10px] opacity-75 tabular-nums">
+                                      <span className="font-mono text-[10px] opacity-70 tabular-nums">
                                         ({subCount})
                                       </span>
                                     </button>
