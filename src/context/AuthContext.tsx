@@ -15,6 +15,9 @@ interface AuthContextType {
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
   quickLoginAsRole: (role: UserRole, customName?: string) => Promise<void>;
+  signInWithGoogle: () => Promise<string>;
+  driveAccessToken: string | null;
+  isGoogleDriveConnected: boolean;
   logout: () => Promise<void>;
 }
 
@@ -91,8 +94,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(authService.getDriveAccessToken());
+
+  const signInWithGoogle = async (): Promise<string> => {
+    setIsLoading(true);
+    try {
+      const { accessToken } = await authService.signInWithGoogle();
+      setDriveAccessToken(accessToken);
+      return accessToken;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     await authService.logout();
+    setDriveAccessToken(null);
     setUserProfile({
       id: 'guest-editor',
       email: 'guest@studio.local',
@@ -104,6 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentRole: UserRole = userProfile?.role || 'EDITOR';
   const isAdmin = currentRole === 'ADMIN' || currentRole === 'PRODUCER';
   const isEditor = currentRole === 'EDITOR' || isAdmin;
+  const isGoogleDriveConnected = Boolean(driveAccessToken && currentUser && !currentUser.isAnonymous);
 
   return (
     <AuthContext.Provider
@@ -119,6 +137,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithEmail,
         registerWithEmail,
         quickLoginAsRole,
+        signInWithGoogle,
+        driveAccessToken,
+        isGoogleDriveConnected,
         logout,
       }}
     >

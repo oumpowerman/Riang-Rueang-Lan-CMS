@@ -3,6 +3,8 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   signInAnonymously,
+  signInWithPopup,
+  GoogleAuthProvider,
   onAuthStateChanged,
   User,
   updateProfile,
@@ -21,10 +23,32 @@ export interface UserProfile {
   lastLoginAt?: string;
 }
 
+// In-memory token cache for Google Workspace Drive API
+let cachedDriveAccessToken: string | null = null;
+
+const googleDriveProvider = new GoogleAuthProvider();
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
+googleDriveProvider.setCustomParameters({
+  prompt: 'select_account',
+});
+
 export const authService = {
   // Listen to auth state changes
   onAuthChange(callback: (user: User | null) => void) {
-    return onAuthStateChanged(auth, callback);
+    return onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        cachedDriveAccessToken = null;
+      }
+      callback(user);
+    });
+  },
+
+  getDriveAccessToken(): string | null {
+    return cachedDriveAccessToken;
+  },
+
+  setDriveAccessToken(token: string | null) {
+    cachedDriveAccessToken = token;
   },
 
   // Fetch or create user profile doc in Firestore
@@ -110,8 +134,20 @@ export const authService = {
     return this.getUserProfile(cred.user, role);
   },
 
+  // Sign in with Google (OAuth with Drive Scope)
+  async signInWithGoogle(role: UserRole = 'EDITOR'): Promise<{ user: User; accessToken: string }> {
+    const cred = await signInWithPopup(auth, googleDriveProvider);
+    const googleCredential = GoogleAuthProvider.credentialFromResult(cred);
+    const accessToken = googleCredential?.accessToken || '';
+    cachedDriveAccessToken = accessToken;
+
+    await this.getUserProfile(cred.user, role);
+    return { user: cred.user, accessToken };
+  },
+
   // Sign out
   async logout() {
+    cachedDriveAccessToken = null;
     await signOut(auth);
   },
 };

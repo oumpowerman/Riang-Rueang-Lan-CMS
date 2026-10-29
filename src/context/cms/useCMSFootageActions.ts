@@ -301,10 +301,97 @@ export function useCMSFootageActions({
     });
   };
 
+  // Batch Create Multiple 1:N Sources + Split Footages at once (for Google Drive 1:N Importer)
+  const batchCreateSourcesWithSplitFootage = (
+    groups: Array<{
+      sourcePayload: {
+        title: string;
+        originalUrl: string;
+        platform: SourcePlatform;
+        channelOrCreator: string;
+        totalDuration?: string;
+        tags: string[];
+        notes: string;
+      };
+      clips: SplitClipDraft[];
+    }>
+  ): { createdSources: RawSource[]; createdFootage: Footage[] } => {
+    if (!groups || groups.length === 0) {
+      return { createdSources: [], createdFootage: [] };
+    }
+
+    const accumulatedSourceIds = sources.map((s) => s.id);
+    const accumulatedFootageIds = footage.map((f) => f.id);
+    const allNewSources: RawSource[] = [];
+    const allNewFootage: Footage[] = [];
+
+    for (const grp of groups) {
+      const { sourcePayload, clips } = grp;
+      const nextSourceId = generateNextId('SRC', accumulatedSourceIds);
+      accumulatedSourceIds.push(nextSourceId);
+
+      const groupFootage: Footage[] = [];
+      for (const clip of clips) {
+        if (!clip.title.trim()) continue;
+        const nextFtId = generateNextId('FT', accumulatedFootageIds);
+        accumulatedFootageIds.push(nextFtId);
+
+        const mergedTags = normalizeFootageTags([...sourcePayload.tags, ...clip.tags]);
+        const ftItem: Footage = {
+          id: nextFtId,
+          title: clip.title.trim(),
+          ingestionFlow: 'SPLIT_1_TO_N',
+          sourceId: nextSourceId,
+          originalUrl: sourcePayload.originalUrl.trim(),
+          timestampRange: clip.timestampRange.trim() || '00:00 - 00:35',
+          durationSec: 35,
+          tags: mergedTags,
+          driveFileUrl: clip.driveFileUrl?.trim() || '',
+          standardFileName: generateStandardFileName(nextFtId, clip.title),
+          mascotNotes: clip.mascotNotes.trim(),
+          createdAt: getReferenceTodayDate(),
+        };
+        groupFootage.push(ftItem);
+        allNewFootage.push(ftItem);
+      }
+
+      const newSource: RawSource = {
+        id: nextSourceId,
+        title: sourcePayload.title.trim(),
+        originalUrl: sourcePayload.originalUrl.trim(),
+        platform: sourcePayload.platform,
+        channelOrCreator: sourcePayload.channelOrCreator.trim() || 'ไม่ระบุช่องต้นทาง',
+        totalDuration: sourcePayload.totalDuration?.trim() || '01:00:00',
+        tags: sourcePayload.tags,
+        notes: sourcePayload.notes.trim(),
+        createdAt: getReferenceTodayDate(),
+        splitFootageIds: groupFootage.map((f) => f.id),
+      };
+      allNewSources.push(newSource);
+    }
+
+    if (allNewSources.length > 0) {
+      setSources((prev) => [...allNewSources, ...prev]);
+    }
+    if (allNewFootage.length > 0) {
+      setFootage((prev) => [...allNewFootage, ...prev]);
+      const chunkSize = 20;
+      for (let i = 0; i < allNewFootage.length; i += chunkSize) {
+        const chunk = allNewFootage.slice(i, i + chunkSize);
+        Promise.all(chunk.map((ft) => firestoreService.saveFootage(ft))).catch((err) =>
+          console.warn('Firestore batch 1:N footage save error:', err)
+        );
+      }
+    }
+
+    return { createdSources: allNewSources, createdFootage: allNewFootage };
+  };
+
   return {
     addDirectFootage,
     createSourceWithSplitFootage,
     appendSplitFootageToSource,
+    batchCreateSourcesWithSplitFootage,
     updateFootage,
     deleteFootage,
     batchAddDirectFootage,

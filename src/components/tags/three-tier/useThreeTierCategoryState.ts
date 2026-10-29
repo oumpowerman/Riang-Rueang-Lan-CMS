@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useCMS } from '../../../context/CMSContext';
 import { CategoryGroup, CategoryTag, EntitySubtype, TagGroupType } from '../../../types/tag.types';
+import { resolveIconKey } from '../../ui/CategoryGroupIcon';
 
-export const EMOJI_OPTIONS = ['🌟', '🎭', '🐾', '⚡', '🏷️', '🎮', '🎤', '⚽', '🍔', '🚗', '🎬', '🏆', '🔥', '💻'];
 export const COLOR_OPTIONS = ['purple', 'blue', 'emerald', 'amber', 'rose', 'cyan', 'indigo', 'teal', 'slate'];
 
 export const useThreeTierCategoryState = () => {
@@ -30,7 +30,7 @@ export const useThreeTierCategoryState = () => {
   const [isEditingGroup, setIsEditingGroup] = useState<boolean>(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupFormName, setGroupFormName] = useState('');
-  const [groupFormIcon, setGroupFormIcon] = useState('🌟');
+  const [groupFormIcon, setGroupFormIcon] = useState('star');
   const [groupFormColor, setGroupFormColor] = useState('indigo');
   const [groupFormDesc, setGroupFormDesc] = useState('');
 
@@ -89,7 +89,7 @@ export const useThreeTierCategoryState = () => {
   const handleOpenAddGroup = () => {
     setEditingGroupId(null);
     setGroupFormName('');
-    setGroupFormIcon('🌟');
+    setGroupFormIcon('star');
     setGroupFormColor('indigo');
     setGroupFormDesc('');
     setIsEditingGroup(true);
@@ -99,7 +99,7 @@ export const useThreeTierCategoryState = () => {
     e.stopPropagation();
     setEditingGroupId(g.id);
     setGroupFormName(g.name);
-    setGroupFormIcon(g.icon || '🌟');
+    setGroupFormIcon(resolveIconKey(g.icon));
     setGroupFormColor(g.color || 'indigo');
     setGroupFormDesc(g.description || '');
     setIsEditingGroup(true);

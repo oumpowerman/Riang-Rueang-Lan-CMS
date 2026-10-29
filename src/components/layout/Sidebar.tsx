@@ -107,10 +107,10 @@ export const Sidebar: React.FC = () => {
           <motion.div
             whileHover={{ rotate: -4, scale: 1.03 }}
             onClick={() => setActiveTab('DASHBOARD')}
-            className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs cursor-pointer"
+            className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shrink-0 shadow-xs cursor-pointer bg-gradient-to-br from-indigo-500 to-indigo-700 p-1"
             title="กลับหน้าภาพรวม"
           >
-            <Tv className="w-5 h-5" />
+            <img src="/favicon.svg" alt="โลโก้เรียงเรื่องลั่น" className="w-full h-full object-contain" />
           </motion.div>
 
           <AnimatePresence initial={false}>

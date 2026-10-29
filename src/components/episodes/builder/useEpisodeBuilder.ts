@@ -383,7 +383,7 @@ export function useEpisodeBuilder() {
     setPickerPage(1);
   };
 
-  // Handle cross-view category pre-selection from E2E Pipeline or Footage Library
+  // Handle cross-view category pre-selection from E2E Pipeline, Footage Library, or Source Mining Studio
   useEffect(() => {
     if (!builderPreselectRequest) return;
     const {
@@ -391,6 +391,8 @@ export function useEpisodeBuilder() {
       recipeId,
       productionTarget: reqTarget,
       targetSubcategoryId: reqSubId,
+      customFootageIds,
+      customEpisodeTitle,
     } = builderPreselectRequest;
     const targetTag = tagMap[tagId];
     if (targetTag) {
@@ -401,7 +403,10 @@ export function useEpisodeBuilder() {
     setTargetSubcategoryId(reqSubId || null);
     setAllowCrossCategory(false);
     setActiveRecipe(recipeId);
-    if (reqTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && reqSubId && tagMap[reqSubId]) {
+
+    if (customEpisodeTitle) {
+      setTitle(customEpisodeTitle);
+    } else if (reqTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && reqSubId && tagMap[reqSubId]) {
       setTitle(
         `5 อันดับ ${tagMap[reqSubId].name} ช็อตเด็ดโดนใจ #${episodes.length + 1}`
       );
@@ -413,6 +418,45 @@ export function useEpisodeBuilder() {
 
     const filterTagId =
       reqTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && reqSubId ? reqSubId : tagId;
+
+    if (customFootageIds && customFootageIds.length > 0) {
+      const customPicked = customFootageIds
+        .map((fid) => computedFootage.find((f) => f.id === fid) || null)
+        .filter((f): f is NonNullable<typeof f> => f !== null);
+
+      const fallbackPicked = generateSmartMixByRecipe(
+        computedFootage.filter((f) => !customFootageIds.includes(f.id)),
+        recipeId,
+        [filterTagId]
+      );
+
+      const combinedPicked = [...customPicked, ...fallbackPicked].slice(0, 5);
+      const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map((rankNum, idx) => {
+        const picked = combinedPicked[idx] || null;
+        return {
+          rank: rankNum,
+          footageId: picked ? picked.id : null,
+          mascotScript: picked
+            ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
+            : '',
+          snapshotNote: picked
+            ? customFootageIds.includes(picked.id)
+              ? 'คัดตรงจากสตูดิโอหั่นไลฟ์สด (1:N)'
+              : picked.cooldownStatus === 'NEW_UNTOUCHED'
+              ? 'ฟุตใหม่แกะกล่อง'
+              : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
+            : '',
+        };
+      });
+      setRankings(nextRankings);
+      setActiveBuilderStep(3);
+      setPreselectNotice(
+        `ส่งช็อตที่เลือกจากไลฟ์สด (${customPicked.length} ฟุต) เข้าช่องจัด 5 อันดับเรียบร้อยแล้ว!`
+      );
+      clearBuilderPreselectRequest();
+      return;
+    }
+
     const autoPicked = generateSmartMixByRecipe(computedFootage, recipeId, [filterTagId]);
     const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map((rankNum, idx) => {
       const picked = autoPicked[idx] || null;

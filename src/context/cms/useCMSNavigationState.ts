@@ -43,6 +43,21 @@ export function useCMSNavigationState() {
     setActiveTab('EPISODE_BUILDER');
   };
 
+  const launchEpisodeBuilderWithCustomClips = (
+    footageIds: string[],
+    tagId = 'TAG-0001',
+    customEpisodeTitle?: string
+  ) => {
+    setBuilderPreselectRequest({
+      tagId,
+      recipeId: 'FORMULA_2_NEW_3_FRESH',
+      customFootageIds: footageIds.slice(0, 5),
+      customEpisodeTitle,
+      timestamp: Date.now(),
+    });
+    setActiveTab('EPISODE_BUILDER');
+  };
+
   const clearBuilderPreselectRequest = () => {
     setBuilderPreselectRequest(null);
   };
@@ -79,5 +94,6 @@ export function useCMSNavigationState() {
     builderPreselectRequest,
     clearBuilderPreselectRequest,
     launchEpisodeBuilderForCategory,
+    launchEpisodeBuilderWithCustomClips,
   };
 }

@@ -21,7 +21,7 @@ export const STAGING_TAG_ID = 'TAG-STAGING';
 export const STAGING_CATEGORY_GROUP: CategoryGroup = {
   id: STAGING_GROUP_ID,
   name: 'พื้นที่พักรอจัดหมวดหมู่',
-  icon: '📥',
+  icon: 'inbox',
   color: 'amber',
   description: 'พื้นที่พักฟุตเทจที่บันทึกด่วน รอคัดแยกเข้าหมวดหมู่จริงภายหลัง (ไม่นับโควตา 5 ฟุต = 1 EP)',
   order: 0,
@@ -71,7 +71,7 @@ export const INITIAL_CATEGORY_GROUPS: CategoryGroup[] = [
   {
     id: 'GRP-PERSON',
     name: 'คนมีชื่อเสียง',
-    icon: '🌟',
+    icon: 'star',
     color: 'purple',
     description: 'ดารา นักแสดง YouTuber สตรีมเมอร์ และคนดังในกระแส',
     order: 1,
@@ -80,7 +80,7 @@ export const INITIAL_CATEGORY_GROUPS: CategoryGroup[] = [
   {
     id: 'GRP-THEME',
     name: 'มุกไวรัล & วิถีชีวิต',
-    icon: '🎭',
+    icon: 'sparkles',
     color: 'blue',
     description: 'ช็อตฮาชีวิตประจำวัน สัตว์โลกแสนซน และกีฬาข้างสนาม',
     order: 2,
@@ -89,7 +89,7 @@ export const INITIAL_CATEGORY_GROUPS: CategoryGroup[] = [
   {
     id: 'GRP-ACTION',
     name: 'ลีลา & จังหวะฮา',
-    icon: '⚡',
+    icon: 'zap',
     color: 'emerald',
     description: 'สัมภาษณ์ข้างทาง พากย์เสียงโบ๊ะบ๊ะ และจังหวะหลุดขำ',
     order: 3,
@@ -98,7 +98,7 @@ export const INITIAL_CATEGORY_GROUPS: CategoryGroup[] = [
   {
     id: 'GRP-GENERAL',
     name: 'ทั่วไป / เบ็ดเตล็ด',
-    icon: '🏷️',
+    icon: 'tag',
     color: 'slate',
     description: 'จังหวะนรก คอนเซ็ปต์สากล และป้ายแท็กผสม',
     order: 4,

@@ -72,6 +72,8 @@ export interface BuilderPreselectRequest {
   recipeId: MixRecipeId;
   productionTarget?: EpisodeProductionTarget;
   targetSubcategoryId?: string | null;
+  customFootageIds?: string[];
+  customEpisodeTitle?: string;
   timestamp: number;
 }
 
@@ -106,7 +108,7 @@ export interface CMSContextType {
   selectedEpisodeDetailId: string | null;
   setSelectedEpisodeDetailId: (id: string | null) => void;
 
-  // Cross-View Category Preselection for Episode Builder
+  // Cross-View Category & Custom Clips Preselection for Episode Builder
   builderPreselectRequest: BuilderPreselectRequest | null;
   clearBuilderPreselectRequest: () => void;
   launchEpisodeBuilderForCategory: (
@@ -114,6 +116,11 @@ export interface CMSContextType {
     recipeId?: MixRecipeId,
     productionTarget?: EpisodeProductionTarget,
     targetSubcategoryId?: string | null
+  ) => void;
+  launchEpisodeBuilderWithCustomClips: (
+    footageIds: string[],
+    tagId?: string,
+    customEpisodeTitle?: string
   ) => void;
 
   // Data Entities & Analytics
@@ -157,6 +164,7 @@ export interface CMSContextType {
     color?: string,
     description?: string
   ) => CategoryTag;
+  batchAddTags: (newTags: CategoryTag[]) => void;
   updateTag: (id: string, updates: Partial<Omit<CategoryTag, 'id'>>) => void;
   deleteTag: (id: string) => void;
   updateSettings: (updates: Partial<SystemSettings>) => void;
@@ -186,6 +194,21 @@ export interface CMSContextType {
   ) => { source: RawSource; createdFootage: Footage[] };
 
   appendSplitFootageToSource: (sourceId: string, clips: SplitClipDraft[]) => Footage[];
+
+  batchCreateSourcesWithSplitFootage: (
+    groups: Array<{
+      sourcePayload: {
+        title: string;
+        originalUrl: string;
+        platform: SourcePlatform;
+        channelOrCreator: string;
+        totalDuration?: string;
+        tags: string[];
+        notes: string;
+      };
+      clips: SplitClipDraft[];
+    }>
+  ) => { createdSources: RawSource[]; createdFootage: Footage[] };
 
   // Actions: Footage Update/Delete & Batch Operations
   updateFootage: (id: string, updates: Partial<Footage>) => void;

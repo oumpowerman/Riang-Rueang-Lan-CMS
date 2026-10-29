@@ -1,4 +1,5 @@
 import React from 'react';
+import { useCMS } from '../../context/CMSContext';
 import { useThreeTierCategoryState } from './three-tier/useThreeTierCategoryState';
 import {
   ThreeTierModalHeader,
@@ -11,6 +12,7 @@ import { Tier2SubcategoryColumn } from './three-tier/Tier2SubcategoryColumn';
 import { ThreeTierConfirmModals } from './three-tier/ThreeTierConfirmModals';
 
 export const ThreeTierCategoryManagerModal: React.FC = () => {
+  const { computedFootage } = useCMS();
   const {
     isThreeTierManagerOpen,
     setIsThreeTierManagerOpen,
@@ -177,6 +179,9 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
         showDeleteTagConfirm={showDeleteTagConfirm}
         setShowDeleteTagConfirm={setShowDeleteTagConfirm}
         onConfirmDeleteTag={handleConfirmDeleteTag}
+        categoryGroups={categoryGroups}
+        tags={tags}
+        computedFootage={computedFootage}
       />
     </div>
   );

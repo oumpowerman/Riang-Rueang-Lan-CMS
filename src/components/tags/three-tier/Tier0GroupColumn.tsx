@@ -1,8 +1,12 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Edit2, Trash2, ChevronRight, Folder, FolderPlus } from 'lucide-react';
+import { Plus, X, Edit2, Trash2, ChevronRight, FolderPlus } from 'lucide-react';
 import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
-import { EMOJI_OPTIONS } from './useThreeTierCategoryState';
+import {
+  CategoryGroupIcon,
+  GROUP_ICON_OPTIONS,
+  resolveIconKey,
+} from '../../ui/CategoryGroupIcon';
 
 interface Tier0GroupColumnProps {
   categoryGroups: CategoryGroup[];
@@ -103,24 +107,30 @@ export const Tier0GroupColumn: React.FC<Tier0GroupColumnProps> = ({
             </div>
 
             <div>
-              <label className="text-[10px] font-semibold text-indigo-900 block mb-0.5">
-                ไอคอนกลุ่ม (เลือก Emoji):
+              <label className="text-[10px] font-semibold text-indigo-900 block mb-1">
+                ไอคอนกลุ่ม (เลือก Vector Icon):
               </label>
-              <div className="flex flex-wrap gap-1">
-                {EMOJI_OPTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => setGroupFormIcon(emoji)}
-                    className={`w-7 h-7 rounded-md text-xs flex items-center justify-center transition-all ${
-                      groupFormIcon === emoji
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-white hover:bg-indigo-100 text-slate-700 border border-slate-200'
-                    }`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 p-1.5 bg-white/80 rounded-xl border border-indigo-200">
+                {GROUP_ICON_OPTIONS.map((opt) => {
+                  const IconComp = opt.icon;
+                  const currentResolved = resolveIconKey(groupFormIcon);
+                  const isOptSelected = currentResolved === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      title={opt.label}
+                      onClick={() => setGroupFormIcon(opt.key)}
+                      className={`h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                        isOptSelected
+                          ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/50'
+                          : 'bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 border border-slate-200/80'
+                      }`}
+                    >
+                      <IconComp className="w-4 h-4" />
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -191,12 +201,16 @@ export const Tier0GroupColumn: React.FC<Tier0GroupColumnProps> = ({
                       : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800 font-medium'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {!group.icon || group.icon === '📁' ? (
-                      <Folder className="w-4 h-4 shrink-0 opacity-80" />
-                    ) : (
-                      <span className="text-base shrink-0">{group.icon}</span>
-                    )}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        isSelected
+                          ? 'bg-indigo-700/90 text-white'
+                          : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                      }`}
+                    >
+                      <CategoryGroupIcon icon={group.icon} className="w-4 h-4" />
+                    </div>
                     <div className="min-w-0">
                       <div className="text-xs truncate flex items-center gap-1.5">
                         <span>{group.name}</span>

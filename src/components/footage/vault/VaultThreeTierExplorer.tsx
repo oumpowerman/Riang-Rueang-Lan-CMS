@@ -4,6 +4,7 @@ import { ChevronDown, Folder, FolderOpen, Layers, Rocket, RotateCcw } from 'luci
 import { isStagingTagId } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { MixRecipeId } from '../../../utils/collisionDetector';
+import { CategoryGroupIcon } from '../../ui/CategoryGroupIcon';
 import { TagPill } from '../../ui/TagPill';
 import {
   CategoryGroupOverviewItem,
@@ -137,9 +138,10 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                     </span>
                   </span>
                   {activeGroupOverview && (
-                    <span className="text-xs font-semibold text-indigo-700">
-                      กำลังเลือกกลุ่ม: {activeGroupOverview.group.icon}{' '}
-                      {activeGroupOverview.group.name}
+                    <span className="text-xs font-semibold text-indigo-700 inline-flex items-center gap-1.5">
+                      <span>กำลังเลือกกลุ่ม:</span>
+                      <CategoryGroupIcon icon={activeGroupOverview.group.icon} className="w-3.5 h-3.5" />
+                      <span>{activeGroupOverview.group.name}</span>
                     </span>
                   )}
                 </div>
@@ -185,13 +187,12 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                           )}
                           <div className="relative z-10 flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
-                              {!groupItem.group.icon || groupItem.group.icon === '📁' ? (
-                                <Folder className="w-4 h-4 shrink-0 opacity-80" />
-                              ) : (
-                                <span className="text-base shrink-0">
-                                  {groupItem.group.icon}
-                                </span>
-                              )}
+                              <CategoryGroupIcon
+                                icon={groupItem.group.icon}
+                                className={`w-4 h-4 shrink-0 ${
+                                  isGroupSelected ? 'text-white' : 'text-indigo-600'
+                                }`}
+                              />
                               <span className="text-xs sm:text-sm font-bold truncate">
                                 {groupItem.group.name}
                               </span>

@@ -21,6 +21,7 @@ import {
   isStagingTagId,
 } from '../../services/seedData';
 import { CategoryTag, EntitySubtype } from '../../types/tag.types';
+import { CategoryGroupIcon } from '../ui/CategoryGroupIcon';
 import { TagPill, getEntityIcon } from '../ui/TagPill';
 
 interface CascadeCategorySelectorProps {
@@ -507,11 +508,10 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                   }`}
                   title={cluster.hint}
                 >
-                  {cluster.id === 'ALL' || !cluster.icon || cluster.icon === '📁' ? (
-                    <Folder className="w-4 h-4 shrink-0 opacity-80" />
-                  ) : (
-                    <span>{cluster.icon}</span>
-                  )}
+                  <CategoryGroupIcon
+                    icon={cluster.id === 'ALL' ? 'folder' : cluster.icon}
+                    className="w-4 h-4 shrink-0"
+                  />
                   <span>{cluster.label}</span>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-mono tabular-nums ${

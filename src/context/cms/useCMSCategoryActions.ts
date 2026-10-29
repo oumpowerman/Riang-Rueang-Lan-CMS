@@ -265,6 +265,21 @@ export function useCMSCategoryActions({
     });
   };
 
+  const batchAddTags = (newTags: CategoryTag[]) => {
+    if (!newTags || newTags.length === 0) return;
+    cmsRepository.setCategoriesWiped(false);
+    setTags((prev) => {
+      const existingIds = new Set(prev.map((t) => t.id));
+      const filteredNew = newTags.filter((t) => !existingIds.has(t.id));
+      const next = [...prev, ...filteredNew];
+      cmsRepository.saveTags(next);
+      return next;
+    });
+    newTags.forEach((t) => {
+      firestoreService.saveCategory(t).catch((err) => console.warn('Firestore batchAddTags error:', err));
+    });
+  };
+
   return {
     createCategoryGroup,
     updateCategoryGroup,
@@ -273,6 +288,7 @@ export function useCMSCategoryActions({
     restoreDefaultCategories,
     createTag,
     createSubcategory,
+    batchAddTags,
     updateTag,
     deleteTag,
     updateSettings,

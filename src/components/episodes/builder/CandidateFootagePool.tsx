@@ -12,6 +12,7 @@ import {
   CategoryTag,
   SystemSettings,
 } from '../../../types/tag.types';
+import { CategoryGroupIcon } from '../../ui/CategoryGroupIcon';
 import { PaginationBar } from '../../ui/PaginationBar';
 import { StatusBadge } from '../../ui/StatusBadge';
 import { TagPill } from '../../ui/TagPill';
@@ -148,7 +149,7 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
                     : 'bg-white text-slate-700 border border-purple-200 hover:bg-purple-100/60'
                 }`}
               >
-                <span>{grp.icon}</span>
+                <CategoryGroupIcon icon={grp.icon} className="w-3.5 h-3.5 shrink-0" />
                 <span>{grp.name}</span>
               </button>
             ))}

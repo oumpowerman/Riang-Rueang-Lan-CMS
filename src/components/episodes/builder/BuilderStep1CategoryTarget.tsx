@@ -5,6 +5,7 @@ import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { EpisodeProductionTarget } from '../../../types/episode.types';
 import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
+import { CategoryGroupIcon } from '../../ui/CategoryGroupIcon';
 import { GroupStockStat, LiveCategoryStock } from './builder.types';
 
 interface BuilderStep1CategoryTargetProps {
@@ -99,12 +100,8 @@ export const BuilderStep1CategoryTarget: React.FC<BuilderStep1CategoryTargetProp
               transition={{ duration: 0.2 }}
               className="flex flex-wrap items-center gap-1.5"
             >
-              <span className="font-bold text-slate-900 flex items-center gap-1">
-                {!activeGroup?.icon || activeGroup.icon === '📁' ? (
-                  <Folder className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                ) : (
-                  <span>{activeGroup.icon}</span>
-                )}
+              <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                <CategoryGroupIcon icon={activeGroup?.icon} className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span>{activeGroup?.name}</span>
               </span>
               <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
@@ -249,7 +246,7 @@ export const BuilderStep1CategoryTarget: React.FC<BuilderStep1CategoryTargetProp
                             : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-purple-300 hover:bg-purple-50/40'
                         }`}
                       >
-                        <span>{gStat.group.icon}</span>
+                        <CategoryGroupIcon icon={gStat.group.icon} className="w-3.5 h-3.5 shrink-0" />
                         <span>{gStat.group.name}</span>
                         <span
                           className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums ${
