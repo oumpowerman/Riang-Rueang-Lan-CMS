@@ -105,12 +105,16 @@ export const Sidebar: React.FC = () => {
         {/* Studio Brand Identity (Fixed Height so items below never shift) */}
         <div className="h-13 flex items-center gap-3 px-1.5 border-b border-slate-100">
           <motion.div
-            whileHover={{ rotate: -4, scale: 1.03 }}
+            whileHover={{ rotate: -4, scale: 1.05 }}
             onClick={() => setActiveTab('DASHBOARD')}
-            className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shrink-0 shadow-xs cursor-pointer bg-gradient-to-br from-indigo-500 to-indigo-700 p-1"
+            className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 shadow-xs cursor-pointer ring-2 ring-indigo-100 hover:ring-indigo-300 transition-all bg-amber-50"
             title="กลับหน้าภาพรวม"
           >
-            <img src="/favicon.svg" alt="โลโก้เรียงเรื่องลั่น" className="w-full h-full object-contain" />
+            <img
+              src="/assets/aistudio/Logo_Funny__b4902753.png"
+              alt="โลโก้เรียงเรื่องลั่น"
+              className="w-full h-full object-cover"
+            />
           </motion.div>
 
           <AnimatePresence initial={false}>

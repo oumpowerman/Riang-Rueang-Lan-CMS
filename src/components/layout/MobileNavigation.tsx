@@ -135,8 +135,12 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                 {/* Drawer Header: Brand + Ready Status + Close Button */}
                 <div className="flex items-center justify-between gap-2 pb-3.5 border-b border-slate-100">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shrink-0 shadow-xs p-1">
-                      <img src="/favicon.svg" alt="โลโก้เรียงเรื่องลั่น" className="w-full h-full object-contain" />
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-amber-50 ring-2 ring-indigo-100 flex items-center justify-center shrink-0 shadow-xs">
+                      <img
+                        src="/assets/aistudio/Logo_Funny__b4902753.png"
+                        alt="โลโก้เรียงเรื่องลั่น"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-extrabold text-slate-900 tracking-tight truncate">
