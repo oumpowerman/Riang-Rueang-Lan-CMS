@@ -41,6 +41,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Sources collection (Flow B 1:N Long-form Livestream Sources SRC-XXXX)
+    match /sources/{sourceId} {
+      allow read, write: if true;
+    }
+
     // Footages collection
     match /footages/{footageId} {
       allow read, write: if true;

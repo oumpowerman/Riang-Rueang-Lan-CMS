@@ -23,8 +23,44 @@ export interface UserProfile {
   lastLoginAt?: string;
 }
 
-// In-memory token cache for Google Workspace Drive API
-let cachedDriveAccessToken: string | null = null;
+const DRIVE_TOKEN_STORAGE_KEY = 'rrl_google_drive_token_v1';
+const DRIVE_TOKEN_TTL_MS = 50 * 60 * 1000; // 50 minutes (Google OAuth access tokens last 60 mins)
+
+function loadPersistedDriveToken(): string | null {
+  try {
+    const raw = sessionStorage.getItem(DRIVE_TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { token: string; expiresAt: number };
+    if (!parsed.token || Date.now() > parsed.expiresAt) {
+      sessionStorage.removeItem(DRIVE_TOKEN_STORAGE_KEY);
+      return null;
+    }
+    return parsed.token;
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedDriveToken(token: string | null): void {
+  try {
+    if (!token) {
+      sessionStorage.removeItem(DRIVE_TOKEN_STORAGE_KEY);
+      return;
+    }
+    sessionStorage.setItem(
+      DRIVE_TOKEN_STORAGE_KEY,
+      JSON.stringify({
+        token,
+        expiresAt: Date.now() + DRIVE_TOKEN_TTL_MS,
+      })
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
+
+// Token cache for Google Workspace Drive API (backed by sessionStorage for Vercel reloads)
+let cachedDriveAccessToken: string | null = loadPersistedDriveToken();
 
 const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
@@ -36,19 +72,26 @@ export const authService = {
   // Listen to auth state changes
   onAuthChange(callback: (user: User | null) => void) {
     return onAuthStateChanged(auth, (user) => {
-      if (!user) {
+      if (!user || user.isAnonymous) {
         cachedDriveAccessToken = null;
+        savePersistedDriveToken(null);
+      } else if (!cachedDriveAccessToken) {
+        cachedDriveAccessToken = loadPersistedDriveToken();
       }
       callback(user);
     });
   },
 
   getDriveAccessToken(): string | null {
+    if (!cachedDriveAccessToken) {
+      cachedDriveAccessToken = loadPersistedDriveToken();
+    }
     return cachedDriveAccessToken;
   },
 
   setDriveAccessToken(token: string | null) {
     cachedDriveAccessToken = token;
+    savePersistedDriveToken(token);
   },
 
   // Fetch or create user profile doc in Firestore
@@ -114,9 +157,10 @@ export const authService = {
   // Quick 1-Click Team Member Login (Anonymous with assigned Role)
   async quickLoginAs(role: UserRole, customName?: string) {
     const cred = await signInAnonymously(auth);
-    const displayName = customName || (role === 'ADMIN' ? 'หัวหน้าทีม (Admin)' : 'ผู้ตัดต่อคลิป (Editor)');
+    const displayName =
+      customName || (role === 'ADMIN' ? 'หัวหน้าทีม (Admin)' : 'ผู้ตัดต่อคลิป (Editor)');
     await updateProfile(cred.user, { displayName });
-    
+
     // Update role in Firestore profile
     const userDocRef = doc(db, 'users', cred.user.uid);
     await setDoc(
@@ -135,11 +179,14 @@ export const authService = {
   },
 
   // Sign in with Google (OAuth with Drive Scope)
-  async signInWithGoogle(role: UserRole = 'EDITOR'): Promise<{ user: User; accessToken: string }> {
+  async signInWithGoogle(
+    role: UserRole = 'EDITOR'
+  ): Promise<{ user: User; accessToken: string }> {
     const cred = await signInWithPopup(auth, googleDriveProvider);
     const googleCredential = GoogleAuthProvider.credentialFromResult(cred);
     const accessToken = googleCredential?.accessToken || '';
     cachedDriveAccessToken = accessToken;
+    savePersistedDriveToken(accessToken);
 
     await this.getUserProfile(cred.user, role);
     return { user: cred.user, accessToken };
@@ -148,6 +195,7 @@ export const authService = {
   // Sign out
   async logout() {
     cachedDriveAccessToken = null;
+    savePersistedDriveToken(null);
     await signOut(auth);
   },
 };

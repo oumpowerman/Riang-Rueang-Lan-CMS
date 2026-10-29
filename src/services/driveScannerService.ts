@@ -1,8 +1,11 @@
 /**
  * Enterprise Recursive Google Drive Scanner Service
  * Scans nested folders (Subfolders) and extracts video files with folder hierarchy.
+ * Optimized for high-volume bulk imports (300–2,000+ videos) & Shared Drives on Vercel.
  */
 
+import { authService } from '../firebase/authService';
+import { defaultGoogleDriveApiKey } from '../firebase/config';
 import { cleanFootageTitle } from '../utils/fileNameGenerator';
 
 export interface DiscoveredDriveVideo {
@@ -82,7 +85,17 @@ export function extractGoogleDriveFolderId(input: string): string | null {
 export function isEligibleVideoFile(name: string, mimeType?: string): boolean {
   if (mimeType && mimeType.startsWith('video/')) return true;
   const lower = name.toLowerCase();
-  const videoExtensions = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.flv', '.wmv', '.ts'];
+  const videoExtensions = [
+    '.mp4',
+    '.mov',
+    '.mkv',
+    '.webm',
+    '.avi',
+    '.m4v',
+    '.flv',
+    '.wmv',
+    '.ts',
+  ];
   return videoExtensions.some((ext) => lower.endsWith(ext));
 }
 
@@ -105,13 +118,13 @@ function buildDriveApiUrl(
 }
 
 /**
- * Fetch a single page from Google Drive API with retry on 429 quota exhaustion
+ * Fetch a single page from Google Drive API with exponential backoff retry on 429/503 quota exhaustion
  */
 async function driveFetchWithRetry(
   url: string,
   accessToken?: string | null,
   signal?: AbortSignal,
-  retries = 3
+  retries = 4
 ): Promise<any> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -127,9 +140,9 @@ async function driveFetchWithRetry(
         return await res.json();
       }
 
-      // Check for quota or rate limit
-      if (res.status === 429 || res.status === 503) {
-        const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      // Check for quota or rate limit during bulk folder scans
+      if (res.status === 429 || res.status === 500 || res.status === 502 || res.status === 503) {
+        const backoffMs = Math.pow(2, attempt) * 900 + Math.random() * 400;
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
         continue;
       }
@@ -140,28 +153,34 @@ async function driveFetchWithRetry(
         `Google Drive API error: ${res.status} ${res.statusText}`;
 
       if (res.status === 401) {
-        throw new Error('โทเค็นการเข้าถึง Google Drive หมดอายุ กรุณาเข้าสู่ระบบ Google ใหม่อีกครั้ง');
+        authService.setDriveAccessToken(null);
+        throw new Error(
+          'โทเค็นการเข้าถึง Google Drive หมดอายุ กรุณากดปุ่ม "Sign in with Google" เพื่อเชื่อมต่อสิทธิ์ใหม่อีกครั้ง'
+        );
       }
       if (res.status === 403) {
         throw new Error(
-          'ไม่มีสิทธิ์เข้าถึงโฟลเดอร์นี้ กรุณาตรวจสอบว่าแชร์สิทธิ์ หรือเปิด Anyone with link can view แล้ว'
+          'ไม่มีสิทธิ์เข้าถึงโฟลเดอร์นี้ กรุณาตรวจสอบว่าแชร์สิทธิ์ให้บัญชีที่ล็อกอิน หรือเปิด Anyone with the link can view แล้ว (หากใช้ API Key บน Vercel ตรวจสอบ HTTP Referrer Restriction ใน Google Cloud Console)'
         );
       }
       if (res.status === 404) {
-        throw new Error('ไม่พบโฟลเดอร์ใน Google Drive กรุณาตรวจสอบลิงก์โฟลเดอร์');
+        throw new Error(
+          'ไม่พบโฟลเดอร์ใน Google Drive กรุณาตรวจสอบลิงก์โฟลเดอร์ หรือตรวจสอบว่าบัญชี Google ที่ใช้เชื่อมต่อมีสิทธิ์เข้าถึงโฟลเดอร์นี้'
+        );
       }
 
       throw new Error(message);
     } catch (err: any) {
       if (err.name === 'AbortError') throw err;
       if (attempt === retries - 1) throw err;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 900));
     }
   }
 }
 
 /**
  * Scans a Google Drive folder recursively using Breadth-First Search (BFS)
+ * Supports Personal Drive & Google Workspace Shared Drives with 500-item pages for fast bulk scanning.
  */
 export async function scanGoogleDriveFolderRecursive({
   folderUrlOrId,
@@ -176,21 +195,27 @@ export async function scanGoogleDriveFolderRecursive({
     throw new Error('ลิงก์โฟลเดอร์ Google Drive ไม่ถูกต้อง กรุณาวางลิงก์โฟลเดอร์ให้ครบถ้วน');
   }
 
-  if (!accessToken && !apiKey) {
+  const effectiveAccessToken = accessToken || authService.getDriveAccessToken();
+  const effectiveApiKey = (apiKey && apiKey.trim()) || defaultGoogleDriveApiKey || null;
+
+  if (!effectiveAccessToken && !effectiveApiKey) {
     throw new Error(
       'กรุณาเข้าสู่ระบบด้วย Google หรือระบุ Google Drive API Key เพื่อใช้สแกนไฟล์'
     );
   }
 
-  // 1. Fetch Root Folder metadata to get its actual name
+  // 1. Fetch Root Folder metadata to get its actual name (with Shared Drive support)
   let rootFolderName = 'คลังหลัก Google Drive';
   try {
     const rootMetaUrl = buildDriveApiUrl(
       `files/${rootFolderId}`,
-      { fields: 'id,name,mimeType' },
-      apiKey
+      {
+        fields: 'id,name,mimeType',
+        supportsAllDrives: 'true',
+      },
+      effectiveAccessToken ? null : effectiveApiKey
     );
-    const rootMeta = await driveFetchWithRetry(rootMetaUrl, accessToken, signal);
+    const rootMeta = await driveFetchWithRetry(rootMetaUrl, effectiveAccessToken, signal);
     if (rootMeta?.name) {
       rootFolderName = rootMeta.name;
     }
@@ -199,6 +224,7 @@ export async function scanGoogleDriveFolderRecursive({
   }
 
   const visitedFolderIds = new Set<string>();
+  const seenVideoIds = new Set<string>();
   const discoveredVideos: DiscoveredDriveVideo[] = [];
   const folderSummariesMap = new Map<string, DriveFolderSummary>();
 
@@ -248,7 +274,7 @@ export async function scanGoogleDriveFolderRecursive({
       currentDepth: current.depth,
     });
 
-    // Fetch all children in this folder with pagination
+    // Fetch all children in this folder with large pagination (500 per page for fast bulk scans)
     let pageToken: string | undefined = undefined;
 
     do {
@@ -259,36 +285,49 @@ export async function scanGoogleDriveFolderRecursive({
         'files',
         {
           q: query,
-          pageSize: '100',
+          pageSize: '500',
+          supportsAllDrives: 'true',
+          includeItemsFromAllDrives: 'true',
           fields:
-            'nextPageToken,files(id,name,mimeType,size,createdTime,videoMediaMetadata,webViewLink)',
+            'nextPageToken,files(id,name,mimeType,size,createdTime,videoMediaMetadata,webViewLink,shortcutDetails)',
           ...(pageToken ? { pageToken } : {}),
         },
-        apiKey
+        effectiveAccessToken ? null : effectiveApiKey
       );
 
-      const data = await driveFetchWithRetry(listUrl, accessToken, signal);
+      const data = await driveFetchWithRetry(listUrl, effectiveAccessToken, signal);
       const files: any[] = data.files || [];
 
       for (const file of files) {
-        const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+        const isFolder =
+          file.mimeType === 'application/vnd.google-apps.folder' ||
+          (file.mimeType === 'application/vnd.google-apps.shortcut' &&
+            file.shortcutDetails?.targetMimeType === 'application/vnd.google-apps.folder');
+
+        const targetId =
+          file.mimeType === 'application/vnd.google-apps.shortcut' && file.shortcutDetails?.targetId
+            ? file.shortcutDetails.targetId
+            : file.id;
 
         if (isFolder) {
           // If within depth limit and not visited, push to queue
-          if (current.depth + 1 <= maxDepth && !visitedFolderIds.has(file.id)) {
+          if (current.depth + 1 <= maxDepth && !visitedFolderIds.has(targetId)) {
             queue.push({
-              id: file.id,
+              id: targetId,
               name: file.name,
               path: [...current.path, file.name],
               depth: current.depth + 1,
             });
           }
         } else if (isEligibleVideoFile(file.name, file.mimeType)) {
+          if (seenVideoIds.has(targetId)) continue;
+          seenVideoIds.add(targetId);
+
           // File is a video!
           folderSummary.videoCount++;
           const cleanTitle = cleanFootageTitle(file.name);
           const driveFileUrl =
-            file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
+            file.webViewLink || `https://drive.google.com/file/d/${targetId}/view`;
 
           let durationSec: number | undefined = undefined;
           if (file.videoMediaMetadata?.durationMillis) {
@@ -296,7 +335,7 @@ export async function scanGoogleDriveFolderRecursive({
           }
 
           discoveredVideos.push({
-            id: file.id,
+            id: targetId,
             name: file.name,
             cleanTitle,
             mimeType: file.mimeType || 'video/mp4',
@@ -312,6 +351,15 @@ export async function scanGoogleDriveFolderRecursive({
       }
 
       pageToken = data.nextPageToken;
+      if (pageToken) {
+        onProgress?.({
+          foldersScanned: foldersScannedCount,
+          foldersPending: queue.length,
+          videosFound: discoveredVideos.length,
+          currentFolder: current.name,
+          currentDepth: current.depth,
+        });
+      }
     } while (pageToken);
 
     folderSummariesMap.set(current.id, folderSummary);

@@ -22,6 +22,7 @@ import {
 import { SourcePlatform } from '../../types/source.types';
 import { CategoryTag } from '../../types/tag.types';
 import { reconcileSubfolder } from '../../utils/tagReconciler';
+import { defaultGoogleDriveApiKey } from '../../firebase/config';
 
 interface GoogleDriveSource1ToNModalProps {
   isOpen: boolean;
@@ -52,7 +53,9 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
 
   const [importMode, setImportMode] = useState<ImportStructureMode>('SINGLE_SOURCE');
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
-  const [fallbackApiKey, setFallbackApiKey] = useState('');
+  const [fallbackApiKey, setFallbackApiKey] = useState(
+    () => localStorage.getItem('DRIVE_API_KEY') || defaultGoogleDriveApiKey || ''
+  );
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
   const [platform, setPlatform] = useState<SourcePlatform>('YOUTUBE');

@@ -64,7 +64,8 @@ export function reconcileSubfolder(
   folderName: string,
   existingTags: CategoryTag[],
   existingGroups: CategoryGroup[],
-  createdTagsInMemory: CategoryTag[] = []
+  createdTagsInMemory: CategoryTag[] = [],
+  targetGroupId?: string
 ): ReconciledCategoryResult {
   const cleanedName = cleanSubfolderCategoryName(folderName);
   const normalizedTarget = normalizeForMatching(cleanedName);
@@ -126,16 +127,20 @@ export function reconcileSubfolder(
   const colorIndex = Math.abs(hash) % VIBRANT_TAG_COLORS.length;
   const chosenColor = VIBRANT_TAG_COLORS[colorIndex];
 
-  // Match default group or fallback
+  // Match requested target group or default group fallback
   const defaultGroup =
+    (targetGroupId ? existingGroups.find((g) => g.id === targetGroupId) : undefined) ||
     existingGroups.find((g) => g.id === 'GRP-THEME') ||
+    existingGroups.find((g) => g.id !== 'GRP-STAGING') ||
     existingGroups[0] || { id: 'GRP-GENERAL' };
+
+  const derivedGroupType = (defaultGroup.id.replace('GRP-', '') || 'THEME') as TagGroupType;
 
   const newTag: CategoryTag = {
     id: newTagId,
     name: cleanedName,
     color: chosenColor,
-    groupType: 'THEME',
+    groupType: derivedGroupType,
     groupId: defaultGroup.id,
     description: `หมวดหมู่นำเข้าอัตโนมัติจากโฟลเดอร์ "${folderName}"`,
     createdAt: new Date().toISOString().split('T')[0],

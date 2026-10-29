@@ -20,7 +20,7 @@
       "properties": {
         "id": { "type": "string", "description": "Unique group ID (e.g. GRP-PERSON)" },
         "name": { "type": "string", "description": "Group display name" },
-        "icon": { "type": "string", "description": "Group emoji or icon" },
+        "icon": { "type": "string", "description": "Group icon key" },
         "color": { "type": "string", "description": "Tailwind color token" },
         "description": { "type": "string" },
         "order": { "type": "number" },
@@ -45,6 +45,24 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "name", "tier", "color"]
+    },
+    "RawSource": {
+      "title": "RawSource",
+      "description": "Long-form source livestream or video (SRC-XXXX) with 1:N split footage references",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique source identifier (e.g. SRC-0001)" },
+        "title": { "type": "string", "description": "Source livestream or video title" },
+        "originalUrl": { "type": "string", "description": "Original URL or Google Drive folder URL" },
+        "platform": { "type": "string", "enum": ["TIKTOK", "FACEBOOK", "YOUTUBE", "INSTAGRAM", "TWITCH", "OTHER"] },
+        "channelOrCreator": { "type": "string", "description": "Source channel or creator name" },
+        "totalDuration": { "type": "string", "description": "Duration in HH:MM:SS" },
+        "tags": { "type": "array", "description": "Array of assigned category tag IDs" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "splitFootageIds": { "type": "array", "description": "Array of FT-XXXX IDs cut from this source" }
+      },
+      "required": ["id", "title", "platform", "tags", "splitFootageIds"]
     },
     "Footage": {
       "title": "Footage",
@@ -119,6 +137,10 @@
     "/categories/{categoryId}": {
       "schema": "CategoryTag",
       "description": "Global Tier 1 and Tier 2 category tags"
+    },
+    "/sources/{sourceId}": {
+      "schema": "RawSource",
+      "description": "Source livestreams and long-form videos (SRC-XXXX) for 1:N splitting"
     },
     "/footages/{footageId}": {
       "schema": "Footage",

@@ -242,25 +242,51 @@ export function useCMSCategoryActions({
         .deleteCategory(rid)
         .catch((err) => console.warn('Firestore deleteTag error:', err));
     });
-    setFootage((prev) =>
-      prev.map((ft) => ({
-        ...ft,
-        tags: normalizeFootageTags(ft.tags.filter((tid) => !removedIds.includes(tid))),
-      }))
-    );
-    setSources((prev) =>
-      prev.map((src) => ({
-        ...src,
-        tags: src.tags.filter((tid) => !removedIds.includes(tid)),
-      }))
-    );
+    setFootage((prev) => {
+      const updatedFootages: Footage[] = [];
+      const next = prev.map((ft) => {
+        if (!ft.tags.some((tid) => removedIds.includes(tid))) return ft;
+        const updatedFt: Footage = {
+          ...ft,
+          tags: normalizeFootageTags(ft.tags.filter((tid) => !removedIds.includes(tid))),
+        };
+        updatedFootages.push(updatedFt);
+        return updatedFt;
+      });
+      if (updatedFootages.length > 0) {
+        firestoreService
+          .batchSaveFootages(updatedFootages)
+          .catch((err) => console.warn('Firestore update footages on deleteTag error:', err));
+      }
+      return next;
+    });
+    setSources((prev) => {
+      const updatedSources: RawSource[] = [];
+      const next = prev.map((src) => {
+        if (!src.tags.some((tid) => removedIds.includes(tid))) return src;
+        const updatedSrc: RawSource = {
+          ...src,
+          tags: src.tags.filter((tid) => !removedIds.includes(tid)),
+        };
+        updatedSources.push(updatedSrc);
+        return updatedSrc;
+      });
+      if (updatedSources.length > 0) {
+        firestoreService
+          .batchSaveSources(updatedSources)
+          .catch((err) => console.warn('Firestore update sources on deleteTag error:', err));
+      }
+      return next;
+    });
     setSelectedTagFilter((prev) => prev.filter((tid) => !removedIds.includes(tid)));
   };
 
   const updateSettings = (updates: Partial<SystemSettings>) => {
     setSettings((prev) => {
       const nextSettings = { ...prev, ...updates };
-      firestoreService.saveSettings(nextSettings).catch((err) => console.warn('Firestore updateSettings error:', err));
+      firestoreService
+        .saveSettings(nextSettings)
+        .catch((err) => console.warn('Firestore updateSettings error:', err));
       return nextSettings;
     });
   };
@@ -275,9 +301,9 @@ export function useCMSCategoryActions({
       cmsRepository.saveTags(next);
       return next;
     });
-    newTags.forEach((t) => {
-      firestoreService.saveCategory(t).catch((err) => console.warn('Firestore batchAddTags error:', err));
-    });
+    firestoreService
+      .batchSaveCategories(newTags)
+      .catch((err) => console.warn('Firestore batchAddTags error:', err));
   };
 
   return {

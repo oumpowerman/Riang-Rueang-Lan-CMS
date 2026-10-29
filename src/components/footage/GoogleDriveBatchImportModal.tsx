@@ -2,12 +2,9 @@ import React, { useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertCircle,
-  AlertTriangle,
   ArrowRight,
   Check,
   CheckCircle2,
-  Clock,
-  ExternalLink,
   FileText,
   FolderDown,
   FolderOpen,
@@ -17,14 +14,12 @@ import {
   Layers,
   Link2,
   Lock,
-  LogOut,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
   Tag,
   Upload,
-  Video,
   X,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
@@ -39,11 +34,11 @@ import {
 import {
   reconcileSubfolder,
   ReconciledCategoryResult,
-  cleanSubfolderCategoryName,
 } from '../../utils/tagReconciler';
-import { STAGING_TAG_ID } from '../../services/seedData';
+import { STAGING_TAG_ID, isStagingGroupId, isStagingTagId } from '../../services/seedData';
 import { cleanFootageTitle } from '../../utils/fileNameGenerator';
 import { CategoryTag } from '../../types/tag.types';
+import { defaultGoogleDriveApiKey } from '../../firebase/config';
 
 interface ParsedPastedItem {
   id: string;
@@ -51,6 +46,8 @@ interface ParsedPastedItem {
   driveFileUrl: string;
   cleanFileName: string;
 }
+
+export type DriveCategoryStrategy = 'SUBFOLDER_TO_CATEGORY' | 'ALL_TO_STAGING';
 
 export const GoogleDriveBatchImportModal: React.FC = () => {
   const {
@@ -71,16 +68,33 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
     signInWithGoogle,
     driveAccessToken,
     isGoogleDriveConnected,
-    logout,
   } = useAuth();
 
   // Mode: RECURSIVE (Enterprise Scan) vs PASTE (Manual Text)
   const [activeImportMode, setActiveImportMode] = useState<'RECURSIVE' | 'PASTE'>('RECURSIVE');
   const [folderUrl, setFolderUrl] = useState(settings.driveRootFolderUrl || '');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('DRIVE_API_KEY') || '');
+  const [apiKey, setApiKey] = useState(
+    () => localStorage.getItem('DRIVE_API_KEY') || defaultGoogleDriveApiKey || ''
+  );
   const [isApiKeyExpanded, setIsApiKeyExpanded] = useState(false);
   const [maxDepth, setMaxDepth] = useState<number>(10);
   const [idPrefix, setIdPrefix] = useState<'CLP' | 'FT'>('CLP');
+
+  // Category Assignment Strategy State
+  const [categoryStrategy, setCategoryStrategy] = useState<DriveCategoryStrategy>(
+    'SUBFOLDER_TO_CATEGORY'
+  );
+  // Optional: Which Tier 0 Group newly created Subfolder categories should be placed under
+  const nonStagingGroups = useMemo(
+    () => categoryGroups.filter((g) => !isStagingGroupId(g.id)),
+    [categoryGroups]
+  );
+  const [targetGroupIdForNewTags, setTargetGroupIdForNewTags] = useState<string>('GRP-THEME');
+  // Per-subfolder override set: subfolders inside this set will be routed to Staging Area even in SUBFOLDER_TO_CATEGORY mode
+  const [stagedSubfolders, setStagedSubfolders] = useState<Set<string>>(new Set());
+
+  // Pasted mode target tag (defaults to STAGING_TAG_ID)
+  const [pasteTargetTagId, setPasteTargetTagId] = useState<string>(STAGING_TAG_ID);
 
   // Scanning State
   const [isScanning, setIsScanning] = useState(false);
@@ -102,6 +116,8 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
   const [importProgress, setImportProgress] = useState(0);
   const [importSuccessData, setImportSuccessData] = useState<{
     totalImported: number;
+    stagedCount: number;
+    categorizedCount: number;
     newTagsCreated: number;
     createdTagNames: string[];
   } | null>(null);
@@ -116,10 +132,45 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
     }
   };
 
+  // Helper: Check if a specific subfolder is routed to Staging Area
+  const isFolderRoutedToStaging = (folderName: string): boolean => {
+    if (categoryStrategy === 'ALL_TO_STAGING') return true;
+    return stagedSubfolders.has(folderName);
+  };
+
+  // Toggle a single subfolder between Category Mapping and Staging Area
+  const handleToggleSubfolderStaging = (folderName: string) => {
+    if (categoryStrategy === 'ALL_TO_STAGING') {
+      // Switch to custom subfolder mode with all OTHER folders staged except this one
+      if (scanResult) {
+        const allFolders = Array.from(
+          new Set(scanResult.videos.map((v) => v.parentFolderName || scanResult.rootFolderName))
+        );
+        const nextStaged = new Set(allFolders.filter((f) => f !== folderName));
+        setStagedSubfolders(nextStaged);
+        setCategoryStrategy('SUBFOLDER_TO_CATEGORY');
+      }
+      return;
+    }
+
+    setStagedSubfolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderName)) {
+        next.delete(folderName);
+      } else {
+        next.add(folderName);
+      }
+      return next;
+    });
+  };
+
   // 1. Reconcile Categories for Discovered Videos
-  const { folderCategoryMap, newTagsToCreate } = useMemo(() => {
+  const { folderCategoryMap, activeNewTagsToCreate } = useMemo(() => {
     if (!scanResult || scanResult.videos.length === 0) {
-      return { folderCategoryMap: new Map<string, ReconciledCategoryResult>(), newTagsToCreate: [] };
+      return {
+        folderCategoryMap: new Map<string, ReconciledCategoryResult>(),
+        activeNewTagsToCreate: [] as CategoryTag[],
+      };
     }
 
     const map = new Map<string, ReconciledCategoryResult>();
@@ -135,7 +186,8 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
         folderName,
         tags,
         categoryGroups,
-        inMemoryNewTags
+        inMemoryNewTags,
+        targetGroupIdForNewTags
       );
       map.set(folderName, reconciled);
       if (reconciled.isNew) {
@@ -143,8 +195,54 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
       }
     });
 
-    return { folderCategoryMap: map, newTagsToCreate: inMemoryNewTags };
-  }, [scanResult, tags, categoryGroups]);
+    // Only create new tags for subfolders that are NOT routed to Staging Area
+    // and have at least one selected video
+    const activeFoldersWithSelectedVideos = new Set(
+      scanResult.videos
+        .filter((v) => selectedVideoIds.has(v.id))
+        .map((v) => v.parentFolderName || scanResult.rootFolderName)
+    );
+
+    const activeNewTagsMap = new Map<string, CategoryTag>();
+    distinctFolderNames.forEach((folderName) => {
+      if (categoryStrategy === 'ALL_TO_STAGING' || stagedSubfolders.has(folderName)) {
+        return;
+      }
+      if (!activeFoldersWithSelectedVideos.has(folderName)) {
+        return;
+      }
+      const reconciled = map.get(folderName);
+      if (reconciled && reconciled.isNew) {
+        activeNewTagsMap.set(reconciled.tag.id, reconciled.tag);
+      }
+    });
+
+    return {
+      folderCategoryMap: map,
+      activeNewTagsToCreate: Array.from(activeNewTagsMap.values()),
+    };
+  }, [
+    scanResult,
+    tags,
+    categoryGroups,
+    targetGroupIdForNewTags,
+    categoryStrategy,
+    stagedSubfolders,
+    selectedVideoIds,
+  ]);
+
+  // Quick helper to route ONLY newly-discovered (unmatched) folders to Staging while keeping existing matched categories
+  const handleStageOnlyUnmatchedFolders = () => {
+    if (!scanResult) return;
+    setCategoryStrategy('SUBFOLDER_TO_CATEGORY');
+    const unmatchedFolders = new Set<string>();
+    folderCategoryMap.forEach((reconciled, folderName) => {
+      if (reconciled.isNew) {
+        unmatchedFolders.add(folderName);
+      }
+    });
+    setStagedSubfolders(unmatchedFolders);
+  };
 
   // 2. Start Recursive Scan
   const handleStartScan = async () => {
@@ -162,6 +260,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
     setScanError(null);
     setIsScanning(true);
     setScanResult(null);
+    setStagedSubfolders(new Set());
     setScanProgress({
       foldersScanned: 0,
       foldersPending: 1,
@@ -253,6 +352,23 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
     return list;
   }, [scanResult, selectedFolderFilter, previewSearch]);
 
+  // Summary counts of selected videos going to Staging vs Categories
+  const selectedRoutingSummary = useMemo(() => {
+    if (!scanResult) return { toStaging: 0, toCategory: 0 };
+    let toStaging = 0;
+    let toCategory = 0;
+    scanResult.videos.forEach((v) => {
+      if (!selectedVideoIds.has(v.id)) return;
+      const folderName = v.parentFolderName || scanResult.rootFolderName;
+      if (categoryStrategy === 'ALL_TO_STAGING' || stagedSubfolders.has(folderName)) {
+        toStaging += 1;
+      } else {
+        toCategory += 1;
+      }
+    });
+    return { toStaging, toCategory };
+  }, [scanResult, selectedVideoIds, categoryStrategy, stagedSubfolders]);
+
   // 4. Pasted fallback parsing
   const parsedPastedItems: ParsedPastedItem[] = useMemo(() => {
     if (activeImportMode !== 'PASTE') return [];
@@ -263,7 +379,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
 
     return lines.map((line, idx) => {
       const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
-      let driveUrl = urlMatch ? urlMatch[1] : '';
+      const driveUrl = urlMatch ? urlMatch[1] : '';
       let remainingText = line.replace(driveUrl, '').trim();
 
       if (!remainingText && driveUrl) {
@@ -293,24 +409,41 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
         const targetVideos = scanResult.videos.filter((v) => selectedVideoIds.has(v.id));
         if (targetVideos.length === 0) return;
 
-        // Step A: Create any new CategoryTags that don't exist yet
-        if (newTagsToCreate.length > 0) {
-          batchAddTags(newTagsToCreate);
+        // Step A: Create any new CategoryTags for non-staged subfolders
+        if (activeNewTagsToCreate.length > 0) {
+          batchAddTags(activeNewTagsToCreate);
         }
         setImportProgress(35);
 
-        // Step B: Build Footage Payload with Pre-assigned Tags based on Subfolder
+        let stagedCount = 0;
+        let categorizedCount = 0;
+
+        // Step B: Build Footage Payload based on selected Category Strategy & per-folder overrides
         const payloadItems = targetVideos.map((item) => {
           const folderName = item.parentFolderName || scanResult.rootFolderName;
+          const isStaged = isFolderRoutedToStaging(folderName);
           const reconciled = folderCategoryMap.get(folderName);
-          const assignedTagId = reconciled ? reconciled.tagId : STAGING_TAG_ID;
+
+          const assignedTagId = isStaged
+            ? STAGING_TAG_ID
+            : reconciled
+            ? reconciled.tagId
+            : STAGING_TAG_ID;
+
+          if (assignedTagId === STAGING_TAG_ID) {
+            stagedCount += 1;
+          } else {
+            categorizedCount += 1;
+          }
 
           return {
             title: item.cleanTitle,
             driveFileUrl: item.webViewLink,
             originalUrl: item.webViewLink,
             tags: [assignedTagId],
-            mascotNotes: `นำเข้าจากโฟลเดอร์ "${folderName}"`,
+            mascotNotes: isStaged
+              ? `พักรอจัดหมวดหมู่ (จากโฟลเดอร์ "${folderName}")`
+              : `นำเข้าจากโฟลเดอร์ "${folderName}"`,
             durationSec: item.durationSec || 25,
           };
         });
@@ -321,18 +454,23 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
 
         setImportSuccessData({
           totalImported: added.length,
-          newTagsCreated: newTagsToCreate.length,
-          createdTagNames: newTagsToCreate.map((t) => t.name),
+          stagedCount,
+          categorizedCount,
+          newTagsCreated: activeNewTagsToCreate.length,
+          createdTagNames: activeNewTagsToCreate.map((t) => t.name),
         });
       } else {
         // Mode PASTE
         if (parsedPastedItems.length === 0) return;
+        const isStaged = isStagingTagId(pasteTargetTagId);
         const payload = parsedPastedItems.map((item) => ({
           title: item.title,
           driveFileUrl: item.driveFileUrl,
           originalUrl: item.driveFileUrl,
-          tags: [STAGING_TAG_ID],
-          mascotNotes: 'นำเข้าแบบข้อความ (รอจัดหมวดหมู่)',
+          tags: [pasteTargetTagId],
+          mascotNotes: isStaged
+            ? 'นำเข้าแบบข้อความ (พักรอจัดหมวดหมู่)'
+            : 'นำเข้าแบบข้อความพร้อมระบุหมวดหมู่',
           durationSec: 25,
         }));
 
@@ -340,6 +478,8 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
         setImportProgress(100);
         setImportSuccessData({
           totalImported: added.length,
+          stagedCount: isStaged ? added.length : 0,
+          categorizedCount: isStaged ? 0 : added.length,
           newTagsCreated: 0,
           createdTagNames: [],
         });
@@ -358,12 +498,19 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
     setIsGoogleDriveBatchModalOpen(false);
     setImportSuccessData(null);
     setScanResult(null);
+    setStagedSubfolders(new Set());
   };
 
-  const handleGoToLibrary = () => {
+  const handleGoToLibrary = (filterTagId: string = 'ALL') => {
     handleClose();
+    setSelectedTagFilter(filterTagId === 'ALL' ? [] : [filterTagId]);
     setActiveTab('FOOTAGE_LIBRARY');
   };
+
+  const selectableMainCategories = useMemo(
+    () => tags.filter((t) => (t.tier === 1 || (!t.parentId && !t.tier)) && !isStagingTagId(t.id)),
+    [tags]
+  );
 
   if (!isGoogleDriveBatchModalOpen) return null;
 
@@ -389,7 +536,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                 </span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                สแกนโฟลเดอร์ย่อยอัตโนมัติ คัดกรองเฉพาะไฟล์วิดีโอ และแปลงชื่อ Subfolder เป็นหมวดหมู่ทันที
+                สแกนโฟลเดอร์ย่อยอัตโนมัติ เลือกได้ว่าจะใช้ชื่อ Subfolder เป็นหมวดหมู่ หรือส่งเข้าพื้นที่พักรอจัดหมวดหมู่ (Staging Area) ก่อน
               </p>
             </div>
           </div>
@@ -414,10 +561,27 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
               <div className="w-14 h-14 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <div>
+              <div className="space-y-2">
                 <h4 className="text-lg font-bold text-emerald-950">
                   นำเข้าสำเร็จ {importSuccessData.totalImported} วิดีโอเข้าสู่คลังเรียบร้อยแล้ว!
                 </h4>
+
+                {/* Breakdown badges */}
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  {importSuccessData.categorizedCount > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-100 border border-indigo-200 text-indigo-900 text-xs font-bold">
+                      <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>เข้าหมวดหมู่จริง {importSuccessData.categorizedCount} คลิป</span>
+                    </span>
+                  )}
+                  {importSuccessData.stagedCount > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-100 border border-amber-300 text-amber-950 text-xs font-bold">
+                      <Inbox className="w-3.5 h-3.5 text-amber-700" />
+                      <span>เข้าพื้นที่พักรอจัดหมวดหมู่ (Staging) {importSuccessData.stagedCount} คลิป</span>
+                    </span>
+                  )}
+                </div>
+
                 {importSuccessData.newTagsCreated > 0 ? (
                   <div className="text-xs text-emerald-800 mt-2 max-w-lg mx-auto">
                     <p className="font-semibold mb-1">
@@ -434,21 +598,36 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                       ))}
                     </div>
                   </div>
+                ) : importSuccessData.stagedCount === importSuccessData.totalImported ? (
+                  <p className="text-xs text-amber-900 mt-1 max-w-md mx-auto">
+                    คลิปทั้งหมดถูกส่งเข้าสู่ &ldquo;พื้นที่พักรอจัดหมวดหมู่&rdquo; เรียบร้อยแล้ว คุณสามารถเข้าไปคัดแยกหมวดหมู่ทีละชุดในหน้าคลังฟุตเทจได้ทันที
+                  </p>
                 ) : (
                   <p className="text-xs text-emerald-800 mt-1 max-w-md mx-auto">
-                    ไฟล์ทั้งหมดถูกจับคู่เข้ากับหมวดหมู่ที่มีอยู่เดิม และพร้อมให้นำไปจัด 5 อันดับได้ทันที
+                    ไฟล์ถูกจับคู่เข้ากับหมวดหมู่ตามที่คุณเลือก และพร้อมให้นำไปจัด 5 อันดับได้ทันที
                   </p>
                 )}
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+                {importSuccessData.stagedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleGoToLibrary(STAGING_TAG_ID)}
+                    className="px-5 py-2.5 rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Inbox className="w-4 h-4 text-slate-900" />
+                    <span>เปิดพื้นที่พักรอจัดหมวดหมู่ ({importSuccessData.stagedCount} คลิป)</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleGoToLibrary}
+                  onClick={() => handleGoToLibrary('ALL')}
                   className="px-5 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                 >
                   <FolderOpen className="w-4 h-4 text-amber-400" />
-                  <span>ไปยังคลังฟุตเทจเพื่อตรวจสอบ</span>
+                  <span>ไปยังคลังฟุตเทจทั้งหมด</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
                 <button
@@ -568,7 +747,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                       </span>
                       {apiKey && (
                         <span className="text-[10px] text-emerald-700 font-mono font-bold">
-                          ✓ บันทึกไว้แล้ว
+                          บันทึกไว้แล้ว
                         </span>
                       )}
                     </div>
@@ -630,7 +809,8 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
               {/* Mode 1: RECURSIVE SCANNER */}
               {activeImportMode === 'RECURSIVE' && (
                 <div className="space-y-4">
-                  <div className="space-y-3 bg-slate-50/80 border border-slate-200 rounded-2xl p-4">
+                  {/* Folder Input & Category Assignment Strategy Selector */}
+                  <div className="space-y-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl p-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-800 mb-1">
                         ลิงก์โฟลเดอร์ Google Drive หรือ Folder ID:
@@ -668,26 +848,124 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                        <span>
-                          สแกนลึกทุก Subfolder, กรองเฉพาะวิดีโอ (MP4, MOV, MKV) และแปลงชื่อ Subfolder เป็นแท็กหมวดหมู่อัตโนมัติ
+                    {/* Category Assignment Strategy Selector (Subfolder vs Staging Area) */}
+                    <div className="pt-2.5 border-t border-slate-200/80 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>รูปแบบการจัดหมวดหมู่เมื่อนำเข้า (เลือกเปลี่ยนได้ตลอดเวลา):</span>
                         </span>
-                      </span>
 
-                      <div className="flex items-center gap-1.5">
-                        <span>ความลึกสูงสุด:</span>
-                        <select
-                          value={maxDepth}
-                          onChange={(e) => setMaxDepth(Number(e.target.value))}
-                          className="px-1.5 py-0.5 rounded border border-slate-200 bg-white font-mono"
-                        >
-                          <option value="5">5 ชั้น</option>
-                          <option value="10">10 ชั้น (แนะนำ)</option>
-                          <option value="20">20 ชั้น</option>
-                        </select>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                          <span>ความลึกสูงสุด:</span>
+                          <select
+                            value={maxDepth}
+                            onChange={(e) => setMaxDepth(Number(e.target.value))}
+                            className="px-1.5 py-0.5 rounded border border-slate-200 bg-white font-mono text-slate-800"
+                          >
+                            <option value="5">5 ชั้น</option>
+                            <option value="10">10 ชั้น (แนะนำ)</option>
+                            <option value="20">20 ชั้น</option>
+                          </select>
+                        </div>
                       </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {/* Strategy 1: Auto-map Subfolder to Category */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCategoryStrategy('SUBFOLDER_TO_CATEGORY');
+                            setStagedSubfolders(new Set());
+                          }}
+                          className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                            categoryStrategy === 'SUBFOLDER_TO_CATEGORY'
+                              ? 'bg-indigo-50/90 border-indigo-400 ring-1 ring-indigo-300 shadow-2xs'
+                              : 'bg-white hover:bg-slate-50 border-slate-200/90'
+                          }`}
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                              categoryStrategy === 'SUBFOLDER_TO_CATEGORY'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            <FolderTree className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-extrabold text-slate-900">
+                                ใช้ชื่อ Subfolder เป็นหมวดหมู่
+                              </span>
+                              {categoryStrategy === 'SUBFOLDER_TO_CATEGORY' && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-600 text-white">
+                                  เลือกอยู่
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                              จับคู่หมวดหมู่เดิมอัตโนมัติ หรือสร้างหมวดใหม่จากชื่อโฟลเดอร์ย่อย (เลือกสลับบางโฟลเดอร์เข้าพื้นที่พักได้)
+                            </p>
+                          </div>
+                        </button>
+
+                        {/* Strategy 2: Send all to Staging Area */}
+                        <button
+                          type="button"
+                          onClick={() => setCategoryStrategy('ALL_TO_STAGING')}
+                          className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+                            categoryStrategy === 'ALL_TO_STAGING'
+                              ? 'bg-amber-50/90 border-amber-400 ring-1 ring-amber-300 shadow-2xs'
+                              : 'bg-white hover:bg-slate-50 border-slate-200/90'
+                          }`}
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                              categoryStrategy === 'ALL_TO_STAGING'
+                                ? 'bg-amber-500 text-slate-950'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            <Inbox className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-extrabold text-slate-900">
+                                ส่งเข้าพื้นที่พักรอจัดหมวดหมู่ก่อน
+                              </span>
+                              {categoryStrategy === 'ALL_TO_STAGING' && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500 text-slate-950">
+                                  เลือกอยู่
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                              พักทุกคลิปไว้ในกลุ่ม &ldquo;พื้นที่พักรอจัดหมวดหมู่ (Staging Area)&rdquo; โดยไม่สร้างแท็กใหม่ เพื่อรอคัดแยกทีหลัง
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+
+                      {/* Optional Target Group Picker when creating new categories from subfolders */}
+                      {categoryStrategy === 'SUBFOLDER_TO_CATEGORY' && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                          <div className="flex flex-wrap items-center gap-2 text-slate-600">
+                            <span>หากต้องสร้างหมวดหมู่หลักใหม่จาก Subfolder ให้จัดเข้ากลุ่มใหญ่:</span>
+                            <select
+                              value={targetGroupIdForNewTags}
+                              onChange={(e) => setTargetGroupIdForNewTags(e.target.value)}
+                              className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white font-bold text-slate-900 cursor-pointer focus:outline-none focus:border-indigo-500"
+                            >
+                              {nonStagingGroups.map((grp) => (
+                                <option key={grp.id} value={grp.id}>
+                                  {grp.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -753,44 +1031,93 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                   {/* Discovered Results Table & Subfolder Mapping */}
                   {scanResult && (
                     <div className="space-y-3 pt-1">
-                      {/* Subfolder Category Auto-Mapping Summary */}
-                      <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-2">
+                      {/* Subfolder Category Mapping & Per-Subfolder Staging Override */}
+                      <div
+                        className={`border rounded-2xl p-3.5 space-y-2.5 transition-colors ${
+                          categoryStrategy === 'ALL_TO_STAGING'
+                            ? 'bg-amber-50/70 border-amber-200/90'
+                            : 'bg-slate-50/90 border-slate-200/90'
+                        }`}
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-indigo-600" />
+                            {categoryStrategy === 'ALL_TO_STAGING' ? (
+                              <Inbox className="w-4 h-4 text-amber-600 shrink-0" />
+                            ) : (
+                              <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                            )}
                             <span className="text-xs font-bold text-slate-900">
-                              การจับคู่หมวดหมู่อัตโนมัติจาก Subfolder ({folderCategoryMap.size} หมวด)
+                              {categoryStrategy === 'ALL_TO_STAGING'
+                                ? `ส่งทุกโฟลเดอร์ย่อย (${folderCategoryMap.size} โฟลเดอร์) เข้าพื้นที่พักรอจัดหมวดหมู่`
+                                : `การจับคู่หมวดหมู่จาก Subfolder (${folderCategoryMap.size} โฟลเดอร์) · คลิกที่ป้ายเพื่อสลับเข้าพื้นที่พักรายโฟลเดอร์`}
                             </span>
                           </div>
-                          {newTagsToCreate.length > 0 && (
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              จะสร้างหมวดใหม่ให้อัตโนมัติ {newTagsToCreate.length} หมวด
-                            </span>
-                          )}
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {categoryStrategy === 'SUBFOLDER_TO_CATEGORY' && (
+                              <button
+                                type="button"
+                                onClick={handleStageOnlyUnmatchedFolders}
+                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-100/90 hover:bg-amber-200/80 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
+                                title="โฟลเดอร์ที่มีหมวดตรงอยู่แล้วให้เข้าหมวดเดิม ส่วนโฟลเดอร์ใหม่ที่ยังไม่มีหมวดให้ส่งเข้าพื้นที่พักแทนการสร้างแท็กใหม่"
+                              >
+                                ส่งเฉพาะโฟลเดอร์ที่ยังไม่มีหมวดหมู่เข้าพื้นที่พัก
+                              </button>
+                            )}
+
+                            {activeNewTagsToCreate.length > 0 ? (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                จะสร้างหมวดใหม่ {activeNewTagsToCreate.length} หมวด
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700">
+                                ไม่มีการสร้างหมวดหมู่ใหม่
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                          {Array.from(folderCategoryMap.values()).map((reconciled, i) => (
-                            <span
-                              key={i}
-                              className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl border ${
-                                reconciled.isNew
-                                  ? 'bg-emerald-50 text-emerald-950 border-emerald-300 font-bold'
-                                  : 'bg-white text-slate-700 border-slate-200'
-                              }`}
-                            >
-                              <FolderOpen className="w-3 h-3 text-slate-400" />
-                              <span className="font-mono text-[11px] text-slate-500">{reconciled.folderName}</span>
-                              <span className="text-slate-300">➔</span>
-                              <Tag className="w-3 h-3 text-indigo-500" />
-                              <span>{reconciled.cleanedCategoryName}</span>
-                              {reconciled.isNew && (
-                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-200/70 text-emerald-800">
-                                  หมวดใหม่
+                        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pt-0.5">
+                          {Array.from(folderCategoryMap.values()).map((reconciled, i) => {
+                            const isStaged = isFolderRoutedToStaging(reconciled.folderName);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => handleToggleSubfolderStaging(reconciled.folderName)}
+                                title="คลิกเพื่อสลับโฟลเดอร์นี้ระหว่าง ใช้หมวดหมู่ตามชื่อโฟลเดอร์ กับ ส่งเข้าพื้นที่พักรอจัดหมวดหมู่"
+                                className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${
+                                  isStaged
+                                    ? 'bg-amber-100/80 text-amber-950 border-amber-300 font-bold'
+                                    : reconciled.isNew
+                                    ? 'bg-emerald-50 text-emerald-950 border-emerald-300 font-bold hover:bg-emerald-100/70'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                                }`}
+                              >
+                                <FolderOpen className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span className="font-mono text-[11px] text-slate-600">
+                                  {reconciled.folderName}
                                 </span>
-                              )}
-                            </span>
-                          ))}
+                                <span className="text-slate-400">➔</span>
+                                {isStaged ? (
+                                  <>
+                                    <Inbox className="w-3 h-3 text-amber-700 shrink-0" />
+                                    <span className="text-amber-900">พื้นที่พักรอจัดหมวดหมู่</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Tag className="w-3 h-3 text-indigo-600 shrink-0" />
+                                    <span>#{reconciled.cleanedCategoryName}</span>
+                                    {reconciled.isNew && (
+                                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-200/70 text-emerald-800">
+                                        หมวดใหม่
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -825,7 +1152,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                             <option value="ALL">ทุกโฟลเดอร์ย่อย ({scanResult.videos.length})</option>
                             {Array.from(folderCategoryMap.keys()).map((fname, i) => (
                               <option key={i} value={fname}>
-                                📁 {fname}
+                                โฟลเดอร์: {fname}
                               </option>
                             ))}
                           </select>
@@ -853,7 +1180,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                               <th className="py-2 px-3 w-28 font-mono">รหัสใหม่</th>
                               <th className="py-2 px-3">ชื่อคลิปวิดีโอ</th>
                               <th className="py-2 px-3 w-36">โฟลเดอร์ต้นทาง</th>
-                              <th className="py-2 px-3 w-32">หมวดหมู่ที่จะได้รับ</th>
+                              <th className="py-2 px-3 w-44">หมวดหมู่ที่จะได้รับ</th>
                               <th className="py-2 px-3 w-20 text-right">ความยาว</th>
                             </tr>
                           </thead>
@@ -863,9 +1190,9 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                               const previewId = `${idPrefix}-${String(
                                 computedFootage.length + idx + 1
                               ).padStart(idPrefix === 'CLP' ? 3 : 4, '0')}`;
-                              const reconciled = folderCategoryMap.get(
-                                video.parentFolderName || scanResult.rootFolderName
-                              );
+                              const folderName = video.parentFolderName || scanResult.rootFolderName;
+                              const isStaged = isFolderRoutedToStaging(folderName);
+                              const reconciled = folderCategoryMap.get(folderName);
 
                               return (
                                 <tr
@@ -890,18 +1217,29 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                                     {video.cleanTitle}
                                   </td>
                                   <td className="py-1.5 px-3 font-sans text-slate-600 truncate max-w-[130px]">
-                                    📁 {video.parentFolderName}
+                                    <span className="inline-flex items-center gap-1 truncate">
+                                      <FolderOpen className="w-3 h-3 text-slate-400 shrink-0" />
+                                      <span className="truncate">{video.parentFolderName}</span>
+                                    </span>
                                   </td>
                                   <td className="py-1.5 px-3 font-sans">
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                        reconciled?.isNew
-                                          ? 'bg-emerald-100 text-emerald-800'
-                                          : 'bg-indigo-100 text-indigo-800'
-                                      }`}
-                                    >
-                                      #{reconciled?.cleanedCategoryName || 'ทั่วไป'}
-                                    </span>
+                                    {isStaged ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                                        <Inbox className="w-3 h-3 text-amber-700 shrink-0" />
+                                        <span>พื้นที่พักรอจัดหมวดหมู่</span>
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                          reconciled?.isNew
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : 'bg-indigo-100 text-indigo-800'
+                                        }`}
+                                      >
+                                        <Tag className="w-2.5 h-2.5 shrink-0" />
+                                        <span>#{reconciled?.cleanedCategoryName || 'ทั่วไป'}</span>
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="py-1.5 px-3 text-right text-slate-500 font-mono">
                                     {video.durationSec}s
@@ -926,6 +1264,27 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
               {/* Mode 2: MANUAL PASTE FALLBACK */}
               {activeImportMode === 'PASTE' && (
                 <div className="space-y-3">
+                  <div className="bg-slate-50/90 border border-slate-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Inbox className="w-4 h-4 text-amber-600" />
+                      <span>หมวดหมู่ปลายทางสำหรับรายการที่วาง:</span>
+                    </span>
+                    <select
+                      value={pasteTargetTagId}
+                      onChange={(e) => setPasteTargetTagId(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-900 cursor-pointer focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value={STAGING_TAG_ID}>
+                        พื้นที่พักรอจัดหมวดหมู่ (Staging Area - แนะนำ)
+                      </option>
+                      {selectableMainCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          หมวดหมู่หลัก: #{cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="flex items-center justify-between text-xs">
                     <label className="font-bold text-slate-800">
                       วางรายชื่อไฟล์ และ/หรือ ลิงก์ Google Drive (1 บรรทัดต่อ 1 ไฟล์):
@@ -953,12 +1312,43 @@ https://drive.google.com/file/d/2XYZ.../view น้องหมาโกลเ�
         {importSuccessData === null && (
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs text-slate-600">
-              <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                {activeImportMode === 'RECURSIVE' && scanResult
-                  ? `พร้อมนำเข้า ${selectedVideoIds.size} วิดีโอ และสร้าง ${newTagsToCreate.length} หมวดหมู่อัตโนมัติ`
-                  : 'นำเข้าสู่พื้นที่คลังฟุตเทจโดยอัตโนมัติ'}
-              </span>
+              {activeImportMode === 'RECURSIVE' && scanResult ? (
+                selectedRoutingSummary.toStaging > 0 && selectedRoutingSummary.toCategory === 0 ? (
+                  <>
+                    <Inbox className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      พร้อมนำเข้า <strong className="text-slate-900">{selectedVideoIds.size}</strong> คลิปเข้าสู่{' '}
+                      <strong className="text-amber-800">พื้นที่พักรอจัดหมวดหมู่ (Staging Area)</strong>
+                    </span>
+                  </>
+                ) : selectedRoutingSummary.toStaging > 0 ? (
+                  <>
+                    <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>
+                      พร้อมนำเข้า <strong className="text-slate-900">{selectedVideoIds.size}</strong> คลิป (เข้าหมวดหมู่{' '}
+                      <strong className="text-indigo-700">{selectedRoutingSummary.toCategory}</strong> · พื้นที่พัก{' '}
+                      <strong className="text-amber-800">{selectedRoutingSummary.toStaging}</strong>)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>
+                      พร้อมนำเข้า <strong className="text-slate-900">{selectedVideoIds.size}</strong> วิดีโอ และสร้าง{' '}
+                      <strong className="text-emerald-700">{activeNewTagsToCreate.length}</strong> หมวดหมู่ใหม่อัตโนมัติ
+                    </span>
+                  </>
+                )
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    {categoryStrategy === 'ALL_TO_STAGING'
+                      ? 'โหมดส่งเข้าพื้นที่พักรอจัดหมวดหมู่ (Staging Area) ก่อนคัดแยกภายหลัง'
+                      : 'โหมดแปลงชื่อ Subfolder เป็นหมวดหมู่อัตโนมัติ'}
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -990,7 +1380,9 @@ https://drive.google.com/file/d/2XYZ.../view น้องหมาโกลเ�
                     <Upload className="w-3.5 h-3.5 text-amber-400" />
                     <span>
                       {activeImportMode === 'RECURSIVE' && scanResult
-                        ? `นำเข้า ${selectedVideoIds.size} คลิปพร้อมจัดหมวดหมู่อัตโนมัติ`
+                        ? selectedRoutingSummary.toStaging === selectedVideoIds.size
+                          ? `นำเข้า ${selectedVideoIds.size} คลิปเข้าพื้นที่พัก (Staging)`
+                          : `นำเข้า ${selectedVideoIds.size} คลิปตามหมวดหมู่ที่เลือก`
                         : `นำเข้า ${parsedPastedItems.length} คลิปทันที`}
                     </span>
                   </>
