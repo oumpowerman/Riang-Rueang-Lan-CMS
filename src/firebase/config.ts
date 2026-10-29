@@ -5,23 +5,41 @@ import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const env = import.meta.env || {};
 
+function cleanEnvValue(value: string | undefined, placeholders: string[] = []): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.startsWith('YOUR_') ||
+    trimmed.startsWith('your-project-id') ||
+    placeholders.includes(trimmed)
+  ) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+const customProjectId = cleanEnvValue(env.VITE_FIREBASE_PROJECT_ID);
+
 export const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
+  apiKey: cleanEnvValue(env.VITE_FIREBASE_API_KEY) || firebaseConfigJson.apiKey,
+  authDomain: cleanEnvValue(env.VITE_FIREBASE_AUTH_DOMAIN) || firebaseConfigJson.authDomain,
+  projectId: customProjectId || firebaseConfigJson.projectId,
+  storageBucket:
+    cleanEnvValue(env.VITE_FIREBASE_STORAGE_BUCKET) || firebaseConfigJson.storageBucket,
   messagingSenderId:
-    env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
-  appId: env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId,
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigJson.measurementId,
+    cleanEnvValue(env.VITE_FIREBASE_MESSAGING_SENDER_ID) || firebaseConfigJson.messagingSenderId,
+  appId: cleanEnvValue(env.VITE_FIREBASE_APP_ID) || firebaseConfigJson.appId,
+  measurementId:
+    cleanEnvValue(env.VITE_FIREBASE_MEASUREMENT_ID) || firebaseConfigJson.measurementId,
 };
 
 export const googleOAuthClientId =
-  env.VITE_GOOGLE_OAUTH_CLIENT_ID ||
+  cleanEnvValue(env.VITE_GOOGLE_OAUTH_CLIENT_ID) ||
   (firebaseConfigJson as { oAuthClientId?: string }).oAuthClientId ||
   '';
 
-export const defaultGoogleDriveApiKey = env.VITE_GOOGLE_DRIVE_API_KEY || '';
+export const defaultGoogleDriveApiKey = cleanEnvValue(env.VITE_GOOGLE_DRIVE_API_KEY) || '';
 
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -29,10 +47,16 @@ export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getA
 // Initialize Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore with specific databaseId if provided via env or config json
+// Initialize Firestore with provisioned named databaseId from firebase-applet-config.json
+// Ignore '(default)' from .env if firebase-applet-config.json specifies a provisioned database ID
+const envDatabaseId = cleanEnvValue(env.VITE_FIREBASE_DATABASE_ID, ['(default)']);
+const configDatabaseId = (firebaseConfigJson as { firestoreDatabaseId?: string })
+  .firestoreDatabaseId;
+
 export const firestoreDatabaseId =
-  env.VITE_FIREBASE_DATABASE_ID ||
-  (firebaseConfigJson as { firestoreDatabaseId?: string }).firestoreDatabaseId ||
+  (customProjectId && envDatabaseId) ||
+  configDatabaseId ||
+  envDatabaseId ||
   '(default)';
 
 export const db =
@@ -44,13 +68,13 @@ export const db =
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.info('Connected to Firebase Firestore successfully.');
+    console.info(`Connected to Firebase Firestore (${firestoreDatabaseId}) successfully.`);
     return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firestore is currently running in offline/cached mode.');
     } else {
-      console.info('Firestore handshake completed.');
+      console.info(`Firestore (${firestoreDatabaseId}) handshake completed.`);
     }
     return true;
   }

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ActiveNavTab, useCMS } from '../../context/CMSContext';
 import { useAuth } from '../../context/AuthContext';
+import logoImg from '../../assets/logo.png';
 
 const SIDEBAR_SPRING = {
   type: 'spring' as const,
@@ -111,9 +112,12 @@ export const Sidebar: React.FC = () => {
             title="กลับหน้าภาพรวม"
           >
             <img
-              src="/assets/aistudio/Logo_Funny__b4902753.png"
+              src={logoImg}
               alt="โลโก้เรียงเรื่องลั่น"
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = '/logo.png';
+              }}
             />
           </motion.div>
 

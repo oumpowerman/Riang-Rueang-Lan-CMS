@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ActiveNavTab, useCMS } from '../../context/CMSContext';
 import { useAuth } from '../../context/AuthContext';
+import logoImg from '../../assets/logo.png';
 
 interface MobileNavigationProps {
   isOpen: boolean;
@@ -137,9 +138,12 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-full overflow-hidden bg-amber-50 ring-2 ring-indigo-100 flex items-center justify-center shrink-0 shadow-xs">
                       <img
-                        src="/assets/aistudio/Logo_Funny__b4902753.png"
+                        src={logoImg}
                         alt="โลโก้เรียงเรื่องลั่น"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = '/logo.png';
+                        }}
                       />
                     </div>
                     <div className="min-w-0">
