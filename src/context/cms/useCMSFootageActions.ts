@@ -1,10 +1,14 @@
 import React from 'react';
 import { firestoreService } from '../../firebase/firestoreService';
-import { normalizeFootageTags } from '../../services/seedData';
+import { isStagingTagId, normalizeFootageTags, STAGING_TAG_ID } from '../../services/seedData';
 import { Footage } from '../../types/footage.types';
 import { RawSource, SourcePlatform } from '../../types/source.types';
 import { getReferenceTodayDate } from '../../utils/cooldownCalculator';
-import { generateNextId, generateStandardFileName } from '../../utils/fileNameGenerator';
+import {
+  cleanFootageTitle,
+  generateNextId,
+  generateStandardFileName,
+} from '../../utils/fileNameGenerator';
 import { SplitClipDraft } from './cms.types';
 
 interface UseCMSFootageActionsParams {
@@ -193,11 +197,118 @@ export function useCMSFootageActions({
     );
   };
 
+  // Flow C: Batch Direct Footage Ingestion (300+ items from Google Drive / Batch Paste)
+  const batchAddDirectFootage = (
+    items: Array<{
+      title: string;
+      driveFileUrl?: string;
+      originalUrl?: string;
+      mascotNotes?: string;
+      tags?: string[];
+      durationSec?: number;
+    }>,
+    idPrefix: 'CLP' | 'FT' = 'CLP'
+  ): Footage[] => {
+    if (!items || items.length === 0) return [];
+    const currentFootageIds = footage.map((f) => f.id);
+    const newItems: Footage[] = [];
+    const accumulatedIds = [...currentFootageIds];
+
+    for (const item of items) {
+      const cleanedTitle = cleanFootageTitle(item.title);
+      if (!cleanedTitle) continue;
+      const nextId = generateNextId(idPrefix, accumulatedIds);
+      accumulatedIds.push(nextId);
+      const standardFileName = generateStandardFileName(nextId, cleanedTitle);
+      const newFootage: Footage = {
+        id: nextId,
+        title: cleanedTitle,
+        ingestionFlow: 'DIRECT_1_TO_1',
+        sourceId: null,
+        originalUrl: (item.originalUrl || item.driveFileUrl || '').trim(),
+        timestampRange: null,
+        durationSec: item.durationSec || 25,
+        tags: normalizeFootageTags(item.tags && item.tags.length > 0 ? item.tags : [STAGING_TAG_ID]),
+        driveFileUrl: (item.driveFileUrl || '').trim(),
+        standardFileName,
+        mascotNotes: (item.mascotNotes || '').trim(),
+        createdAt: getReferenceTodayDate(),
+      };
+      newItems.push(newFootage);
+    }
+
+    if (newItems.length > 0) {
+      setFootage((prev) => [...newItems, ...prev]);
+      // Batch save to Firestore in chunks of 20
+      const chunkSize = 20;
+      for (let i = 0; i < newItems.length; i += chunkSize) {
+        const chunk = newItems.slice(i, i + chunkSize);
+        Promise.all(chunk.map((ft) => firestoreService.saveFootage(ft))).catch((err) =>
+          console.warn('Firestore batch save error:', err)
+        );
+      }
+    }
+
+    return newItems;
+  };
+
+  // Batch Categorization: Assign or append tags to multiple footages at once
+  const batchUpdateFootageTags = (
+    footageIds: string[],
+    newTags: string[],
+    mode: 'REPLACE' | 'APPEND' = 'REPLACE'
+  ) => {
+    if (!footageIds.length) return;
+    const targetSet = new Set(footageIds);
+    setFootage((prev) =>
+      prev.map((ft) => {
+        if (!targetSet.has(ft.id)) return ft;
+        let mergedTags: string[];
+        if (mode === 'REPLACE') {
+          mergedTags = normalizeFootageTags(newTags);
+        } else {
+          // APPEND: merge new tags, remove STAGING_TAG_ID if real categories are present
+          const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
+          mergedTags = normalizeFootageTags([...existingReal, ...newTags]);
+        }
+        const updatedFt: Footage = {
+          ...ft,
+          tags: mergedTags,
+        };
+        firestoreService.saveFootage(updatedFt).catch((err) =>
+          console.warn('Firestore batch update tags error:', err)
+        );
+        return updatedFt;
+      })
+    );
+  };
+
+  // Batch Delete: Remove multiple footages at once
+  const batchDeleteFootage = (footageIds: string[]) => {
+    if (!footageIds.length) return;
+    const targetSet = new Set(footageIds);
+    setFootage((prev) => prev.filter((ft) => !targetSet.has(ft.id)));
+    setSources((prev) =>
+      prev.map((src) => ({
+        ...src,
+        splitFootageIds: src.splitFootageIds.filter((fid) => !targetSet.has(fid)),
+      }))
+    );
+    footageIds.forEach((id) => {
+      firestoreService.deleteFootage(id).catch((err) =>
+        console.warn('Firestore batch delete error:', err)
+      );
+    });
+  };
+
   return {
     addDirectFootage,
     createSourceWithSplitFootage,
     appendSplitFootageToSource,
     updateFootage,
     deleteFootage,
+    batchAddDirectFootage,
+    batchUpdateFootageTags,
+    batchDeleteFootage,
   };
 }

@@ -31,12 +31,21 @@ export function generateMasterEpisodeFileName(
   return `${episodeId}_${publishDate}_${slotTag}_${sanitizedTitle || '5อันดับเรียงเรื่องลั่น'}.mp4`;
 }
 
+export function cleanFootageTitle(rawTitle: string): string {
+  if (!rawTitle) return 'คลิปฟุตเทจ';
+  return rawTitle
+    .trim()
+    .replace(/\.(mp4|mov|mkv|avi|webm|flv|m4v|mp3|wav)$/i, '')
+    .trim();
+}
+
 export function generateNextId(
-  prefix: 'FT' | 'SRC' | 'EP' | 'TAG' | 'GRP',
-  existingIds: string[]
+  prefix: 'FT' | 'SRC' | 'EP' | 'TAG' | 'GRP' | 'CLP',
+  existingIds: string[],
+  padLength: number = prefix === 'CLP' ? 3 : 4
 ): string {
   let maxNumber = 0;
-  const regex = new RegExp(`^${prefix}-(\\d+)$`);
+  const regex = new RegExp(`^${prefix}[-_]?(\\d+)$`, 'i');
 
   for (const id of existingIds) {
     const match = id.match(regex);
@@ -49,7 +58,7 @@ export function generateNextId(
   }
 
   const nextNum = maxNumber + 1;
-  return `${prefix}-${String(nextNum).padStart(4, '0')}`;
+  return `${prefix}-${String(nextNum).padStart(padLength, '0')}`;
 }
 
 export function formatThaiDate(dateStr: string | null): string {

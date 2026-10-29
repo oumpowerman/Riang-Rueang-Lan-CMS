@@ -12,6 +12,9 @@ export function useCMSNavigationState() {
   const [isStatusRuleModalOpen, setIsStatusRuleModalOpen] = useState(false);
   const [isClearClipsModalOpen, setIsClearClipsModalOpen] = useState(false);
   const [isDirectFootageModalOpen, setIsDirectFootageModalOpen] = useState(false);
+  const [isGoogleDriveBatchModalOpen, setIsGoogleDriveBatchModalOpen] = useState(false);
+  const [isBatchAssignCategoryModalOpen, setIsBatchAssignCategoryModalOpen] = useState(false);
+  const [selectedFootageIdsForBatch, setSelectedFootageIdsForBatch] = useState<string[]>([]);
   const [isSourceSplitterModalOpen, setIsSourceSplitterModalOpen] = useState(false);
   const [activeSourceForSplitting, setActiveSourceForSplitting] = useState<RawSource | null>(null);
   const [traceabilityFootageId, setTraceabilityFootageId] = useState<string | null>(null);
@@ -59,6 +62,12 @@ export function useCMSNavigationState() {
     setIsClearClipsModalOpen,
     isDirectFootageModalOpen,
     setIsDirectFootageModalOpen,
+    isGoogleDriveBatchModalOpen,
+    setIsGoogleDriveBatchModalOpen,
+    isBatchAssignCategoryModalOpen,
+    setIsBatchAssignCategoryModalOpen,
+    selectedFootageIdsForBatch,
+    setSelectedFootageIdsForBatch,
     isSourceSplitterModalOpen,
     setIsSourceSplitterModalOpen,
     activeSourceForSplitting,

@@ -1,6 +1,6 @@
 {
-  "summary":  "แผนปรับปรุง FootageTraceabilityModal และส่วนประกอบทั่วทั้งระบบ ให้ใช้ Lucide React SVG Icons ระดับมืออาชีพแทนอิโมจิทั่วไป พร้อมสไตล์ป้ายโปร่งแสง (Translucent Tinted Badges) ขอบเส้นบางประณีต และพับเก็บแผงเลือกหมวดหมู่ให้คลีนที่สุด",
-  "updatedAt":  "2026-10-28T19:27:29.876451398Z",
+  "summary":  "แผนงานสร้างระบบนำเข้าฟุตเทจจำนวนมาก (300+ ไฟล์) จาก Google Drive เข้าสู่พื้นที่พัก (Staging Inbox) อัตโนมัติ พร้อมระบบเลือกหลายรายการเพื่อจัดหมวดหมู่พร้อมกัน (Batch Multi-Select Categorization) รวดเร็วและแม่นยำ",
+  "updatedAt":  "2026-10-29T03:33:41.618662386Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

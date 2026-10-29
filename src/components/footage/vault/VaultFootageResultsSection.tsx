@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
+import { useCMS } from '../../../context/CMSContext';
 import { STAGING_TAG_ID, isFootageInStaging } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryTag, SystemSettings } from '../../../types/tag.types';
@@ -45,6 +46,31 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
   onResetFilters,
   onOpenDirectFootageModal,
 }) => {
+  const { selectedFootageIdsForBatch, setSelectedFootageIdsForBatch } = useCMS();
+
+  const isAllPaginatedSelected =
+    paginatedFootage.length > 0 &&
+    paginatedFootage.every((ft) => selectedFootageIdsForBatch.includes(ft.id));
+
+  const handleToggleSelectAllPaginated = () => {
+    if (isAllPaginatedSelected) {
+      const pageIdSet = new Set(paginatedFootage.map((f) => f.id));
+      setSelectedFootageIdsForBatch((prev) => prev.filter((id) => !pageIdSet.has(id)));
+    } else {
+      const newSelected = Array.from(
+        new Set([...selectedFootageIdsForBatch, ...paginatedFootage.map((f) => f.id)])
+      );
+      setSelectedFootageIdsForBatch(newSelected);
+    }
+  };
+
+  const handleToggleSelectOne = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedFootageIdsForBatch((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   return (
     <AnimatePresence mode="wait" initial={false}>
       {filteredCount === 0 ? (
@@ -154,6 +180,15 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                    <th className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllPaginatedSelected}
+                        onChange={handleToggleSelectAllPaginated}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                        title="เลือกทั้งหมดในหน้านี้"
+                      />
+                    </th>
                     <th className="py-3 px-4 w-28">รหัส</th>
                     <th className="py-3 px-4">ชื่อคลิป</th>
                     <th className="py-3 px-4">หมวดหมู่</th>
@@ -162,36 +197,53 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
-                  {paginatedFootage.map((ft, index) => (
-                    <motion.tr
-                      key={ft.id}
-                      initial={{
-                        opacity: 0,
-                        y: 14,
-                        filter: 'blur(3px)',
-                      }}
-                      animate={{
-                        opacity: 1,
-                        y: 0,
-                        filter: 'blur(0px)',
-                      }}
-                      transition={{
-                        type: 'spring',
-                        stiffness: 400,
-                        damping: 28,
-                        delay: Math.min(index * 0.035, 0.28),
-                      }}
-                      onClick={() => onSelectForTraceability(ft.id)}
-                      className="hover:bg-slate-50 cursor-pointer transition-colors group"
-                    >
-                      <td className="py-3 px-4 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
-                        {ft.id}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900 text-sm line-clamp-1">
-                          {ft.title}
-                        </div>
-                      </td>
+                  {paginatedFootage.map((ft, index) => {
+                    const isSelected = selectedFootageIdsForBatch.includes(ft.id);
+                    return (
+                      <motion.tr
+                        key={ft.id}
+                        initial={{
+                          opacity: 0,
+                          y: 14,
+                          filter: 'blur(3px)',
+                        }}
+                        animate={{
+                          opacity: 1,
+                          y: 0,
+                          filter: 'blur(0px)',
+                        }}
+                        transition={{
+                          type: 'spring',
+                          stiffness: 400,
+                          damping: 28,
+                          delay: Math.min(index * 0.035, 0.28),
+                        }}
+                        onClick={() => onSelectForTraceability(ft.id)}
+                        className={`cursor-pointer transition-colors group ${
+                          isSelected
+                            ? 'bg-indigo-50/70 hover:bg-indigo-100/60'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td
+                          className="py-3 px-3 w-10 text-center"
+                          onClick={(e) => handleToggleSelectOne(ft.id, e)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                          />
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
+                          {ft.id}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 text-sm line-clamp-1">
+                            {ft.title}
+                          </div>
+                        </td>
                       <td className="py-3 px-4">
                         {isFootageInStaging(ft.tags) ? (
                           <TagPill tag={tagMap[STAGING_TAG_ID]} />
@@ -222,7 +274,8 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                         </span>
                       </td>
                     </motion.tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

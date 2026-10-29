@@ -1,14 +1,20 @@
 import {
   ArrowUpDown,
   Check,
+  CheckSquare,
   Copy,
   ExternalLink,
   Eye,
   Film,
+  FolderDown,
+  Inbox,
   MessageSquareQuote,
   Scissors,
+  Tag,
   Video,
 } from 'lucide-react';
+import { useCMS } from '../../../context/CMSContext';
+import { isFootageInStaging, STAGING_TAG_ID } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryTag } from '../../../types/tag.types';
 import { hasRealDriveLink } from '../../../utils/fileNameGenerator';
@@ -51,8 +57,47 @@ export const DashboardFootageExplorerTable: React.FC<
   setTraceabilityFootageId,
   resetAllFilters,
 }) => {
+  const {
+    selectedFootageIdsForBatch,
+    setSelectedFootageIdsForBatch,
+    setIsGoogleDriveBatchModalOpen,
+    setIsBatchAssignCategoryModalOpen,
+  } = useCMS();
+
+  const visibleFootages = filteredFootages.slice(0, footageLimit);
+  const stagingItems = filteredFootages.filter((ft) => isFootageInStaging(ft.tags));
+
+  const isAllVisibleSelected =
+    visibleFootages.length > 0 &&
+    visibleFootages.every((ft) => selectedFootageIdsForBatch.includes(ft.id));
+
+  const handleToggleSelectAllVisible = () => {
+    if (isAllVisibleSelected) {
+      const visibleIdSet = new Set(visibleFootages.map((f) => f.id));
+      setSelectedFootageIdsForBatch((prev) => prev.filter((id) => !visibleIdSet.has(id)));
+    } else {
+      const newSelected = Array.from(
+        new Set([...selectedFootageIdsForBatch, ...visibleFootages.map((f) => f.id)])
+      );
+      setSelectedFootageIdsForBatch(newSelected);
+    }
+  };
+
+  const handleSelectAllStagingItems = () => {
+    const stagingIds = stagingItems.map((f) => f.id);
+    setSelectedFootageIdsForBatch(Array.from(new Set([...selectedFootageIdsForBatch, ...stagingIds])));
+  };
+
+  const handleToggleSelectOne = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedFootageIdsForBatch((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   return (
     <div className="space-y-3 pt-2">
+      {/* Top Action Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
           <Film className="w-4 h-4 text-emerald-600" />
@@ -60,6 +105,15 @@ export const DashboardFootageExplorerTable: React.FC<
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsGoogleDriveBatchModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap"
+          >
+            <FolderDown className="w-3.5 h-3.5 text-amber-400" />
+            <span>+ ดึงไฟล์จาก Google Drive (Batch)</span>
+          </button>
+
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs">
             <button
               type="button"
@@ -115,6 +169,43 @@ export const DashboardFootageExplorerTable: React.FC<
         </div>
       </div>
 
+      {/* Staging Alert & 1-Click Multi-Select Banner */}
+      {stagingItems.length > 0 && (
+        <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <Inbox className="w-4 h-4 text-amber-700 shrink-0" />
+            <div>
+              <span className="font-bold text-amber-950">
+                มีฟุตเทจในพื้นที่พักรอจัดหมวดหมู่ {stagingItems.length} รายการ
+              </span>
+              <span className="text-[11px] text-amber-800 ml-1.5 hidden md:inline">
+                (ไม่นับรวมในโควตาทำคลิป 5:1 จนกว่าคุณจะเลือกหมวดหมู่จริง)
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSelectAllStagingItems}
+              className="px-3 py-1 bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+            >
+              เลือกทั้ง {stagingItems.length} รายการ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                handleSelectAllStagingItems();
+                setIsBatchAssignCategoryModalOpen(true);
+              }}
+              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+            >
+              <Tag className="w-3.5 h-3.5 text-amber-300" />
+              <span>จัดหมวดหมู่พร้อมกัน</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {filteredFootages.length === 0 ? (
         <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200/70 space-y-2">
           <div className="text-sm font-bold text-slate-700">
@@ -133,6 +224,15 @@ export const DashboardFootageExplorerTable: React.FC<
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[11px] font-bold text-slate-600">
+                <th className="py-2.5 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllVisibleSelected}
+                    onChange={handleToggleSelectAllVisible}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                    title="เลือกทั้งหมดในหน้านี้"
+                  />
+                </th>
                 <th className="py-2.5 px-3">รหัส & ชื่อฟุตเทจ</th>
                 <th className="py-2.5 px-3">สถานะเกณฑ์สี</th>
                 <th className="py-2.5 px-3">สถิติการใช้ซ้ำ & วันพัก</th>
@@ -143,12 +243,28 @@ export const DashboardFootageExplorerTable: React.FC<
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredFootages.slice(0, footageLimit).map((ft) => {
                 const isCopied = copiedId === ft.id;
+                const isSelected = selectedFootageIdsForBatch.includes(ft.id);
                 return (
                   <tr
                     key={ft.id}
                     onClick={() => setTraceabilityFootageId(ft.id)}
-                    className="hover:bg-emerald-50/40 transition-colors cursor-pointer"
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-50/70 hover:bg-indigo-100/60'
+                        : 'hover:bg-emerald-50/40'
+                    }`}
                   >
+                    <td
+                      className="py-3 px-3 w-10 text-center"
+                      onClick={(e) => handleToggleSelectOne(ft.id, e)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                      />
+                    </td>
                     <td className="py-3 px-3 min-w-[210px]">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-indigo-700 shrink-0">

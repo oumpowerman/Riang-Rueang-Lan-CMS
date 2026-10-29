@@ -1,76 +1,135 @@
-# แผนการอัปเกรดดีไซน์สู่ Professional Lucide SVG Icons & Premium Tinted Badges
+# แผนงานระบบนำเข้าฟุตเทจจำนวนมากจาก Google Drive (300+ ไฟล์) และระบบจัดหมวดหมู่แบบกลุ่ม (Batch Categorization)
 
-## 1. วัตถุประสงค์ (Design Philosophy & Visual Upgrade)
-ยกระดับดีไซน์ของทั้งแอปพลิเคชันจากอิโมจิพื้นฐานทั่วไป (`🔵`, `🟢`, `🟡`, `🔴`, `🥇`, `🥈`, `📥`, `👤`, `🐾`) มาเป็น **Lucide React SVG Icons ระดับมืออาชีพ** ด้วยสไตล์ **Translucent Tinted Badges** (พื้นหลังโปร่งแสงอ่อนๆ พร้อมเส้นขอบคมชัดบาง 1px และสีไอคอนตามความหมาย) เพื่อให้ดูเรียบหรู คมชัด สแกนสายตาง่าย และมีความเป็น Enterprise SaaS Footage Management System อย่างแท้จริง
-
----
-
-## 2. รายละเอียดการอัปเกรดคอมโพเนนต์ส่วนกลาง (Global Core Components)
-
-### 2.1 ป้ายสถานะฟุตเทจทั่วทั้งระบบ (`src/components/ui/StatusBadge.tsx`)
-เปลี่ยนจากอิโมจิวงกลมสี (`🔵 🟢 🟡 🔴`) เป็นป้าย Badge แบบ Lucide SVG Icon พร้อมพื้นหลังโปร่งแสงและขอบเส้น:
-- **`NEW_UNTOUCHED` (ใหม่แกะกล่อง)**:
-  - ใช้ `<Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />`
-  - สไตล์: `bg-sky-50/80 border border-sky-200/90 text-sky-900 rounded-lg px-2.5 py-0.5`
-- **`READY_FRESH` (พร้อมใช้ / พักสด)**:
-  - ใช้ `<CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />`
-  - สไตล์: `bg-emerald-50/80 border border-emerald-200/90 text-emerald-900 rounded-lg px-2.5 py-0.5`
-- **`HIGH_VELOCITY_WARNING` (ใช้ถี่ / เพิ่งพ้นพัก)**:
-  - ใช้ `<AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />`
-  - สไตล์: `bg-amber-50/80 border border-amber-200/90 text-amber-950 rounded-lg px-2.5 py-0.5`
-- **`RECENT_COOLDOWN` (ติดระยะพักห้ามซ้ำ)**:
-  - ใช้ `<Clock className="w-3.5 h-3.5 text-rose-600 shrink-0" />`
-  - สไตล์: `bg-rose-50/80 border border-rose-200/90 text-rose-950 rounded-lg px-2.5 py-0.5`
-
-### 2.2 ป้ายแท็กหมวดหมู่ทั่วทั้งระบบ (`src/components/ui/TagPill.tsx`)
-เปลี่ยนจากอิโมจิบุคคล/สัตว์/หัวข้อ (`📥 👤 🐾 🎯 ⚡ 🏷️`) เป็น Lucide SVG Icons คมชัด:
-- **พื้นที่พัก (Staging)**: `<Inbox className="w-3.5 h-3.5 text-amber-600" />`
-- **บุคคล / สตรีมเมอร์ (Person)**: `<User className="w-3.5 h-3.5 text-indigo-600" />`
-- **สัตว์ (Animal)**: `<PawPrint className="w-3.5 h-3.5 text-emerald-600" />`
-- **หัวข้อ / ประเด็น (Topic)**: `<Target className="w-3.5 h-3.5 text-rose-600" />`
-- **กิริยา / มุกฮา (Action)**: `<Zap className="w-3.5 h-3.5 text-amber-600" />`
-- **ทั่วไป (General)**: `<Tag className="w-3.5 h-3.5 text-slate-500" />`
+1-2 ประโยคสรุป: รองรับการดึงไฟล์วิดีโอ 300+ รายการจากโฟลเดอร์ Google Drive เข้าสู่คลังฟุตเทจโดยอัตโนมัติ พร้อมตั้งรหัส `CLP-xxx` และส่งเข้าพื้นที่พัก (Staging Inbox) ทันที พร้อมระบบเลือกหลายรายการ (Multi-Select) เพื่อติดป้ายหมวดหมู่หลักและหมวดย่อยพร้อมกันได้อย่างสะดวกรวดเร็ว
 
 ---
 
-## 3. รายละเอียดการปรับโฉม `FootageTraceabilityModal` & Subcomponents
+## User Review & Critical Decisions
 
-### 3.1 ส่วนหัวหน้าต่าง (`TraceabilityModalHeader.tsx`)
-- **แถวระบุตัวตน & ที่มา**:
-  - รหัสคลิป: `<Film className="w-3.5 h-3.5 text-slate-400" /> FT-XXXX`
-  - ที่มาคลิป: `<Video className="w-3.5 h-3.5 text-slate-600" /> คลิปเดี่ยว 1:1` หรือ `<Scissors className="w-3.5 h-3.5 text-indigo-600" /> SRC-XXXX (12:05-12:45)`
-  - วันที่นำเข้า: `<Calendar className="w-3.5 h-3.5 text-slate-400" /> {formatThaiDate(createdAt)}`
-  - สถานะขวาสุด: `StatusBadge` แบบ SVG ใหม่
-- **แถบ 4 KPIs แถวเดียว (Single-Row Lucide Badges)**:
-  1. `<Clapperboard className="w-3.5 h-3.5 text-indigo-600" /> ใช้ {totalUsageCount}x` (bg-indigo-50/70 border-indigo-200)
-  2. `<Activity className="w-3.5 h-3.5 text-amber-600" /> 90d: {usageLast90Days}/{max}` (bg-amber-50/70 border-amber-200)
-  3. `<Clock className="w-3.5 h-3.5 text-emerald-600" /> พัก {daysSinceLastUsed}d` หรือ `<Sparkles className="w-3.5 h-3.5 text-sky-600" /> ใหม่แกะกล่อง`
-  4. `<GitMerge className="w-3.5 h-3.5 text-purple-600" /> คู่ผสม {coUsedCount} ฟุต` (bg-purple-50/70 border-purple-200)
-- **แถบสลับแท็บ Segmented**:
-  - แท็บ 1: `<FileEdit className="w-3.5 h-3.5" /> ข้อมูล & แท็ก`
-  - แท็บ 2: `<Trophy className="w-3.5 h-3.5" /> ประวัติ EP ({count})`
-  - แท็บ 3: `<GitMerge className="w-3.5 h-3.5" /> คู่ผสมซ้ำ ({count})`
+> [!IMPORTANT]
+> **สรุปการตัดสินใจจากการสัมภาษณ์ผู้ใช้งาน (Confirmed User Decisions):**
+> 1. **วิธีการนำเข้า**: เชื่อมต่อโฟลเดอร์ Google Drive เพื่อดึงไฟล์ทั้งหมดอัตโนมัติ (พร้อมระบบสำรองวางลิงก์/รายชื่อแบบ Batch Paste เผื่อกรณีไม่ได้ต่อ OAuth)
+> 2. **รหัสและชื่อคลิป**: ใช้ชื่อไฟล์เดิมที่ผู้ใช้ตั้งไว้ใน Google Drive (ตัดนามสกุลไฟล์ออก เช่น `.mp4`) และสร้างรหัส `CLP-001`, `CLP-002`, ... อัตโนมัติ
+> 3. **ขั้นตอนหลังนำเข้า (ตามคำขอเพิ่มเติมของผู้ใช้)**: ทุกคลิปที่นำเข้าจะถูกส่งเข้าสู่ **พื้นที่พักรอจัดหมวดหมู่ (Staging Inbox)** ทันที เพื่อไม่ให้กระทบโควตาผลิตคลิป 5 อันดับ (5 ฟุต = 1 EP) และเพิ่ม **ฟังก์ชันเลือกคลิปหลายรายการ (Multi-Select Checkboxes)** เพื่อกางหน้าต่างจัดหมวดหมู่เป็นชุด (Batch Tagging) ในครั้งเดียว
 
-### 3.2 แท็บข้อมูล ลิงก์ & หมวดหมู่ (`TraceabilityDetailsTab.tsx`)
-- **การ์ดข้อมูลและชื่อไฟล์**:
-  - หัวการ์ด: `<FileText className="w-4 h-4 text-indigo-600" /> ข้อมูลช็อต & ชื่อไฟล์`
-  - กล่องชื่อไฟล์มาตรฐาน: `<FileCode className="w-3.5 h-3.5 text-slate-500" /> {standardFileName}` พร้อมปุ่ม `<Copy /> / <Check /> คัดลอก`
-  - ช่องกรอก: `<Film /> ชื่อช็อตฟุตเทจ` และ `<Mic /> บทพากย์มาสคอต`
-- **การ์ดลิงก์ 2 ช่อง (Drive & Original Link)**:
-  - Google Drive: `<FolderCheck className="w-4 h-4 text-emerald-600" /> Google Drive` พร้อม Badge สถานะ `<CheckCircle2 /> พร้อมใช้` หรือ `<Clock /> รออัปโหลด`
-  - ลิงก์ต้นฉบับ: `<Link2 className="w-4 h-4 text-indigo-600" /> ลิงก์คลิปต้นฉบับ` พร้อมป้ายแพลตฟอร์ม `<ExternalLink />`
-- **การจัดการหมวดหมู่แบบพับเก็บ (Clean Accordion)**:
-  - แสดงแถบหมวดหมู่ปัจจุบันด้วย `TagPill` ชุดใหม่
-  - ปุ่มสลับด่วน `<Inbox className="w-3.5 h-3.5" /> พักไว้ก่อน`
-  - ปุ่ม `<SlidersHorizontal className="w-3.5 h-3.5" /> แก้ไขหมวดหมู่ 3 ชั้น` ที่กดแล้วกางตัวเลือกออกอย่างนุ่มนวลด้วย Framer Motion
+---
 
-### 3.3 แท็บประวัติใช้ในคลิปหลัก (`TraceabilityEpisodeHistoryTab.tsx`)
-- อันดับ 1: Badge `<Trophy className="w-3.5 h-3.5 text-amber-500" /> อันดับ 1` (bg-amber-50 border-amber-200)
-- อันดับ 2: Badge `<Medal className="w-3.5 h-3.5 text-slate-400" /> อันดับ 2` (bg-slate-100 border-slate-200)
-- อันดับ 3: Badge `<Medal className="w-3.5 h-3.5 text-amber-700" /> อันดับ 3` (bg-amber-100/60 border-amber-300)
-- อันดับ 4–5: Badge `<Award className="w-3.5 h-3.5 text-indigo-600" /> อันดับ 4 / 5`
-- รอบเวลา: Badge `<Sun className="w-3 h-3 text-amber-500" /> 06:00` หรือ `<Moon className="w-3 h-3 text-indigo-500" /> 18:00`
+## 1. ภาพรวมระบบและคุณค่าหลัก (Overview & Core Concept)
 
-### 3.4 แท็บคู่ผสมซ้ำ (`TraceabilityCoUsageTab.tsx`)
-- ป้ายหัวการ์ด: `<Film className="w-3.5 h-3.5 text-slate-500" /> FT-XXXX` คู่กับ Badge `<Layers className="w-3.5 h-3.5 text-amber-600" /> {count} EP`
-- แสดงแท็กด้วย `TagPill` แบบ SVG ใหม่ พร้อมปุ่ม `<ArrowUpRight className="w-3.5 h-3.5" /> ตรวจสอบฟุตนี้`
+- **ปัญหาเดิม**: มีไฟล์ฟุตเทจใน Google Drive กว่า 300 ไฟล์ หากต้องกดเพิ่มทีละคลิปผ่านหน้าต่าง Direct Footage จะเสียเวลามาก และการจัดหมวดหมู่ทีละ 1 รายการสร้างภาระทางสายตา
+- **โซลูชันใหม่**:
+  1. **Google Drive Batch Ingestion Modal**: หน้าต่างนำเข้าไฟล์จากโฟลเดอร์ Google Drive เพียงวางลิงก์โฟลเดอร์ หรือกดเชื่อมต่อ Google Drive ระบบจะดึงรายชื่อไฟล์ทั้งหมด ดึง URL ลิงก์ตรงของไฟล์ แปลงชื่อไฟล์เป็นชื่อคลิป และรันรหัส `CLP-xxx` เข้าสู่คลังทันที
+  2. **Staging Multi-Select & Batch Categorize**: ในหน้าคลังฟุตเทจ เมื่อกรองดู "พื้นที่พักรอจัดหมวดหมู่ (Staging)" จะมี Checkbox ให้ติ๊กเลือกคลิปได้หลายรายการพร้อมกัน (หรือกด "เลือกทั้งหมด 300 รายการ") แล้วกดปุ่ม **"จัดหมวดหมู่พร้อมกัน"** เพื่อเลือกหมวดหลัก (Tier 1) และหมวดย่อย (Tier 2) เพียงครั้งเดียว คลิปทั้งหมดจะถูกย้ายออกจากพื้นที่พักและนำไปคำนวณโควตาผลิตคลิป 5:1 ทันที
+
+---
+
+## 2. ประสบการณ์ใช้งานและการออกแบบอินเทอร์เฟซ (UX & Visual Design)
+
+### 2.1 หน้าต่างนำเข้าไฟล์ Google Drive (`GoogleDriveBatchImportModal.tsx`)
+- **การเปิดใช้งาน**: มีปุ่มเด่น `ดึงไฟล์จาก Google Drive (Batch Import)` ในแถบเครื่องมือของคลังฟุตเทจและหน้าแดชบอร์ด
+- **ขั้นตอนที่ 1: ใส่โฟลเดอร์ Google Drive**:
+  - ช่องใส่ลิงก์โฟลเดอร์ Google Drive (เช่น `https://drive.google.com/drive/folders/...`)
+  - ปุ่ม `สแกนไฟล์ในโฟลเดอร์ (Scan Folder)`: ดึงรายชื่อไฟล์วิดีโอ/ออดิโอทั้งหมดในโฟลเดอร์ผ่าน Google Drive API หรือ Google Picker
+  - แท็บทางเลือก `วางข้อความ / ลิงก์ด่วน (Batch Paste)`: สำหรับคัดลอกรายชื่อไฟล์และ URL มาวางหลายบรรทัดพร้อมกัน
+- **ขั้นตอนที่ 2: พรีวิวรายการและตรวจสอบความถูกต้อง (Review Table)**:
+  - แสดงตารางรายการ 300+ ไฟล์: ลำดับ, รหัสที่จะได้รับ (`CLP-001`, `CLP-002`...), ชื่อคลิปที่สกัดได้, ลิงก์ Drive ที่ตรวจพบ
+  - สรุปตัวเลข: `พบไฟล์พร้อมนำเข้า 324 ไฟล์ · ซ้ำในระบบ 0 ไฟล์`
+  - ตัวเลือกปลายทาง: `ส่งเข้าพื้นที่พักรอจัดหมวดหมู่ (ค่าเริ่มต้น)` หรือ `กำหนดหมวดหมู่ล่วงหน้าทั้งหมดพร้อมกัน`
+- **ขั้นตอนที่ 3: กดยืนยันนำเข้า (1-Click Bulk Save)**:
+  - มีแถบ Progress Bar แสดงความคืบหน้าการบันทึกเข้า LocalStorage และ Firebase Firestore
+  - แจ้งเตือนเมื่อเสร็จสิ้น พร้อมปุ่มลัด `ไปยังพื้นที่พักเพื่อเริ่มจัดหมวดหมู่ทันที`
+
+### 2.2 ฟังก์ชันเลือกหลายคลิปเพื่อจัดหมวดหมู่ (`BatchCategorizeToolbar` & Checkbox System)
+- **Checkbox ในตารางและคลังฟุตเทจ**:
+  - ช่อง Checkbox ที่หัวตาราง: `เลือกทั้งหมดในหน้านี้ (Select Page)` / `เลือกทุกคลิปในพื้นที่พัก (Select All 300+ Items)`
+  - Checkbox ประจำแต่ละการ์ด/แถวฟุตเทจ
+- **แถบเครื่องมือลอยตัวด้านล่าง (Sticky Floating Batch Bar)**:
+  - จะแสดงขึ้นมาอย่างนุ่มนวลเมื่อมีการเลือกตั้งแต่ 1 คลิปขึ้นไป
+  - แสดงจำนวน: `เลือกแล้ว 18 รายการ (จากพื้นที่พัก)`
+  - ปุ่มแอ็กชัน:
+    - `<Tag className="w-4 h-4" /> จัดหมวดหมู่พร้อมกัน (Batch Tagging)` (ปุ่มเด่น)
+    - `<FolderOpen className="w-4 h-4" /> ตรวจสอบลิงก์ Drive พร้อมกัน`
+    - `<Trash2 className="w-4 h-4" /> ลบรายการที่เลือก`
+    - `<X className="w-4 h-4" /> ยกเลิกการเลือก`
+- **หน้าต่างจัดหมวดหมู่แบบกลุ่ม (`BatchAssignCategoryModal.tsx`)**:
+  - แสดงจำนวนคลิปที่จะได้รับการอัปเดต
+  - ใช้ `CascadeCategorySelector` เลือกกลุ่ม (Cluster) -> หมวดหลัก (Tier 1) -> หมวดย่อย (Tier 2)
+  - ตัวเลือกรูปแบบการติดป้าย:
+    - `แทนที่หมวดเดิมทั้งหมด (ย้ายออกจากพื้นที่พักทันที)` (แนะนำ)
+    - `เพิ่มหมวดนี้เข้าไปโดยไม่ลบหมวดเดิม`
+  - พรีวิวก่อนกดบันทึก: แสดงตัวอย่างคลิปที่จะถูกเปลี่ยน
+  - เมื่อกดบันทึก: อัปเดต State และ Firestore ทันที พร้อมรีเฟรชโควตาในกระดานสายพานการผลิต
+
+---
+
+## 3. การตัดสินใจเชิงเทคนิคและสถาปัตยกรรม (Key Product Decisions)
+
+1. **การสร้างรหัส CLP อัตโนมัติ**:
+   - ระบบจะค้นหาเลขสูงสุดของรหัสที่มีอยู่ในระบบ (เช่น หากมี `CLP045` อยู่แล้ว จะเริ่มรันต่อที่ `CLP046`)
+   - นามสกุลไฟล์ยอดนิยม (`.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`, `.mp3`) จะถูกตัดออกโดยอัตโนมัติเพื่อให้ได้ชื่อคลิปที่สะอาด
+2. **การคงแนวคิด Staging / Untagged (พื้นที่พักรอจัดหมวดหมู่)**:
+   - ฟุตเทจทั้ง 300+ รายการที่นำเข้ามาใหม่จะมีแท็ก `TAG-STAGING`
+   - จะไม่ทำให้โควตาการตัดต่อ 5 ฟุตต่อ 1 EP รวนหรือเกิด False Positive
+   - เมื่อผู้ใช้จัดหมวดหมู่ให้คลิปใด คลิปนั้นจะถูกลบแท็ก `TAG-STAGING` ออก และคำนวณโควตาจริงทันที
+3. **ประสิทธิภาพในการจัดการ 300+ รายการ (Performance & Batching)**:
+   - ใช้ Pagination แบบรวดเร็ว (10, 25, 50, 100 รายการต่อหน้า)
+   - การบันทึกเข้า Firestore จะทำผ่าน `writeBatch` หรือ chunked concurrent promises เพื่อไม่ให้ UI หน่วงหรือติด rate limit
+
+---
+
+## 4. แผนภาพสถาปัตยกรรมระบบ (Technical Architecture Diagram)
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Google Drive Source                             │
+│   • 300+ Video Files in Folder (e.g. "Ep1_Footage_Vault")              │
+│   • Google Drive Folder URL / Google Drive API (drive.readonly)        │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│             GoogleDriveBatchImportModal (นำเข้าแบบกลุ่ม)              │
+│   1. Parse Folder / Fetch File List                                    │
+│   2. Strip File Extension (.mp4/.mov) -> Footage Title                 │
+│   3. Auto-generate sequential ID: CLP-001, CLP-002...                  │
+│   4. Assign Default Tag: TAG-STAGING (พื้นที่พักรอจัดหมวดหมู่)           │
+│   5. Save batch to CMSContext + Sync Firestore                         │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│             Footage Vault: Staging Inbox View (คลังฟุตเทจ)             │
+│   • กรองเฉพาะแท็ก "พื้นที่พักรอจัดหมวดหมู่" (300+ รายการ)                │
+│   • Multi-Select Checkboxes [✓] แต่ละแถว + เลือกทั้งหมด                │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│      Floating Batch Action Bar & BatchAssignCategoryModal              │
+│   • แสดงจำนวนที่เลือก: "เลือกแล้ว 25 คลิป"                             │
+│   • CascadeCategorySelector: เลือกหมวดหมู่หลัก + หมวดย่อย              │
+│   • 1-Click Update: ย้ายคลิปออกจาก Staging เข้าหมวดหมู่จริง            │
+│   • Real-Time Update: คำนวณโควตา 5 ฟุต = 1 EP ในสายพานทันที            │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. แผนการดำเนินงานเป็นลำดับขั้นตอน (Step-by-Step Implementation Steps)
+
+1. **Step 1: ฟังก์ชัน Batch Ingestion ใน Context & Types**
+   - เพิ่มฟังก์ชัน `batchAddDirectFootage` ใน `useCMSFootageActions.ts` รองรับการเพิ่มอาเรย์ของฟุตเทจพร้อมกัน พร้อมการคำนวณรหัส `CLP-xxx` แบบต่อเนื่อง
+   - เพิ่มฟังก์ชัน `batchUpdateFootageCategories` ใน `useCMSFootageActions.ts` สำหรับเปลี่ยนหมวดหมู่ของคลิปหลายรายการในครั้งเดียว
+2. **Step 2: คอมโพเนนต์หน้าต่างนำเข้า Google Drive (`GoogleDriveBatchImportModal.tsx`)**
+   - สร้างโมดอลดึงรายชื่อไฟล์จาก Google Drive พร้อมพรีวิวและช่องทางเลือก Batch Paste URL/ชื่อไฟล์
+   - เชื่อมต่อปุ่มเปิดโมดอลที่แถบด้านบนของคลังฟุตเทจและหน้า Pipeline
+3. **Step 3: ระบบเลือกหลายรายการในตารางคลังฟุตเทจ (Multi-Select & Floating Batch Bar)**
+   - เพิ่ม Checkbox ใน `DashboardFootageExplorerTable` และแถบตัวกรอง Staging
+   - สร้างคอมโพเนนต์ `BatchCategorizeFloatingBar.tsx` ลอยอยู่ด้านล่างเมื่อมีการติ๊กเลือก
+4. **Step 4: หน้าต่างจัดหมวดหมู่แบบกลุ่ม (`BatchAssignCategoryModal.tsx`)**
+   - ออกแบบหน้าต่างติดแท็กแบบกลุ่ม เชื่อมโยงกับ `CascadeCategorySelector`
+   - มีปุ่มยืนยันอัปเดตและแจ้งเตือนผลสำเร็จ
+5. **Step 5: ตรวจสอบและทดสอบระบบทั้งหมด (Verification & Build)**
+   - ทดสอบนำเข้าไฟล์จำลอง 50-300 รายการ ตรวจสอบความถูกต้องของรหัส `CLP-xxx`
+   - ทดสอบการเลือกจัดหมวดหมู่ 5-10 คลิปพร้อมกัน และดูการขยับของโควตาในหน้าบอร์ดสายพาน EP
+   - รัน `compile_applet` และ `lint_applet` เพื่อยืนยันว่าไม่มีข้อผิดพลาด

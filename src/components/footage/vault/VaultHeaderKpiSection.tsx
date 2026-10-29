@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Scissors,
   Film,
+  FolderDown,
   Sliders,
   CheckCircle2,
   Sparkles,
@@ -35,6 +36,7 @@ export interface VaultHeaderKpiSectionProps {
   onOpenThreeTierManager: () => void;
   onOpenSourceSplitter: () => void;
   onOpenDirectFootageModal: () => void;
+  onOpenGoogleDriveBatchModal?: () => void;
 }
 
 export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
@@ -53,6 +55,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
   onOpenThreeTierManager,
   onOpenSourceSplitter,
   onOpenDirectFootageModal,
+  onOpenGoogleDriveBatchModal,
 }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
@@ -93,6 +96,15 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
           >
             <Scissors className="w-3.5 h-3.5 text-indigo-700" />
             <span>หั่นจากไลฟ์ (1:N)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenGoogleDriveBatchModal}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+          >
+            <FolderDown className="w-3.5 h-3.5 text-amber-400" />
+            <span>ดึงจาก Google Drive (300+)</span>
           </button>
 
           <button

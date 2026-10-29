@@ -28,6 +28,7 @@ export const FootageLibraryView: React.FC = () => {
         onOpenThreeTierManager={() => vault.setIsThreeTierManagerOpen(true)}
         onOpenSourceSplitter={() => vault.openSourceSplitterFor(null)}
         onOpenDirectFootageModal={() => vault.setIsDirectFootageModalOpen(true)}
+        onOpenGoogleDriveBatchModal={() => vault.setIsGoogleDriveBatchModalOpen(true)}
       />
 
       {/* 2. Progressive 3-Tier Category Explorer (Group -> Main Category -> Subcategory) */}

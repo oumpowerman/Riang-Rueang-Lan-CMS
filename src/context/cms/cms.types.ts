@@ -91,6 +91,12 @@ export interface CMSContextType {
   setIsClearClipsModalOpen: (open: boolean) => void;
   isDirectFootageModalOpen: boolean;
   setIsDirectFootageModalOpen: (open: boolean) => void;
+  isGoogleDriveBatchModalOpen: boolean;
+  setIsGoogleDriveBatchModalOpen: (open: boolean) => void;
+  isBatchAssignCategoryModalOpen: boolean;
+  setIsBatchAssignCategoryModalOpen: (open: boolean) => void;
+  selectedFootageIdsForBatch: string[];
+  setSelectedFootageIdsForBatch: React.Dispatch<React.SetStateAction<string[]>>;
   isSourceSplitterModalOpen: boolean;
   setIsSourceSplitterModalOpen: (open: boolean) => void;
   activeSourceForSplitting: RawSource | null;
@@ -181,9 +187,26 @@ export interface CMSContextType {
 
   appendSplitFootageToSource: (sourceId: string, clips: SplitClipDraft[]) => Footage[];
 
-  // Actions: Footage Update/Delete
+  // Actions: Footage Update/Delete & Batch Operations
   updateFootage: (id: string, updates: Partial<Footage>) => void;
   deleteFootage: (id: string) => void;
+  batchAddDirectFootage: (
+    items: Array<{
+      title: string;
+      driveFileUrl?: string;
+      originalUrl?: string;
+      mascotNotes?: string;
+      tags?: string[];
+      durationSec?: number;
+    }>,
+    idPrefix?: 'CLP' | 'FT'
+  ) => Footage[];
+  batchUpdateFootageTags: (
+    footageIds: string[],
+    newTags: string[],
+    mode?: 'REPLACE' | 'APPEND'
+  ) => void;
+  batchDeleteFootage: (footageIds: string[]) => void;
 
   // Actions: Episodes & Master Archive
   saveEpisode: (

@@ -19,9 +19,24 @@ export const FootageCard: React.FC<FootageCardProps> = ({
   onSelectForTraceability,
   onQuickTagClick,
 }) => {
-  const { tagMap, settings } = useCMS();
+  const {
+    tagMap,
+    settings,
+    selectedFootageIdsForBatch,
+    setSelectedFootageIdsForBatch,
+  } = useCMS();
   const hasDrive = hasRealDriveLink(footage.driveFileUrl);
   const inStaging = isFootageInStaging(footage.tags);
+  const isSelected = selectedFootageIdsForBatch.includes(footage.id);
+
+  const handleToggleSelect = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedFootageIdsForBatch((prev) =>
+      prev.includes(footage.id)
+        ? prev.filter((id) => id !== footage.id)
+        : [...prev, footage.id]
+    );
+  };
 
   return (
     <motion.div
@@ -31,12 +46,24 @@ export const FootageCard: React.FC<FootageCardProps> = ({
       whileHover={{ y: -2 }}
       transition={{ duration: 0.15 }}
       onClick={() => onSelectForTraceability(footage.id)}
-      className="group bg-white border border-slate-200/90 rounded-2xl p-4 hover:border-slate-400 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between gap-3.5"
+      className={`group rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between gap-3.5 border ${
+        isSelected
+          ? 'bg-indigo-50/40 border-indigo-500 ring-2 ring-indigo-300/60 shadow-xs'
+          : 'bg-white border-slate-200/90 hover:border-slate-400 hover:shadow-xs'
+      }`}
     >
       <div className="space-y-2.5">
-        {/* Top Row: ID + Link Readiness Badge + Clean Status Badge */}
+        {/* Top Row: Checkbox + ID + Link Readiness Badge + Clean Status Badge */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onClick={handleToggleSelect}
+              onChange={() => {}}
+              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 shrink-0"
+              title="เลือกฟุตเทจนี้"
+            />
             <span className="font-mono text-sm font-bold text-slate-600 tabular-nums">
               {footage.id}
             </span>

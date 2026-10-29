@@ -10,6 +10,9 @@ import { EpisodeBuilderView } from './components/episodes/EpisodeBuilderView';
 import { EpisodeDetailModal } from './components/episodes/EpisodeDetailModal';
 import { MasterEpisodeArchiveView } from './components/episodes/MasterEpisodeArchiveView';
 import { DirectFootageModal } from './components/footage/DirectFootageModal';
+import { GoogleDriveBatchImportModal } from './components/footage/GoogleDriveBatchImportModal';
+import { BatchAssignCategoryModal } from './components/footage/BatchAssignCategoryModal';
+import { BatchCategorizeFloatingBar } from './components/footage/BatchCategorizeFloatingBar';
 import { FootageLibraryView } from './components/footage/FootageLibraryView';
 import { FootageTraceabilityModal } from './components/footage/FootageTraceabilityModal';
 import { MobileNavigation } from './components/layout/MobileNavigation';
@@ -79,6 +82,11 @@ const MainWorkspace: React.FC = () => {
       <StatusColorRulesModal />
       <ClearAllClipsModal />
       <AuthModal />
+      <GoogleDriveBatchImportModal />
+      <BatchAssignCategoryModal />
+
+      {/* Floating Batch Categorize Action Bar */}
+      <BatchCategorizeFloatingBar />
     </div>
   );
 };
