@@ -1,15 +1,14 @@
 import React from 'react';
-import { Scissors, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 
 interface SourceStudioHeaderProps {
   onOpenDrive1ToN: () => void;
-  onOpenSourceSplitter: () => void;
+  onOpenSourceSplitter?: () => void;
 }
 
 export const SourceStudioHeader: React.FC<SourceStudioHeaderProps> = ({
   onOpenDrive1ToN,
-  onOpenSourceSplitter,
 }) => {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-indigo-50/70 via-white to-sky-50/60 border border-indigo-200/70 rounded-2xl px-4 py-3 shadow-2xs">
@@ -28,15 +27,6 @@ export const SourceStudioHeader: React.FC<SourceStudioHeaderProps> = ({
         >
           <GoogleDriveIcon className="w-4 h-4 shrink-0" />
           <span>ดึงไลฟ์จากไดร์ฟ</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onOpenSourceSplitter}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
-        >
-          <Scissors className="w-3.5 h-3.5" />
-          <span>+ หั่นคลิปจากไลฟ์</span>
         </button>
       </div>
     </div>

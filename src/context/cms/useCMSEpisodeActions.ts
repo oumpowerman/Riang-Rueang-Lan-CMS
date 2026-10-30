@@ -71,8 +71,24 @@ export function useCMSEpisodeActions({
       }
     }
 
+    const scope = episodePayload.categoryEpisodeScope || 'MAIN_CATEGORY';
+    const computedCategoryEpisodeNo =
+      episodePayload.categoryEpisodeNo ||
+      (scope === 'SUBCATEGORY' && episodePayload.targetSubcategoryId
+        ? episodes.filter((e) => e.targetSubcategoryId === episodePayload.targetSubcategoryId).length + 1
+        : episodes.filter((e) => e.mainCategoryTagId === episodePayload.mainCategoryTagId).length + 1);
+
+    const seriesId =
+      episodePayload.seriesId ||
+      (scope === 'SUBCATEGORY' && episodePayload.targetSubcategoryId
+        ? episodePayload.targetSubcategoryId
+        : episodePayload.mainCategoryTagId);
+
     const newEpisode: Episode = {
       ...episodePayload,
+      categoryEpisodeScope: scope,
+      seriesId,
+      categoryEpisodeNo: computedCategoryEpisodeNo,
       id: nextEpId,
       masterVideoInfo: fullMasterInfo,
       createdAt: getReferenceTodayDate(),

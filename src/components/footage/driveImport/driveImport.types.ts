@@ -19,6 +19,7 @@ export interface DriveImportSuccessSummary {
   categorizedCount: number;
   newTagsCreated: number;
   createdTagNames: string[];
+  skippedDuplicatesCount?: number;
 }
 
 export interface SelectedRoutingSummary {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCMS } from '../../../context/CMSContext';
 import { isStagingGroupId, isStagingTagId } from '../../../services/seedData';
 import {
+  Episode,
   EpisodeProductionTarget,
   EpisodeRankingSlot,
   EpisodeWorkflowStage,
@@ -196,11 +197,37 @@ export function useEpisodeBuilder() {
   const [pickerPage, setPickerPage] = useState(1);
   const [pickerPageSize, setPickerPageSize] = useState(5);
 
+  // Flexible Episode Scope: 'MAIN_CATEGORY' (Tier 1) or 'SUBCATEGORY' (Tier 2)
+  const [categoryEpisodeScope, setCategoryEpisodeScope] = useState<'MAIN_CATEGORY' | 'SUBCATEGORY'>('MAIN_CATEGORY');
+
+  // Category Episode Numbering for Series (Supports Tier 1 Main Category or Tier 2 Subcategory)
+  const categoryEpisodeCount = useMemo(() => {
+    if (categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId) {
+      return episodes.filter((e) => e.targetSubcategoryId === targetSubcategoryId).length;
+    }
+    return episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId).length;
+  }, [episodes, mainCategoryTagId, categoryEpisodeScope, targetSubcategoryId]);
+
+  const nextCategoryEpisodeNo = categoryEpisodeCount + 1;
+
+  const handleToggleEpisodeScope = (scope: 'MAIN_CATEGORY' | 'SUBCATEGORY') => {
+    setCategoryEpisodeScope(scope);
+    if (scope === 'SUBCATEGORY' && targetSubcategoryId && tagMap[targetSubcategoryId]) {
+      const subName = tagMap[targetSubcategoryId].name;
+      const subEpNo = episodes.filter((e) => e.targetSubcategoryId === targetSubcategoryId).length + 1;
+      setTitle(`5 อันดับ ${subName} EP.${subEpNo} - จังหวะพีคคัดเน้นๆ`);
+    } else {
+      const mainName = tagMap[mainCategoryTagId]?.name || 'หมวด';
+      const mainEpNo = episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId).length + 1;
+      setTitle(`5 อันดับ ${mainName} EP.${mainEpNo} - จังหวะพีคคัดเน้นๆ`);
+    }
+  };
+
   // Step 4: Auto-Generated Headline, Schedule & Collapsible Optional Master Info
   const [title, setTitle] = useState(
     `5 อันดับ ${
       tagMap[defaultCategoryId]?.name || 'ดาราฮาๆ'
-    } จังหวะพีคคัดเน้นๆ #${episodes.length + 1}`
+    } EP.${episodes.filter((e) => e.mainCategoryTagId === defaultCategoryId).length + 1} - จังหวะพีคคัดเน้นๆ`
   );
   const [publishDate, setPublishDate] = useState<string>('2026-10-28');
   const [publishSlot, setPublishSlot] = useState<PublishSlot>('MORNING_0600');
@@ -219,6 +246,7 @@ export function useEpisodeBuilder() {
   const [preselectNotice, setPreselectNotice] = useState<string | null>(null);
   const [savedBannerMessage, setSavedBannerMessage] = useState<string | null>(null);
   const [duplicateConfirmModalOpen, setDuplicateConfirmModalOpen] = useState(false);
+  const [newlyCreatedEpisode, setNewlyCreatedEpisode] = useState<Episode | null>(null);
 
   // Active Category Stat
   const activeCategoryStat = useMemo(
@@ -326,8 +354,9 @@ export function useEpisodeBuilder() {
     setAllowCrossCategory(false);
     setPickerPage(1);
     if (tagObj) {
+      const catEpNo = episodes.filter((e) => e.mainCategoryTagId === tagId).length + 1;
       setTitle(
-        `5 อันดับ ${tagObj.name} จังหวะพีคคัดเน้นๆ #${episodes.length + 1}`
+        `5 อันดับ ${tagObj.name} EP.${catEpNo} - จังหวะพีคคัดเน้นๆ`
       );
     }
     if (autoFillWithRecipe) {
@@ -728,10 +757,24 @@ export function useEpisodeBuilder() {
   const performActualSave = () => {
     if (!title.trim() || selectedFootageIds.length < 5) return;
 
+    const effectiveSeriesTitle =
+      categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId && tagMap[targetSubcategoryId]
+        ? `5 อันดับ ${tagMap[targetSubcategoryId].name}`
+        : `5 อันดับ ${tagMap[mainCategoryTagId]?.name || ''}`;
+
+    const effectiveSeriesId =
+      categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId
+        ? targetSubcategoryId
+        : mainCategoryTagId;
+
     const created = saveEpisode({
       title: title.trim(),
       categoryGroupId: selectedGroupId,
       mainCategoryTagId,
+      categoryEpisodeNo: nextCategoryEpisodeNo,
+      categoryEpisodeScope,
+      seriesId: effectiveSeriesId,
+      seriesTitle: effectiveSeriesTitle,
       productionTarget,
       targetSubcategoryId:
         productionTarget === 'SINGLE_SUBCATEGORY_SPECIAL' ? targetSubcategoryId : null,
@@ -753,16 +796,25 @@ export function useEpisodeBuilder() {
       },
     });
 
+    setNewlyCreatedEpisode(created);
     setSavedBannerMessage(
-      `บันทึกคลิปหลัก ${created.id} (${created.masterVideoInfo.masterFileName}) เข้าสู่คลัง Master Episode Archive เรียบร้อยแล้ว!`
+      `บันทึกคลิป 5 อันดับ ${created.id} (EP.${created.categoryEpisodeNo || nextCategoryEpisodeNo} · ${created.title}) เข้าสู่คลังเรียบร้อยแล้ว!`
     );
     setPreselectNotice(null);
-    setRankings(DEFAULT_RANKINGS_1_TO_5);
-    setActiveBuilderStep(1);
     setMasterDriveUrl('');
     setYoutubeUrl('');
     setFacebookUrl('');
     setDuplicateConfirmModalOpen(false);
+  };
+
+  const handleContinueNextEpisodeInCategory = () => {
+    setNewlyCreatedEpisode(null);
+    clearAllSlots();
+    const nextNo = episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId).length + 1;
+    const catName = tagMap[mainCategoryTagId]?.name || '';
+    setTitle(`5 อันดับ ${catName} EP.${nextNo} - จังหวะพีคคัดเน้นๆ`);
+    setActiveBuilderStep(2);
+    applyRecipeForCategory(mainCategoryTagId, activeRecipe);
   };
 
   const handleSaveEpisode = (e: React.FormEvent) => {
@@ -881,5 +933,15 @@ export function useEpisodeBuilder() {
     previewMasterFileName,
     handleSaveEpisode,
     performActualSave,
+
+    // Series Episode Numbering & Post-Save State
+    categoryEpisodeNo: nextCategoryEpisodeNo,
+    existingCategoryEpisodesCount: categoryEpisodeCount,
+    categoryEpisodeScope,
+    setCategoryEpisodeScope,
+    handleToggleEpisodeScope,
+    newlyCreatedEpisode,
+    setNewlyCreatedEpisode,
+    handleContinueNextEpisodeInCategory,
   };
 }

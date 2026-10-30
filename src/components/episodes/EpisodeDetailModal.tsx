@@ -95,6 +95,10 @@ export const EpisodeDetailModal: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="font-mono font-bold text-sm text-indigo-700">{episode.id}</span>
               <span aria-hidden="true">·</span>
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs">
+                {tagMap[episode.mainCategoryTagId]?.name || 'หมวด'} · EP.{episode.categoryEpisodeNo || 1}
+              </span>
+              <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">
                 {formatThaiDate(episode.publishDate)}
               </span>

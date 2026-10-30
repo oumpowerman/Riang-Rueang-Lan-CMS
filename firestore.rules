@@ -7,26 +7,27 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper function to get current user data
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    // Helper function to check role
+    // Helper function to check role safely
     function hasRole(role) {
       return isAuthenticated() && (
-        getUserData().role == role ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role) ||
         request.auth.token.role == role
       );
     }
 
     function isAdmin() {
-      return hasRole('ADMIN');
+      return hasRole('ADMIN') || (
+        isAuthenticated() &&
+        (request.auth.token.email == 'jengwaachanel@gmail.com' ||
+          request.auth.token.email == 'dramaeveryday222@gmail.com') &&
+        request.auth.token.email_verified == true
+      );
     }
 
     // Users collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow create, update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow delete: if isAdmin();
     }
@@ -58,6 +59,11 @@ service cloud.firestore {
 
     // System settings collection
     match /system_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Google Drive delta sync records collection
+    match /drive_sync_records/{folderId} {
       allow read, write: if true;
     }
 

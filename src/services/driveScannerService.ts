@@ -17,10 +17,13 @@ export interface DiscoveredDriveVideo {
   thumbnailUrl?: string;
   sizeBytes: number;
   createdTime: string;
+  modifiedTime?: string;
   durationSec?: number;
   folderPath: string[]; // Hierarchy path e.g. ["คลังหลัก", "01_ตลกหน้าตาย"]
   parentFolderName: string; // Immediate subfolder name
   parentFolderId: string;
+  isDuplicate?: boolean;
+  duplicateReason?: 'FILE_ID' | 'TITLE' | 'BOTH';
 }
 
 export interface DriveFolderSummary {
@@ -35,8 +38,11 @@ export interface ScanProgressUpdate {
   foldersScanned: number;
   foldersPending: number;
   videosFound: number;
+  newVideosFound?: number;
+  duplicatesFound?: number;
   currentFolder: string;
   currentDepth: number;
+  scanMode?: 'DELTA' | 'FULL';
 }
 
 export interface RecursiveScanResult {
@@ -44,8 +50,13 @@ export interface RecursiveScanResult {
   rootFolderName: string;
   totalFoldersScanned: number;
   totalVideosDiscovered: number;
+  totalNewVideos: number;
+  totalDuplicates: number;
   folders: DriveFolderSummary[];
   videos: DiscoveredDriveVideo[];
+  scanMode?: 'DELTA' | 'FULL';
+  sinceModifiedTime?: string | null;
+  latestFileModifiedTime?: string;
 }
 
 export interface ScanOptions {
@@ -53,8 +64,29 @@ export interface ScanOptions {
   accessToken?: string | null;
   apiKey?: string | null;
   maxDepth?: number;
+  sinceModifiedTime?: string | null; // ISO 8601 string for Server-side Delta Sync
+  existingClipKeys?: {
+    titles: Set<string>;
+    fileIds: Set<string>;
+  };
   onProgress?: (progress: ScanProgressUpdate) => void;
   signal?: AbortSignal;
+}
+
+/**
+ * Extracts Google Drive File ID from standard Drive web view/preview URLs or raw IDs
+ */
+export function extractGoogleDriveFileId(input: string): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch && fileMatch[1]) return fileMatch[1];
+  const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) return idMatch[1];
+  if (/^[a-zA-Z0-9_-]{15,60}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return null;
 }
 
 /**
@@ -188,6 +220,8 @@ export async function scanGoogleDriveFolderRecursive({
   accessToken,
   apiKey,
   maxDepth = 10,
+  sinceModifiedTime,
+  existingClipKeys,
   onProgress,
   signal,
 }: ScanOptions): Promise<RecursiveScanResult> {
@@ -247,6 +281,10 @@ export async function scanGoogleDriveFolderRecursive({
   ];
 
   let foldersScannedCount = 0;
+  let newVideosCount = 0;
+  let duplicatesCount = 0;
+  let latestFileModifiedTime: string | undefined = undefined;
+  const activeScanMode: 'DELTA' | 'FULL' = sinceModifiedTime ? 'DELTA' : 'FULL';
 
   // BFS Traversal
   while (queue.length > 0) {
@@ -271,8 +309,11 @@ export async function scanGoogleDriveFolderRecursive({
       foldersScanned: foldersScannedCount,
       foldersPending: queue.length,
       videosFound: discoveredVideos.length,
+      newVideosFound: newVideosCount,
+      duplicatesFound: duplicatesCount,
       currentFolder: current.name,
       currentDepth: current.depth,
+      scanMode: activeScanMode,
     });
 
     // Fetch all children in this folder with large pagination (500 per page for fast bulk scans)
@@ -281,7 +322,13 @@ export async function scanGoogleDriveFolderRecursive({
     do {
       if (signal?.aborted) throw new Error('การสแกนถูกยกเลิก');
 
-      const query = `'${current.id}' in parents and trashed = false`;
+      let query = `'${current.id}' in parents and trashed = false`;
+      if (sinceModifiedTime) {
+        // Delta Sync: filter out files modified before sinceModifiedTime directly on Google servers
+        // Always include subfolders/shortcuts so BFS can discover newly added nested folders
+        query += ` and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/vnd.google-apps.shortcut' or modifiedTime > '${sinceModifiedTime}')`;
+      }
+
       const listUrl = buildDriveApiUrl(
         'files',
         {
@@ -290,7 +337,7 @@ export async function scanGoogleDriveFolderRecursive({
           supportsAllDrives: 'true',
           includeItemsFromAllDrives: 'true',
           fields:
-            'nextPageToken,files(id,name,mimeType,size,createdTime,videoMediaMetadata,webViewLink,thumbnailLink,shortcutDetails)',
+            'nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,videoMediaMetadata,webViewLink,thumbnailLink,shortcutDetails)',
           ...(pageToken ? { pageToken } : {}),
         },
         effectiveAccessToken ? null : effectiveApiKey
@@ -327,12 +374,40 @@ export async function scanGoogleDriveFolderRecursive({
           // File is a video!
           folderSummary.videoCount++;
           const cleanTitle = cleanFootageTitle(file.name);
+          const cleanTitleLower = cleanTitle.toLowerCase().trim();
+
+          // High performance O(1) duplicate check against existing footage in CMS
+          const hasDuplicateFileId = existingClipKeys?.fileIds?.has(targetId) ?? false;
+          const hasDuplicateTitle = existingClipKeys?.titles?.has(cleanTitleLower) ?? false;
+          const isDuplicate = hasDuplicateFileId || hasDuplicateTitle;
+
+          const duplicateReason: 'FILE_ID' | 'TITLE' | 'BOTH' | undefined =
+            hasDuplicateFileId && hasDuplicateTitle
+              ? 'BOTH'
+              : hasDuplicateFileId
+              ? 'FILE_ID'
+              : hasDuplicateTitle
+              ? 'TITLE'
+              : undefined;
+
+          if (isDuplicate) {
+            duplicatesCount++;
+          } else {
+            newVideosCount++;
+          }
+
           const driveFileUrl =
             file.webViewLink || `https://drive.google.com/file/d/${targetId}/view`;
 
           let durationSec: number | undefined = undefined;
           if (file.videoMediaMetadata?.durationMillis) {
             durationSec = Math.round(Number(file.videoMediaMetadata.durationMillis) / 1000);
+          }
+
+          if (file.modifiedTime) {
+            if (!latestFileModifiedTime || file.modifiedTime > latestFileModifiedTime) {
+              latestFileModifiedTime = file.modifiedTime;
+            }
           }
 
           discoveredVideos.push({
@@ -346,10 +421,13 @@ export async function scanGoogleDriveFolderRecursive({
               `https://drive.google.com/thumbnail?id=${targetId}&sz=w320`,
             sizeBytes: Number(file.size || 0),
             createdTime: file.createdTime || new Date().toISOString(),
+            modifiedTime: file.modifiedTime,
             durationSec: durationSec || 25,
             folderPath: current.path,
             parentFolderName: current.name,
             parentFolderId: current.id,
+            isDuplicate,
+            duplicateReason,
           });
         }
       }
@@ -360,8 +438,11 @@ export async function scanGoogleDriveFolderRecursive({
           foldersScanned: foldersScannedCount,
           foldersPending: queue.length,
           videosFound: discoveredVideos.length,
+          newVideosFound: newVideosCount,
+          duplicatesFound: duplicatesCount,
           currentFolder: current.name,
           currentDepth: current.depth,
+          scanMode: activeScanMode,
         });
       }
     } while (pageToken);
@@ -374,7 +455,12 @@ export async function scanGoogleDriveFolderRecursive({
     rootFolderName,
     totalFoldersScanned: foldersScannedCount,
     totalVideosDiscovered: discoveredVideos.length,
+    totalNewVideos: newVideosCount,
+    totalDuplicates: duplicatesCount,
     folders: Array.from(folderSummariesMap.values()),
     videos: discoveredVideos,
+    scanMode: activeScanMode,
+    sinceModifiedTime: sinceModifiedTime || null,
+    latestFileModifiedTime,
   };
 }

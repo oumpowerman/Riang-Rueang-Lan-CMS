@@ -27,6 +27,10 @@ export type EpisodeProductionTarget = 'MAIN_CATEGORY_VARIETY' | 'SINGLE_SUBCATEG
 export interface Episode {
   id: string; // e.g., EP-0001
   title: string; // e.g., "5 อันดับคนไทยเป็นคนตลก #12"
+  categoryEpisodeNo?: number; // ลำดับตอนเฉพาะหมวดหมู่นี้ เช่น 1, 2, 3...
+  categoryEpisodeScope?: 'MAIN_CATEGORY' | 'SUBCATEGORY'; // ระดับการรันเลขตอน (หมวดหลัก Tier 1 หรือ หมวดย่อย Tier 2)
+  seriesId?: string; // Tag ID ของซีรีส์ที่ใช้อ้างอิง (อาจเป็น mainCategoryTagId หรือ targetSubcategoryId)
+  seriesTitle?: string; // e.g., "5 อันดับ คนไทยเป็นคนตลก"
   categoryGroupId?: string; // Primary Category Group ID (Tier 0, e.g., GRP-PERSON)
   mainCategoryTagId: string; // Primary Tag ID (Tier 1)
   productionTarget?: EpisodeProductionTarget; // 'MAIN_CATEGORY_VARIETY' (รวมหลายดารา) or 'SINGLE_SUBCATEGORY_SPECIAL' (เจาะจงดาราคนเดียว)

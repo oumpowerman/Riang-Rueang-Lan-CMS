@@ -393,18 +393,41 @@ export const cmsRepository = {
       const parsed: Episode[] = JSON.parse(raw);
       let needsSave = false;
       const tagLookup = new Map(INITIAL_TAGS.map((t) => [t.id, t]));
+      const catCountMap: Record<string, number> = {};
+
       const migrated = parsed.map((ep) => {
-        if (!ep.categoryGroupId) {
-          needsSave = true;
+        let changed = false;
+        let catGrpId = ep.categoryGroupId;
+        if (!catGrpId) {
+          changed = true;
           const tag = tagLookup.get(ep.mainCategoryTagId);
-          const groupId = tag?.groupId || (tag ? `GRP-${tag.groupType}` : 'GRP-THEME');
+          catGrpId = tag?.groupId || (tag ? `GRP-${tag.groupType}` : 'GRP-THEME');
+        }
+
+        let catEpNo = ep.categoryEpisodeNo;
+        if (!catEpNo) {
+          changed = true;
+          const currentCount = (catCountMap[ep.mainCategoryTagId] || 0) + 1;
+          catCountMap[ep.mainCategoryTagId] = currentCount;
+          catEpNo = currentCount;
+        } else {
+          catCountMap[ep.mainCategoryTagId] = Math.max(
+            catCountMap[ep.mainCategoryTagId] || 0,
+            catEpNo
+          );
+        }
+
+        if (changed) {
+          needsSave = true;
           return {
             ...ep,
-            categoryGroupId: groupId,
+            categoryGroupId: catGrpId,
+            categoryEpisodeNo: catEpNo,
           };
         }
         return ep;
       });
+
       if (needsSave) {
         localStorage.setItem(STORAGE_KEYS.EPISODES, JSON.stringify(migrated));
       }

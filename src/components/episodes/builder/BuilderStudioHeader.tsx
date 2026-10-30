@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ChevronRight,
@@ -83,7 +83,7 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Studio Header: Title, EP ID & Stepper */}
+      {/* Main Studio Header: Title, EP ID & Stepper */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
         {/* Top Row: Title + Code Badge + Selection Pill */}
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   deleteDoc,
   getDocs,
   onSnapshot,
@@ -14,6 +15,7 @@ import { Footage } from '../types/footage.types';
 import { RawSource } from '../types/source.types';
 import { CategoryGroup, CategoryTag, SystemSettings } from '../types/tag.types';
 import { Episode } from '../types/episode.types';
+import { DriveSyncRecord } from '../types/driveSync.types';
 import { INITIAL_CATEGORY_GROUPS } from '../services/seedData';
 
 /**
@@ -512,4 +514,52 @@ export const firestoreService = {
 
     await commitOperationsInChunks(ops);
   },
+
+  /**
+   * Google Drive Delta Sync Record Operations
+   */
+  async getDriveSyncRecord(folderId: string): Promise<DriveSyncRecord | null> {
+    try {
+      const snap = await getDoc(doc(db, 'drive_sync_records', folderId));
+      if (!snap.exists()) return null;
+      return snap.data() as DriveSyncRecord;
+    } catch (err) {
+      console.warn('Failed to fetch DriveSyncRecord for folder:', folderId, err);
+      return null;
+    }
+  },
+
+  async saveDriveSyncRecord(record: DriveSyncRecord): Promise<void> {
+    try {
+      const cleanData = sanitizeForFirestore({
+        ...record,
+        updatedAt: record.updatedAt || new Date().toISOString(),
+      });
+      await setDoc(doc(db, 'drive_sync_records', record.folderId), cleanData, { merge: true });
+    } catch (err) {
+      console.error('Failed to save DriveSyncRecord:', record.folderId, err);
+      throw err;
+    }
+  },
+
+  subscribeDriveSyncRecord(
+    folderId: string,
+    callback: (record: DriveSyncRecord | null) => void
+  ): () => void {
+    const unsub = onSnapshot(
+      doc(db, 'drive_sync_records', folderId),
+      (snap) => {
+        if (!snap.exists()) {
+          callback(null);
+        } else {
+          callback(snap.data() as DriveSyncRecord);
+        }
+      },
+      (err) => {
+        console.warn('drive_sync_records listener error:', err);
+      }
+    );
+    return unsub;
+  },
 };
+

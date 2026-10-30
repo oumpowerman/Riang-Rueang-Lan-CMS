@@ -1,14 +1,17 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { useCMS } from '../../../context/CMSContext';
 import { defaultGoogleDriveApiKey } from '../../../firebase/config';
+import { firestoreService } from '../../../firebase/firestoreService';
 import {
   DiscoveredDriveVideo,
+  extractGoogleDriveFileId,
   extractGoogleDriveFolderId,
   RecursiveScanResult,
   scanGoogleDriveFolderRecursive,
   ScanProgressUpdate,
 } from '../../../services/driveScannerService';
+import { DriveSyncMode, DriveSyncRecord } from '../../../types/driveSync.types';
 import {
   isStagingGroupId,
   isStagingTagId,
@@ -60,6 +63,45 @@ export const useGoogleDriveBatchImport = () => {
   const [maxDepth, setMaxDepth] = useState<number>(10);
   const [idPrefix, setIdPrefix] = useState<DriveClipIdPrefix>('CLP');
 
+  // Google Drive Delta Sync State (Server-Side ModifiedTime + Firestore Sync History)
+  const [syncMode, setSyncMode] = useState<DriveSyncMode>('DELTA');
+  const [folderSyncRecord, setFolderSyncRecord] = useState<DriveSyncRecord | null>(null);
+  const [isLoadingSyncRecord, setIsLoadingSyncRecord] = useState<boolean>(false);
+
+  // Auto-fetch Firestore Sync Record whenever folderUrl or modal state changes
+  useEffect(() => {
+    if (!isGoogleDriveBatchModalOpen) return;
+    const extractedId = extractGoogleDriveFolderId(folderUrl);
+    if (!extractedId) {
+      setFolderSyncRecord(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingSyncRecord(true);
+    firestoreService
+      .getDriveSyncRecord(extractedId)
+      .then((record) => {
+        if (!isMounted) return;
+        setFolderSyncRecord(record);
+        if (record?.lastSyncTimestamp) {
+          setSyncMode('DELTA');
+        } else {
+          setSyncMode('FULL');
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load folder sync record:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingSyncRecord(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [folderUrl, isGoogleDriveBatchModalOpen]);
+
   // Category Assignment Strategy State
   const [categoryStrategy, setCategoryStrategy] = useState<DriveCategoryStrategy>(
     'SUBFOLDER_TO_CATEGORY'
@@ -78,6 +120,29 @@ export const useGoogleDriveBatchImport = () => {
   // Pasted mode target tag (defaults to STAGING_TAG_ID)
   const [pasteTargetTagId, setPasteTargetTagId] = useState<string>(STAGING_TAG_ID);
 
+  // Pre-index existing clips in CMS for fast O(1) deduplication (clean titles + Drive File IDs)
+  const existingClipKeys = useMemo(() => {
+    const titles = new Set<string>();
+    const fileIds = new Set<string>();
+
+    computedFootage.forEach((f) => {
+      if (f.title) {
+        titles.add(cleanFootageTitle(f.title).toLowerCase().trim());
+        titles.add(f.title.toLowerCase().trim());
+      }
+      if (f.driveFileUrl) {
+        const extracted = extractGoogleDriveFileId(f.driveFileUrl);
+        if (extracted) fileIds.add(extracted);
+      }
+      if (f.originalUrl) {
+        const extracted = extractGoogleDriveFileId(f.originalUrl);
+        if (extracted) fileIds.add(extracted);
+      }
+    });
+
+    return { titles, fileIds };
+  }, [computedFootage]);
+
   // Scanning State
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgressUpdate | null>(null);
@@ -86,6 +151,8 @@ export const useGoogleDriveBatchImport = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Selection & Filtering State
+  // Incremental scan: hide duplicate clips by default to save DOM/memory and highlight only new items
+  const [hideDuplicates, setHideDuplicates] = useState(true);
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>('ALL');
   const [previewSearch, setPreviewSearch] = useState('');
@@ -260,11 +327,19 @@ export const useGoogleDriveBatchImport = () => {
     abortControllerRef.current = new AbortController();
 
     try {
+      // Determine whether to apply Delta Sync timestamp filter from Firestore sync record
+      const effectiveSinceModifiedTime =
+        syncMode === 'DELTA' && folderSyncRecord?.lastSyncTimestamp
+          ? folderSyncRecord.lastSyncTimestamp
+          : null;
+
       const result = await scanGoogleDriveFolderRecursive({
         folderUrlOrId: extractedId,
         accessToken: driveAccessToken,
         apiKey: apiKey.trim() || undefined,
         maxDepth,
+        sinceModifiedTime: effectiveSinceModifiedTime,
+        existingClipKeys,
         onProgress: (prog) => {
           setScanProgress(prog);
         },
@@ -272,8 +347,10 @@ export const useGoogleDriveBatchImport = () => {
       });
 
       setScanResult(result);
-      // Select all discovered videos by default
-      setSelectedVideoIds(new Set(result.videos.map((v) => v.id)));
+      setHideDuplicates(true);
+      // Auto-select ONLY newly discovered clips by default (skip duplicates)
+      const newVideoIds = result.videos.filter((v) => !v.isDuplicate).map((v) => v.id);
+      setSelectedVideoIds(new Set(newVideoIds));
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error('Scan error:', err);
@@ -292,9 +369,9 @@ export const useGoogleDriveBatchImport = () => {
     setIsScanning(false);
   };
 
-  // 3. Selection Handlers
+  // 3. Selection Handlers & Actions
   const handleToggleSelectAll = (filteredVideos: DiscoveredDriveVideo[]) => {
-    const isAllSelected = filteredVideos.every((v) => selectedVideoIds.has(v.id));
+    const isAllSelected = filteredVideos.length > 0 && filteredVideos.every((v) => selectedVideoIds.has(v.id));
     setSelectedVideoIds((prev) => {
       const next = new Set(prev);
       if (isAllSelected) {
@@ -318,10 +395,33 @@ export const useGoogleDriveBatchImport = () => {
     });
   };
 
-  // Filtered Discovered Videos in Preview
+  const handleToggleHideDuplicates = () => {
+    setHideDuplicates((prev) => !prev);
+  };
+
+  const handleSelectOnlyNew = () => {
+    if (!scanResult) return;
+    const newVideoIds = scanResult.videos.filter((v) => !v.isDuplicate).map((v) => v.id);
+    setSelectedVideoIds(new Set(newVideoIds));
+  };
+
+  const handleSelectAllVideos = () => {
+    if (!scanResult) return;
+    setSelectedVideoIds(new Set(scanResult.videos.map((v) => v.id)));
+  };
+
+  const handleDeselectAllVideos = () => {
+    setSelectedVideoIds(new Set());
+  };
+
+  // Filtered Discovered Videos in Preview (omits duplicates when hideDuplicates is true to maximize DOM speed)
   const displayedVideos = useMemo(() => {
     if (!scanResult) return [];
     let list = scanResult.videos;
+
+    if (hideDuplicates) {
+      list = list.filter((v) => !v.isDuplicate);
+    }
 
     if (selectedFolderFilter !== 'ALL') {
       list = list.filter((v) => v.parentFolderName === selectedFolderFilter);
@@ -338,7 +438,7 @@ export const useGoogleDriveBatchImport = () => {
     }
 
     return list;
-  }, [scanResult, selectedFolderFilter, previewSearch]);
+  }, [scanResult, hideDuplicates, selectedFolderFilter, previewSearch]);
 
   // Summary counts of selected videos going to Staging vs Categories
   const selectedRoutingSummary: SelectedRoutingSummary = useMemo(() => {
@@ -441,12 +541,34 @@ export const useGoogleDriveBatchImport = () => {
         const added = batchAddDirectFootage(payloadItems, idPrefix);
         setImportProgress(100);
 
+        // Update Centralized Firestore Sync Record for this Google Drive folder
+        const nowIso = new Date().toISOString();
+        const updatedRecord: DriveSyncRecord = {
+          folderId: scanResult.rootFolderId,
+          folderName: scanResult.rootFolderName,
+          lastSyncTimestamp: nowIso,
+          lastSyncVideoCount: added.length,
+          totalClipsInFolder: (folderSyncRecord?.totalClipsInFolder || 0) + added.length,
+          updatedAt: nowIso,
+          updatedBy: currentUser?.email || 'authenticated-user',
+        };
+
+        firestoreService
+          .saveDriveSyncRecord(updatedRecord)
+          .then(() => {
+            setFolderSyncRecord(updatedRecord);
+          })
+          .catch((err) => {
+            console.warn('Failed to update DriveSyncRecord in Firestore:', err);
+          });
+
         setImportSuccessData({
           totalImported: added.length,
           stagedCount,
           categorizedCount,
           newTagsCreated: activeNewTagsToCreate.length,
           createdTagNames: activeNewTagsToCreate.map((t) => t.name),
+          skippedDuplicatesCount: scanResult.totalDuplicates,
         });
       } else {
         // Mode PASTE
@@ -525,6 +647,12 @@ export const useGoogleDriveBatchImport = () => {
     maxDepth,
     setMaxDepth,
 
+    // Google Drive Delta Sync (Timestamp & Firestore)
+    syncMode,
+    setSyncMode,
+    folderSyncRecord,
+    isLoadingSyncRecord,
+
     // Category Strategy & Subfolder Staging
     categoryStrategy,
     handleSelectSubfolderStrategy,
@@ -556,6 +684,13 @@ export const useGoogleDriveBatchImport = () => {
     previewSearch,
     setPreviewSearch,
     displayedVideos,
+
+    // Incremental Deduplication State & Controls
+    hideDuplicates,
+    handleToggleHideDuplicates,
+    handleSelectOnlyNew,
+    handleSelectAllVideos,
+    handleDeselectAllVideos,
 
     // Manual Paste Mode
     pasteTargetTagId,

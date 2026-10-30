@@ -1,6 +1,6 @@
 {
-  "summary":  "แผนการติดตั้งโลโก้ช่อง 'เรียงเรื่องลั่น' บนแท็บเบราว์เซอร์ (Favicon) พร้อมอัปเดตชื่อแท็บ และแทนที่ไอคอนแบรนด์ใน Sidebar และ Mobile Navigation เพื่อสร้างเอกลักษณ์ของสตูดิโอให้สมบูรณ์",
-  "updatedAt":  "2026-10-29T20:37:55.457867320Z",
+  "summary":  "Comprehensive UX and Architecture plan for scaling Riang-Rueang-Lan CMS to 30-100 video categories, featuring a 2-Tier Group & Series navigation system, dual-level episode numbering (Tier 1 Main Category or Tier 2 Subcategory), and a Series Shelf Catalog Hub alongside the existing Episode View in MasterEpisodeArchiveView.tsx.",
+  "updatedAt":  "2026-10-30T07:53:27.681472063Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

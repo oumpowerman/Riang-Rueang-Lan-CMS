@@ -5,8 +5,10 @@ import { BuilderStep1CategoryTarget } from './builder/BuilderStep1CategoryTarget
 import { BuilderStep3RankingWorkspace } from './builder/BuilderStep3RankingWorkspace';
 import { BuilderStep4MetadataForm } from './builder/BuilderStep4MetadataForm';
 import { BuilderStudioHeader } from './builder/BuilderStudioHeader';
+import { BuilderCompactStickyBar } from './builder/BuilderCompactStickyBar';
 import { DiversityCollisionBanner } from './builder/DiversityCollisionBanner';
 import { DuplicateEpisodeConfirmModal } from './builder/DuplicateEpisodeConfirmModal';
+import { EpisodeCreatedSuccessModal } from './builder/EpisodeCreatedSuccessModal';
 import { useEpisodeBuilder } from './builder/useEpisodeBuilder';
 
 export const EpisodeBuilderView: React.FC = () => {
@@ -101,10 +103,28 @@ export const EpisodeBuilderView: React.FC = () => {
     previewMasterFileName,
     handleSaveEpisode,
     performActualSave,
+    categoryEpisodeNo,
+    existingCategoryEpisodesCount,
+    categoryEpisodeScope,
+    handleToggleEpisodeScope,
+    newlyCreatedEpisode,
+    setNewlyCreatedEpisode,
+    handleContinueNextEpisodeInCategory,
   } = useEpisodeBuilder();
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3.5 relative">
+      {/* Full Page Sticky Compact Bar (slides down when scrolling anywhere down the page) */}
+      <BuilderCompactStickyBar
+        nextEpisodeId={nextEpisodeId}
+        selectedCount={selectedFootageIds.length}
+        activeGroup={activeGroup}
+        activeCategoryStat={activeCategoryStat}
+        productionTarget={productionTarget}
+        activeSubcategory={activeSubcategory}
+        onFocusStep1={() => setActiveBuilderStep(1)}
+      />
+
       {/* Studio Header & Interactive 4-Step Stepper Bar */}
       <BuilderStudioHeader
         nextEpisodeId={nextEpisodeId}
@@ -115,6 +135,7 @@ export const EpisodeBuilderView: React.FC = () => {
         activeSubcategory={activeSubcategory}
         activeBuilderStep={activeBuilderStep}
         onSelectStep={setActiveBuilderStep}
+        onFocusStep1={() => setActiveBuilderStep(1)}
         preselectNotice={preselectNotice}
         onDismissPreselectNotice={() => setPreselectNotice(null)}
         savedBannerMessage={savedBannerMessage}
@@ -223,6 +244,13 @@ export const EpisodeBuilderView: React.FC = () => {
         previewMasterFileName={previewMasterFileName}
         title={title}
         onChangeTitle={setTitle}
+        categoryName={tagMap[mainCategoryTagId]?.name}
+        subcategoryName={targetSubcategoryId ? tagMap[targetSubcategoryId]?.name : undefined}
+        categoryEpisodeNo={categoryEpisodeNo}
+        existingCategoryEpisodesCount={existingCategoryEpisodesCount}
+        categoryEpisodeScope={categoryEpisodeScope}
+        onToggleEpisodeScope={handleToggleEpisodeScope}
+        productionTarget={productionTarget}
         publishDate={publishDate}
         onChangePublishDate={setPublishDate}
         publishSlot={publishSlot}
@@ -248,6 +276,25 @@ export const EpisodeBuilderView: React.FC = () => {
         topSimilarityMatch={validationReport.topSimilarityMatch}
         onClose={() => setDuplicateConfirmModalOpen(false)}
         onConfirmSave={performActualSave}
+      />
+
+      {/* Post-Save Success Modal with Action Options & Google Drive File Name */}
+      <EpisodeCreatedSuccessModal
+        episode={newlyCreatedEpisode}
+        isOpen={Boolean(newlyCreatedEpisode)}
+        onClose={() => {
+          setNewlyCreatedEpisode(null);
+          clearAllSlots();
+          setActiveBuilderStep(1);
+        }}
+        onContinueSameCategory={handleContinueNextEpisodeInCategory}
+        onOpenArchive={() => {
+          setNewlyCreatedEpisode(null);
+          clearAllSlots();
+          setActiveTab('MASTER_ARCHIVE');
+        }}
+        computedFootageMap={computedFootageMap}
+        tagMap={tagMap}
       />
     </div>
   );

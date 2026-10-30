@@ -38,32 +38,41 @@ export const DriveImportModalFooter: React.FC<DriveImportModalFooterProps> = ({
     <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-2 text-xs text-slate-600">
         {activeImportMode === 'RECURSIVE' && scanResult ? (
-          selectedRoutingSummary.toStaging > 0 && selectedRoutingSummary.toCategory === 0 ? (
-            <>
-              <Inbox className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                พร้อมนำเข้า <strong className="text-slate-900">{selectedCount}</strong> คลิปเข้าสู่{' '}
-                <strong className="text-amber-800">พื้นที่พักรอจัดหมวดหมู่ (Staging Area)</strong>
-              </span>
-            </>
-          ) : selectedRoutingSummary.toStaging > 0 ? (
-            <>
-              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>
-                พร้อมนำเข้า <strong className="text-slate-900">{selectedCount}</strong> คลิป (เข้าหมวดหมู่{' '}
-                <strong className="text-indigo-700">{selectedRoutingSummary.toCategory}</strong> · พื้นที่พัก{' '}
-                <strong className="text-amber-800">{selectedRoutingSummary.toStaging}</strong>)
-              </span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>
-                พร้อมนำเข้า <strong className="text-slate-900">{selectedCount}</strong> วิดีโอ และสร้าง{' '}
-                <strong className="text-emerald-700">{activeNewTagsCount}</strong> หมวดหมู่ใหม่อัตโนมัติ
-              </span>
-            </>
-          )
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1.5">
+              {selectedRoutingSummary.toStaging > 0 && selectedRoutingSummary.toCategory === 0 ? (
+                <>
+                  <Inbox className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    พร้อมนำเข้า <strong className="text-slate-900">{selectedCount}</strong> คลิปเข้าสู่{' '}
+                    <strong className="text-amber-800">พื้นที่พักรอจัดหมวดหมู่ (Staging Area)</strong>
+                  </span>
+                </>
+              ) : selectedRoutingSummary.toStaging > 0 ? (
+                <>
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>
+                    พร้อมนำเข้า <strong className="text-slate-900">{selectedCount}</strong> คลิป (เข้าหมวดหมู่{' '}
+                    <strong className="text-indigo-700">{selectedRoutingSummary.toCategory}</strong> · พื้นที่พัก{' '}
+                    <strong className="text-amber-800">{selectedRoutingSummary.toStaging}</strong>)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>
+                    พร้อมนำเข้า <strong className="text-slate-900">{selectedCount}</strong> วิดีโอ และสร้าง{' '}
+                    <strong className="text-emerald-700">{activeNewTagsCount}</strong> หมวดหมู่ใหม่อัตโนมัติ
+                  </span>
+                </>
+              )}
+            </div>
+            {scanResult.totalDuplicates > 0 && (
+              <div className="text-[11px] text-slate-500 pl-5">
+                * ข้ามคลิปที่มีในระบบแล้ว {scanResult.totalDuplicates} รายการโดยอัตโนมัติ
+              </div>
+            )}
+          </div>
         ) : (
           <>
             <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
@@ -105,7 +114,9 @@ export const DriveImportModalFooter: React.FC<DriveImportModalFooterProps> = ({
               <Upload className="w-3.5 h-3.5 text-amber-400" />
               <span>
                 {activeImportMode === 'RECURSIVE' && scanResult
-                  ? selectedRoutingSummary.toStaging === selectedCount
+                  ? scanResult.totalDuplicates > 0 && selectedCount === scanResult.totalNewVideos
+                    ? `นำเข้าเฉพาะคลิปใหม่ (${selectedCount} คลิป)`
+                    : selectedRoutingSummary.toStaging === selectedCount
                     ? `นำเข้า ${selectedCount} คลิปเข้าพื้นที่พัก (Staging)`
                     : `นำเข้า ${selectedCount} คลิปตามหมวดหมู่ที่เลือก`
                   : `นำเข้า ${parsedPastedCount} คลิปทันที`}

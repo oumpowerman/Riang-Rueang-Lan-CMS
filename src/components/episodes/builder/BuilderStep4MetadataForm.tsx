@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check, ChevronDown, ChevronUp, CheckCircle2, Folder, Video, Mic, Plus } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, CheckCircle2, Folder, Video, Mic, Plus, Sparkles } from 'lucide-react';
 import { PublishSlot } from '../../../types/episode.types';
 
 interface BuilderStep4MetadataFormProps {
@@ -11,6 +11,13 @@ interface BuilderStep4MetadataFormProps {
   previewMasterFileName: string;
   title: string;
   onChangeTitle: (val: string) => void;
+  categoryName?: string;
+  subcategoryName?: string;
+  categoryEpisodeNo?: number;
+  existingCategoryEpisodesCount?: number;
+  categoryEpisodeScope?: 'MAIN_CATEGORY' | 'SUBCATEGORY';
+  onToggleEpisodeScope?: (scope: 'MAIN_CATEGORY' | 'SUBCATEGORY') => void;
+  productionTarget?: 'MAIN_CATEGORY_VARIETY' | 'SINGLE_SUBCATEGORY_SPECIAL';
   publishDate: string;
   onChangePublishDate: (val: string) => void;
   publishSlot: PublishSlot;
@@ -42,6 +49,13 @@ export const BuilderStep4MetadataForm: React.FC<
   previewMasterFileName,
   title,
   onChangeTitle,
+  categoryName,
+  subcategoryName,
+  categoryEpisodeNo = 1,
+  existingCategoryEpisodesCount = 0,
+  categoryEpisodeScope = 'MAIN_CATEGORY',
+  onToggleEpisodeScope,
+  productionTarget = 'MAIN_CATEGORY_VARIETY',
   publishDate,
   onChangePublishDate,
   publishSlot,
@@ -181,6 +195,58 @@ export const BuilderStep4MetadataForm: React.FC<
               transition={{ duration: 0.24, ease: 'easeOut' }}
               className="pt-4 space-y-4"
             >
+              {/* Series Category Episode Summary Banner */}
+              {categoryName && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-xs text-emerald-950">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 font-bold rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-emerald-600" />
+                      <span>
+                        ซีรีส์:{' '}
+                        {categoryEpisodeScope === 'SUBCATEGORY' && subcategoryName
+                          ? subcategoryName
+                          : categoryName}
+                      </span>
+                    </span>
+                    <span className="text-slate-600">
+                      หมวดนี้มีแล้ว <strong className="font-mono text-slate-900">{existingCategoryEpisodesCount}</strong> ตอน ➔ บันทึกเป็น <strong className="text-emerald-800 font-bold">EP.{categoryEpisodeNo}</strong> ของหมวดนี้
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {productionTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && subcategoryName && onToggleEpisodeScope && (
+                      <div className="inline-flex items-center gap-1 p-0.5 bg-white/90 border border-emerald-200 rounded-lg text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => onToggleEpisodeScope('MAIN_CATEGORY')}
+                          className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                            categoryEpisodeScope === 'MAIN_CATEGORY'
+                              ? 'bg-emerald-700 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          นับตามหมวดหลัก
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onToggleEpisodeScope('SUBCATEGORY')}
+                          className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                            categoryEpisodeScope === 'SUBCATEGORY'
+                              ? 'bg-emerald-700 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          นับตามหมวดย่อย
+                        </button>
+                      </div>
+                    )}
+                    <span className="text-[11px] font-mono text-emerald-700 bg-emerald-100/70 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      Global: {nextEpisodeId}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Core Required Episode Fields in One Clean Row */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-white border border-amber-200/80 rounded-xl p-4">
                 <div className="md:col-span-7">

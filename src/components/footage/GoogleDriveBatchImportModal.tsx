@@ -95,6 +95,10 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                     onCancelScan={driveImport.handleCancelScan}
                     maxDepth={driveImport.maxDepth}
                     onMaxDepthChange={driveImport.setMaxDepth}
+                    syncMode={driveImport.syncMode}
+                    onSyncModeChange={driveImport.setSyncMode}
+                    folderSyncRecord={driveImport.folderSyncRecord}
+                    isLoadingSyncRecord={driveImport.isLoadingSyncRecord}
                     categoryStrategy={driveImport.categoryStrategy}
                     onSelectSubfolderStrategy={driveImport.handleSelectSubfolderStrategy}
                     onSelectAllToStagingStrategy={
@@ -135,6 +139,9 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                         isFolderRoutedToStaging={driveImport.isFolderRoutedToStaging}
                         idPrefix={driveImport.idPrefix}
                         computedFootageCount={driveImport.computedFootageCount}
+                        hideDuplicates={driveImport.hideDuplicates}
+                        onToggleHideDuplicates={driveImport.handleToggleHideDuplicates}
+                        onSelectOnlyNew={driveImport.handleSelectOnlyNew}
                       />
                     </div>
                   )}

@@ -43,6 +43,12 @@ export const DriveImportSuccessView: React.FC<DriveImportSuccessViewProps> = ({
               <span>เข้าพื้นที่พักรอจัดหมวดหมู่ (Staging) {importSuccessData.stagedCount} คลิป</span>
             </span>
           )}
+          {importSuccessData.skippedDuplicatesCount !== undefined &&
+            importSuccessData.skippedDuplicatesCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold">
+                <span>ข้ามคลิปเดิมในระบบ {importSuccessData.skippedDuplicatesCount} รายการ</span>
+              </span>
+            )}
         </div>
 
         {importSuccessData.newTagsCreated > 0 ? (
