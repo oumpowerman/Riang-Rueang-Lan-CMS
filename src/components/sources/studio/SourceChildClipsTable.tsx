@@ -6,10 +6,12 @@ import {
   Sparkles,
   Square,
 } from 'lucide-react';
+import { useCMS } from '../../../context/CMSContext';
 import { ComputedFootage } from '../../../types/footage.types';
 import { RawSource } from '../../../types/source.types';
 import { SystemSettings } from '../../../types/tag.types';
 import { hasRealDriveLink } from '../../../utils/fileNameGenerator';
+import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 import { PaginationBar } from '../../ui/PaginationBar';
 import { StatusBadge } from '../../ui/StatusBadge';
@@ -51,6 +53,8 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
   onChildPageChange,
   onChildPageSizeChange,
 }) => {
+  const { setPreviewFootageId } = useCMS();
+
   const paginatedChildFootages = childFootages.slice(
     (currentChildPage - 1) * childPageSize,
     currentChildPage * childPageSize
@@ -58,10 +62,10 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
 
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold text-slate-700 flex flex-wrap items-center justify-between gap-2">
+      <div className="text-xs font-semibold text-[#554d44] flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <Film className="w-3.5 h-3.5 text-indigo-600" />
-          <span className="font-bold text-slate-800">
+          <Film className="w-3.5 h-3.5 text-[#3b6845]" />
+          <span className="font-bold text-[#2d2926]">
             คลิปย่อย ({childFootages.length})
           </span>
         </div>
@@ -71,9 +75,9 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
             <button
               type="button"
               onClick={() => onSelectTop5Ready(source)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-[#244b2f] bg-[#edf4ed] hover:bg-[#dceadc] border border-[#bad8b9] rounded-lg transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3 h-3 text-indigo-600" />
+              <Sparkles className="w-3 h-3 text-[#3b6845]" />
               <span>เลือก 5 คลิปพร้อมใช้</span>
             </button>
           )}
@@ -88,7 +92,7 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
                   `5 อันดับ ${source.title.slice(0, 32)} คัดช็อตเน้นๆ`
                 )
               }
-              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-white bg-[#3b6845] hover:bg-[#2c5234] rounded-lg shadow-2xs transition-colors cursor-pointer"
             >
               <Rocket className="w-3.5 h-3.5" />
               <span>จัด 5 อันดับ ({selectedIdsForSource.length})</span>
@@ -97,12 +101,13 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
         </div>
       </div>
 
-      <div className="border border-slate-200/90 rounded-xl overflow-x-auto">
+      <div className="border border-[#e8dfd3] rounded-xl overflow-x-auto bg-white">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[11px] font-bold text-slate-600">
+            <tr className="bg-[#faf7f2] border-b border-[#e8dfd3] text-[11px] font-bold text-[#554d44]">
               <th className="py-2 px-3 w-10 text-center"></th>
               <th className="py-2 px-3">#</th>
+              <th className="py-2 px-3">พรีวิว</th>
               <th className="py-2 px-3">รหัส</th>
               <th className="py-2 px-3">เวลา</th>
               <th className="py-2 px-3">ชื่อคลิป</th>
@@ -111,7 +116,7 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
               <th className="py-2 px-3">สถานะ</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-xs">
+          <tbody className="divide-y divide-[#eee6da] text-xs">
             {paginatedChildFootages.map((ft, idx) => {
               const globalIdx = (currentChildPage - 1) * childPageSize + idx + 1;
               const isSelected = selectedIdsForSource.includes(ft.id);
@@ -121,8 +126,8 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
                 <tr
                   key={ft.id}
                   onClick={() => onSelectForTraceability(ft.id)}
-                  className={`hover:bg-slate-50 cursor-pointer transition-colors ${
-                    isSelected ? 'bg-indigo-50/50' : ''
+                  className={`hover:bg-[#faf7f2] cursor-pointer transition-colors ${
+                    isSelected ? 'bg-[#edf4ed]/60' : ''
                   }`}
                 >
                   <td
@@ -134,25 +139,38 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
                   >
                     <button
                       type="button"
-                      className="text-slate-500 hover:text-indigo-600 cursor-pointer"
+                      className="text-[#8c8275] hover:text-[#3b6845] cursor-pointer"
                     >
                       {isSelected ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                        <CheckSquare className="w-4 h-4 text-[#3b6845]" />
                       ) : (
                         <Square className="w-4 h-4" />
                       )}
                     </button>
                   </td>
-                  <td className="py-2 px-3 font-mono tabular-nums text-slate-400">
+                  <td className="py-2 px-3 font-mono tabular-nums text-[#8c8275]">
                     #{globalIdx}
                   </td>
-                  <td className="py-2 px-3 font-mono font-bold text-indigo-700 whitespace-nowrap">
+                  <td
+                    className="py-2 px-3"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <VideoThumbnailPreview
+                      footage={ft}
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewFootageId(ft.id);
+                      }}
+                    />
+                  </td>
+                  <td className="py-2 px-3 font-mono font-bold text-[#244b2f] whitespace-nowrap">
                     {ft.id}
                   </td>
-                  <td className="py-2 px-3 font-mono tabular-nums text-slate-700 whitespace-nowrap">
+                  <td className="py-2 px-3 font-mono tabular-nums text-[#554d44] whitespace-nowrap">
                     {ft.timestampRange || '-'}
                   </td>
-                  <td className="py-2 px-3 font-medium text-slate-900">
+                  <td className="py-2 px-3 font-medium text-[#2d2926]">
                     {ft.title}
                   </td>
                   <td
@@ -164,18 +182,18 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
                         href={ft.driveFileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 font-semibold text-[11px]"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#fdfbf7] text-[#4d4740] hover:bg-[#f4eee4] border border-[#e2d8cb] font-semibold text-[11px]"
                       >
                         <GoogleDriveIcon className="w-3 h-3" />
                         <span>Drive</span>
                       </a>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[11px]">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#f4eee4] text-[#787066] text-[11px]">
                         รอลิงก์
                       </span>
                     )}
                   </td>
-                  <td className="py-2 px-3 font-mono tabular-nums text-slate-600">
+                  <td className="py-2 px-3 font-mono tabular-nums text-[#554d44]">
                     {ft.velocitySummaryText}
                   </td>
                   <td className="py-2 px-3 whitespace-nowrap">

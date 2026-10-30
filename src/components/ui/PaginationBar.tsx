@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 interface PaginationBarProps {
   currentPage: number;
@@ -19,12 +19,17 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
   pageSize,
   onPageChange,
   onPageSizeChange,
-  pageSizeOptions = [6, 12, 24],
+  pageSizeOptions = [6, 12, 24, 48, 96],
   itemLabel = 'รายการ',
   compact = false,
 }) => {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const [jumpInput, setJumpInput] = useState<string>(String(safePage));
+
+  useEffect(() => {
+    setJumpInput(String(safePage));
+  }, [safePage]);
 
   if (totalItems === 0) return null;
 
@@ -47,37 +52,59 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
 
   const pageNumbers = getPageNumbers();
 
+  const handleJumpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = parseInt(jumpInput, 10);
+    if (!Number.isNaN(parsed)) {
+      const target = Math.min(Math.max(1, parsed), totalPages);
+      onPageChange(target);
+      setJumpInput(String(target));
+    } else {
+      setJumpInput(String(safePage));
+    }
+  };
+
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-2.5 ${
+      className={`flex flex-wrap items-center justify-between gap-3 ${
         compact
-          ? 'pt-2.5 border-t border-slate-100 text-[11px]'
-          : 'studio-card border border-slate-200/90 rounded-2xl px-4 py-3 text-xs'
+          ? 'pt-2.5 border-t border-[#E8DFD3] text-[11px]'
+          : 'bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl px-4 py-3 text-xs shadow-2xs'
       }`}
     >
       {/* Left: Item Range + Optional Page Size Picker */}
-      <div className="flex flex-wrap items-center gap-2.5 text-slate-600">
+      <div className="flex flex-wrap items-center gap-2.5 text-[#6E665E]">
         <span className="font-mono tabular-nums">
-          แสดง <span className="font-bold text-slate-900">{startIndex}</span>–
-          <span className="font-bold text-slate-900">{endIndex}</span> จาก{' '}
-          <span className="font-bold text-slate-900">{totalItems}</span> {itemLabel}
+          แสดง{' '}
+          <span className="font-bold text-[#2D2926]">
+            {startIndex.toLocaleString()}
+          </span>
+          –
+          <span className="font-bold text-[#2D2926]">
+            {endIndex.toLocaleString()}
+          </span>{' '}
+          จากทั้งหมด{' '}
+          <span className="font-bold text-[#356140]">
+            {totalItems.toLocaleString()}
+          </span>{' '}
+          {itemLabel}
         </span>
 
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-400">·</span>
-            <label className="text-slate-500 whitespace-nowrap">ต่อหน้า:</label>
+            <span className="text-[#C8BCAE]">·</span>
+            <label className="text-[#787066] whitespace-nowrap">แสดงหน้าละ:</label>
             <select
               value={pageSize}
               onChange={(e) => {
                 onPageSizeChange(Number(e.target.value));
                 onPageChange(1);
               }}
-              className="px-2 py-1 text-xs font-mono font-bold bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg text-slate-900 focus:outline-none cursor-pointer"
+              className="px-2 py-1 text-xs font-mono font-bold bg-[#F5EFE6] hover:bg-[#EDE3D5] border border-[#DFD3C3] rounded-lg text-[#3D3731] focus:outline-none cursor-pointer transition-colors"
             >
               {pageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
-                  {opt}
+                  {opt} {itemLabel}
                 </option>
               ))}
             </select>
@@ -85,15 +112,28 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
         )}
       </div>
 
-      {/* Right: Page Controls */}
+      {/* Right: Page Controls + Direct Jump Input for Large Archives */}
       {totalPages > 1 && (
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* First Page Button */}
+          {!compact && totalPages > 4 && (
+            <button
+              type="button"
+              disabled={safePage <= 1}
+              onClick={() => onPageChange(1)}
+              className="inline-flex items-center justify-center w-7 h-7 font-semibold text-[#5C544C] bg-white border border-[#E2D8C9] hover:bg-[#F5EFE6] hover:border-[#C8B9A6] disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors cursor-pointer"
+              title="หน้าแรกสุด (หน้า 1)"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <motion.button
             type="button"
             whileTap={{ scale: 0.94 }}
             disabled={safePage <= 1}
             onClick={() => onPageChange(safePage - 1)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-400 disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-[#4D4740] bg-white border border-[#E2D8C9] hover:bg-[#F5EFE6] hover:border-[#C8B9A6] disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors cursor-pointer"
             title="หน้าก่อนหน้า"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -106,7 +146,7 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
                 return (
                   <span
                     key={pageItem}
-                    className="px-1.5 text-slate-400 font-mono select-none"
+                    className="px-1.5 text-[#9C9286] font-mono select-none"
                   >
                     …
                   </span>
@@ -121,10 +161,10 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
                   whileHover={{ y: -1 }}
                   whileTap={{ scale: 0.92 }}
                   onClick={() => onPageChange(pageItem)}
-                  className={`min-w-[30px] h-7 px-2 font-mono font-bold rounded-xl transition-colors cursor-pointer ${
+                  className={`min-w-[30px] h-7 px-2 font-mono font-bold rounded-xl transition-colors cursor-pointer border ${
                     isCurrent
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 border border-slate-200 hover:border-indigo-400'
+                      ? 'bg-[#E6F0E6] text-[#244B2F] border-[#9BBF99] shadow-2xs'
+                      : 'bg-white text-[#5C544C] border-[#E2D8C9] hover:bg-[#FAF6F0] hover:border-[#C8B9A6]'
                   }`}
                 >
                   {pageItem}
@@ -138,12 +178,50 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
             whileTap={{ scale: 0.94 }}
             disabled={safePage >= totalPages}
             onClick={() => onPageChange(safePage + 1)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-400 disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 font-semibold text-[#4D4740] bg-white border border-[#E2D8C9] hover:bg-[#F5EFE6] hover:border-[#C8B9A6] disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors cursor-pointer"
             title="หน้าถัดไป"
           >
             {!compact && <span>ถัดไป</span>}
             <ChevronRight className="w-3.5 h-3.5" />
           </motion.button>
+
+          {/* Last Page Button */}
+          {!compact && totalPages > 4 && (
+            <button
+              type="button"
+              disabled={safePage >= totalPages}
+              onClick={() => onPageChange(totalPages)}
+              className="inline-flex items-center justify-center w-7 h-7 font-semibold text-[#5C544C] bg-white border border-[#E2D8C9] hover:bg-[#F5EFE6] hover:border-[#C8B9A6] disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors cursor-pointer"
+              title={`หน้าสุดท้าย (หน้า ${totalPages})`}
+            >
+              <ChevronsRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Direct Jump-to-Page Form for multi-page archives */}
+          {!compact && totalPages > 3 && (
+            <form
+              onSubmit={handleJumpSubmit}
+              className="flex items-center gap-1 pl-1.5 ml-0.5 border-l border-[#E8DFD3]"
+            >
+              <span className="text-[11px] text-[#787066] whitespace-nowrap">
+                ไปหน้า:
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={jumpInput}
+                onChange={(e) => setJumpInput(e.target.value)}
+                onBlur={handleJumpSubmit}
+                className="w-12 h-7 px-1.5 text-center font-mono font-bold text-xs bg-[#F5EFE6] border border-[#DFD3C3] rounded-lg text-[#2D2926] focus:outline-none focus:border-[#9BBF99] focus:bg-white transition-colors"
+                title={`พิมพ์เลขหน้าระหว่าง 1 ถึง ${totalPages} แล้วกด Enter`}
+              />
+              <span className="text-[11px] font-mono text-[#8C8277]">
+                /{totalPages}
+              </span>
+            </form>
+          )}
         </div>
       )}
     </div>

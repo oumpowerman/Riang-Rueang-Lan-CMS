@@ -190,12 +190,13 @@ export function useEpisodeBuilder() {
   // Right Pool Filter & Pagination State
   const [allowCrossCategory, setAllowCrossCategory] = useState(false);
   const [poolFilterGroupId, setPoolFilterGroupId] = useState<string>('ALL');
+  const [poolSubcategoryFilterId, setPoolSubcategoryFilterId] = useState<string | null>(null);
   const [poolQuickFilter, setPoolQuickFilter] =
     useState<PoolQuickFilter>('AVAILABLE_USABLE');
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerSortBy, setPickerSortBy] = useState<PickerSortBy>('REST_DAYS_DESC');
   const [pickerPage, setPickerPage] = useState(1);
-  const [pickerPageSize, setPickerPageSize] = useState(5);
+  const [pickerPageSize, setPickerPageSize] = useState(6);
 
   // Flexible Episode Scope: 'MAIN_CATEGORY' (Tier 1) or 'SUBCATEGORY' (Tier 2)
   const [categoryEpisodeScope, setCategoryEpisodeScope] = useState<'MAIN_CATEGORY' | 'SUBCATEGORY'>('MAIN_CATEGORY');
@@ -349,6 +350,7 @@ export function useEpisodeBuilder() {
       setSelectedGroupId(grpId);
     }
     setMainCategoryTagId(tagId);
+    setPoolSubcategoryFilterId(null);
     setProductionTarget('MAIN_CATEGORY_VARIETY');
     setTargetSubcategoryId(null);
     setAllowCrossCategory(false);
@@ -478,7 +480,7 @@ export function useEpisodeBuilder() {
         };
       });
       setRankings(nextRankings);
-      setActiveBuilderStep(3);
+      setActiveBuilderStep(2);
       setPreselectNotice(
         `ส่งช็อตที่เลือกจากไลฟ์สด (${customPicked.length} ฟุต) เข้าช่องจัด 5 อันดับเรียบร้อยแล้ว!`
       );
@@ -503,7 +505,7 @@ export function useEpisodeBuilder() {
       };
     });
     setRankings(nextRankings);
-    setActiveBuilderStep(3);
+    setActiveBuilderStep(2);
     setPreselectNotice(
       `ดึงวัตถุดิบหมวด #${targetTag?.name || tagId} มาจัดเรียงช่องอันดับ 1–5 ครบ ${
         autoPicked.length
@@ -526,6 +528,7 @@ export function useEpisodeBuilder() {
     mainCategoryTagId,
     allowCrossCategory,
     poolFilterGroupId,
+    poolSubcategoryFilterId,
     poolQuickFilter,
     pickerSearch,
     pickerSortBy,
@@ -694,6 +697,11 @@ export function useEpisodeBuilder() {
         if (!belongsToSelectedPoolGroup) return false;
       }
 
+      // Quick subcategory chip filter (e.g. ตำรวจ, ทหาร, นักเรียน)
+      if (poolSubcategoryFilterId) {
+        if (!ft.tags.includes(poolSubcategoryFilterId)) return false;
+      }
+
       if (poolQuickFilter === 'AVAILABLE_USABLE') {
         const isUsable =
           ft.cooldownStatus === 'NEW_UNTOUCHED' || ft.cooldownStatus === 'READY_FRESH';
@@ -737,6 +745,7 @@ export function useEpisodeBuilder() {
     computedFootage,
     allowCrossCategory,
     poolFilterGroupId,
+    poolSubcategoryFilterId,
     productionTarget,
     targetSubcategoryId,
     currentSubcategories,
@@ -898,6 +907,8 @@ export function useEpisodeBuilder() {
     setAllowCrossCategory,
     poolFilterGroupId,
     setPoolFilterGroupId,
+    poolSubcategoryFilterId,
+    setPoolSubcategoryFilterId,
     poolQuickFilter,
     setPoolQuickFilter,
     pickerSearch,

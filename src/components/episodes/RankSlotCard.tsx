@@ -5,7 +5,6 @@ import {
   ArrowUp,
   GripVertical,
   History,
-  MessageSquare,
   Trash2,
   Video,
   Scissors,
@@ -16,6 +15,7 @@ import {
 import { useCMS } from '../../context/CMSContext';
 import { EpisodeRankingSlot } from '../../types/episode.types';
 import { ComputedFootage } from '../../types/footage.types';
+import { VideoThumbnailPreview } from '../footage/VideoThumbnailPreview';
 import { StatusBadge } from '../ui/StatusBadge';
 import { TagPill } from '../ui/TagPill';
 
@@ -50,7 +50,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
   onSlotDragStart,
   onDropItemOnSlot,
 }) => {
-  const { tagMap, settings, setTraceabilityFootageId } = useCMS();
+  const { tagMap, settings, setTraceabilityFootageId, setPreviewFootageId } = useCMS();
   const [isScriptExpanded, setIsScriptExpanded] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -104,31 +104,31 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
       onClick={onActivatePicker}
       className={`rounded-2xl border p-3.5 transition-all cursor-pointer select-none ${
         isDragOver
-          ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/30 scale-[1.01]'
+          ? 'border-[#8eb58c] bg-[#edf4ed] ring-2 ring-[#a4c5a1]/40 scale-[1.01]'
           : isActivePickerSlot
-          ? 'bg-white border-slate-900 ring-2 ring-slate-900/10 shadow-xs'
+          ? 'bg-white border-[#3b6845] ring-2 ring-[#a4c5a1]/40 shadow-xs'
           : footage
-          ? 'bg-white border-slate-200/90 hover:border-slate-400'
-          : 'bg-slate-50/70 border-dashed border-slate-300 hover:border-slate-400'
+          ? 'bg-[#fdfbf7] border-[#e8dfd3] hover:border-[#bad8b9]'
+          : 'bg-[#faf7f2]/80 border-dashed border-[#e2d8cb] hover:border-[#bad8b9]'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        {/* Left: Drag Handle + Rank Badge + Footage Info */}
+        {/* Left: Drag Handle + Rank Badge + Thumbnail Preview + Footage Info */}
         <div className="flex items-start gap-2.5 flex-1 min-w-0">
           <div
-            className="pt-2 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing shrink-0"
+            className="pt-2 text-[#9a9186] hover:text-[#4d4740] cursor-grab active:cursor-grabbing shrink-0"
             title="ลากเพื่อสลับอันดับขึ้น-ลง"
           >
             <GripVertical className="w-4 h-4" />
           </div>
 
           <div
-            className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 font-mono ${
+            className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 font-mono border ${
               slot.rank === 1
-                ? 'bg-amber-500 text-slate-950 font-black shadow-2xs'
+                ? 'bg-[#fef4e8] text-[#7d5622] border-[#f0dfc8] font-black shadow-xs'
                 : footage
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-200 text-slate-700'
+                ? 'bg-[#edf4ed] text-[#2b5435] border-[#cbe0cb] font-extrabold'
+                : 'bg-[#f3ede3] text-[#716960] border-[#e2d9cd]'
             }`}
           >
             <span className="text-[9px] uppercase tracking-wider opacity-80 leading-none">
@@ -140,25 +140,35 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
           </div>
 
           {footage ? (
-            <div className="space-y-1.5 flex-1 min-w-0">
-              <div className="flex flex-wrap items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <span className="font-extrabold text-slate-900">{footage.id}</span>
-                  <span className="text-slate-300">·</span>
-                  <span className="text-slate-500 text-[11px] inline-flex items-center gap-1">
-                    {footage.ingestionFlow === 'DIRECT_1_TO_1' ? (
-                      <>
-                        <Video className="w-3 h-3 text-indigo-500" />
-                        <span>1:1</span>
-                      </>
-                    ) : (
-                      <>
-                        <Scissors className="w-3 h-3 text-sky-500" />
-                        <span>{footage.sourceId}</span>
-                      </>
-                    )}
-                  </span>
-                </div>
+            <>
+              <VideoThumbnailPreview
+                footage={footage}
+                size="md"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewFootageId(footage.id);
+                }}
+              />
+
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <span className="font-extrabold text-[#2d2926]">{footage.id}</span>
+                    <span className="text-[#c7bdb2]">·</span>
+                    <span className="text-[#787066] text-[11px] inline-flex items-center gap-1">
+                      {footage.ingestionFlow === 'DIRECT_1_TO_1' ? (
+                        <>
+                          <Video className="w-3 h-3 text-[#4a634b]" />
+                          <span>1:1</span>
+                        </>
+                      ) : (
+                        <>
+                          <Scissors className="w-3 h-3 text-[#8a632b]" />
+                          <span>{footage.sourceId}</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
 
                 <StatusBadge
                   status={footage.cooldownStatus}
@@ -169,7 +179,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
                 />
               </div>
 
-              <h4 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-1">
+              <h4 className="text-xs sm:text-sm font-bold text-[#2d2926] line-clamp-1">
                 {footage.title}
               </h4>
 
@@ -180,8 +190,8 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
                   ))}
                 </div>
 
-                <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-500">
-                  <Clock className="w-3 h-3 text-slate-400" />
+                <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[#787066]">
+                  <Clock className="w-3 h-3 text-[#9a9186]" />
                   <span>
                     {footage.daysSinceLastUsed !== null
                       ? `พัก ${footage.daysSinceLastUsed} วัน`
@@ -190,16 +200,17 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
                 </span>
               </div>
             </div>
+            </>
           ) : (
             <div className="flex-1 py-1">
-              <div className="text-xs sm:text-sm font-bold text-slate-600">
-                ว่าง — ลากฟุตเทจมาวางที่นี่ หรือกดปุ่ม [{slot.rank}] จากคลังขวา
+              <div className="text-xs sm:text-sm font-bold text-[#554d44]">
+                ว่าง — ลากฟุตเทจมาวางที่นี่ หรือกดปุ่ม [{slot.rank}] จากคลังด้านขวา
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-[#8c8378] mt-0.5">
                 {slot.rank === 1 ? (
-                  <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
-                    <Star className="w-3 h-3 text-amber-500 shrink-0" />
-                    <span>อันดับ 1 แนะนำให้ใช้ช็อตที่พีคและฮาที่สุดของคลิป</span>
+                  <span className="inline-flex items-center gap-1 text-[#855621] font-medium">
+                    <Star className="w-3 h-3 text-[#b37731] shrink-0" />
+                    <span>อันดับ 1 แนะนำช็อตที่พีคและดึงดูดสายตาที่สุด</span>
                   </span>
                 ) : (
                   `เลือกฟุตเทจสำหรับอันดับที่ ${slot.rank}`
@@ -218,7 +229,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
             type="button"
             disabled={!canMoveUp}
             onClick={() => onMoveRank('UP')}
-            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg disabled:opacity-30"
+            className="p-1.5 text-[#787066] hover:text-[#2d2926] hover:bg-[#f4eee4] rounded-lg disabled:opacity-30 cursor-pointer"
             title="เลื่อนขึ้น"
           >
             <ArrowUp className="w-3.5 h-3.5" />
@@ -227,7 +238,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
             type="button"
             disabled={!canMoveDown}
             onClick={() => onMoveRank('DOWN')}
-            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg disabled:opacity-30"
+            className="p-1.5 text-[#787066] hover:text-[#2d2926] hover:bg-[#f4eee4] rounded-lg disabled:opacity-30 cursor-pointer"
             title="เลื่อนลง"
           >
             <ArrowDown className="w-3.5 h-3.5" />
@@ -238,10 +249,10 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsScriptExpanded((prev) => !prev)}
-                className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-lg border transition-colors cursor-pointer ${
                   isScriptExpanded || slot.mascotScript
-                    ? 'bg-amber-50 text-amber-900 border-amber-200'
-                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:text-slate-900'
+                    ? 'bg-[#fef8ed] text-[#7d5622] border-[#f0e2ca]'
+                    : 'bg-[#f4eee4] text-[#554d44] border-[#e2d9cd] hover:text-[#2d2926]'
                 }`}
                 title="เปิด/ปิดช่องเขียนบทพากย์มาสคอตของอันดับนี้"
               >
@@ -252,7 +263,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
               <button
                 type="button"
                 onClick={() => setTraceabilityFootageId(footage.id)}
-                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                className="p-1.5 text-[#787066] hover:text-[#2d2926] hover:bg-[#f4eee4] rounded-lg cursor-pointer"
                 title="ดูประวัติการใช้งานฟุตนี้"
               >
                 <History className="w-3.5 h-3.5" />
@@ -261,7 +272,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
               <button
                 type="button"
                 onClick={onClearSlot}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                className="p-1.5 text-[#9a9186] hover:text-[#a34c3c] hover:bg-[#fdf3ec] rounded-lg cursor-pointer"
                 title="นำฟุตเทจออกจากอันดับนี้"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -271,7 +282,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
         </div>
       </div>
 
-      {/* Collapsible Mascot Script Input (Collapsed by Default to prevent clutter) */}
+      {/* Collapsible Mascot Script Input */}
       <AnimatePresence initial={false}>
         {isScriptExpanded && footage && (
           <motion.div
@@ -282,9 +293,9 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
             className="overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mt-2.5 pt-2.5 border-t border-slate-100">
-              <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 mb-1">
-                <Mic className="w-3.5 h-3.5 text-amber-600" />
+            <div className="mt-2.5 pt-2.5 border-t border-[#ede7dc]">
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-[#47413a] mb-1">
+                <Mic className="w-3.5 h-3.5 text-[#b37731]" />
                 <span>
                   บทพากย์มาสคอต ({settings.defaultMascotName}) สำหรับอันดับที่{' '}
                   {slot.rank}:
@@ -299,7 +310,7 @@ export const RankSlotCard: React.FC<RankSlotCardProps> = ({
                     ? `ไกด์มุก: ${footage.mascotNotes}`
                     : `พิมพ์บทพากย์มาสคอตเกริ่นนำก่อนเข้าคลิปอันดับที่ ${slot.rank}...`
                 }
-                className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-slate-900"
+                className="w-full px-3 py-1.5 text-xs bg-[#faf7f2] border border-[#e8dfd3] rounded-lg focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
               />
             </div>
           </motion.div>

@@ -23,12 +23,12 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #CBD5E1 transparent;
+    scrollbar-color: #D7CEC7 transparent;
   }
 
   *::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
   }
 
   *::-webkit-scrollbar-track {
@@ -36,12 +36,12 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #CBD5E1;
+    background-color: #D7CEC7;
     border-radius: 9999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #94A3B8;
+    background-color: #C4B4A0;
   }
 
   html {
@@ -93,3 +93,31 @@
     0 12px 24px -4px rgba(15, 23, 42, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 1);
 }
+
+/* Slim elegant pastel earth-tone scrollbar (4px, soft sand/cream) */
+.scrollbar-thin,
+.scrollbar-earth {
+  scrollbar-width: thin;
+  scrollbar-color: #D7CEC7 rgba(245, 240, 232, 0.45);
+}
+.scrollbar-thin::-webkit-scrollbar,
+.scrollbar-earth::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track,
+.scrollbar-earth::-webkit-scrollbar-track {
+  background: rgba(245, 240, 232, 0.45);
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb,
+.scrollbar-earth::-webkit-scrollbar-thumb {
+  background-color: #D7CEC7;
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.scrollbar-earth::-webkit-scrollbar-thumb:hover {
+  background-color: #C4B4A0;
+}
+
+

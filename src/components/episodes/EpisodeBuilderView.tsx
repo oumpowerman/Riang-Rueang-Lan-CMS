@@ -1,11 +1,9 @@
 import React from 'react';
 import { CollisionWarningBanner } from './CollisionWarningBanner';
-import { SmartMixRecipeSelector } from './SmartMixRecipeSelector';
 import { BuilderStep1CategoryTarget } from './builder/BuilderStep1CategoryTarget';
-import { BuilderStep3RankingWorkspace } from './builder/BuilderStep3RankingWorkspace';
+import { BuilderStep2RankingWorkspace } from './builder/BuilderStep2RankingWorkspace';
 import { BuilderStep4MetadataForm } from './builder/BuilderStep4MetadataForm';
 import { BuilderStudioHeader } from './builder/BuilderStudioHeader';
-import { BuilderCompactStickyBar } from './builder/BuilderCompactStickyBar';
 import { DiversityCollisionBanner } from './builder/DiversityCollisionBanner';
 import { DuplicateEpisodeConfirmModal } from './builder/DuplicateEpisodeConfirmModal';
 import { EpisodeCreatedSuccessModal } from './builder/EpisodeCreatedSuccessModal';
@@ -46,7 +44,6 @@ export const EpisodeBuilderView: React.FC = () => {
     handleSelectSubcategory,
 
     activeRecipe,
-    selectedFootageObjects,
     applyRecipeForCategory,
 
     duplicateSubcategories,
@@ -69,6 +66,8 @@ export const EpisodeBuilderView: React.FC = () => {
     setAllowCrossCategory,
     poolFilterGroupId,
     setPoolFilterGroupId,
+    poolSubcategoryFilterId,
+    setPoolSubcategoryFilterId,
     poolQuickFilter,
     setPoolQuickFilter,
     pickerSearch,
@@ -114,28 +113,13 @@ export const EpisodeBuilderView: React.FC = () => {
 
   return (
     <div className="space-y-3.5 relative">
-      {/* Full Page Sticky Compact Bar (slides down when scrolling anywhere down the page) */}
-      <BuilderCompactStickyBar
-        nextEpisodeId={nextEpisodeId}
-        selectedCount={selectedFootageIds.length}
-        activeGroup={activeGroup}
-        activeCategoryStat={activeCategoryStat}
-        productionTarget={productionTarget}
-        activeSubcategory={activeSubcategory}
-        onFocusStep1={() => setActiveBuilderStep(1)}
-      />
-
-      {/* Studio Header & Interactive 4-Step Stepper Bar */}
+      {/* Studio Header & Interactive 3-Step Stepper Bar */}
       <BuilderStudioHeader
         nextEpisodeId={nextEpisodeId}
         selectedCount={selectedFootageIds.length}
-        activeGroup={activeGroup}
         activeCategoryStat={activeCategoryStat}
-        productionTarget={productionTarget}
-        activeSubcategory={activeSubcategory}
         activeBuilderStep={activeBuilderStep}
         onSelectStep={setActiveBuilderStep}
-        onFocusStep1={() => setActiveBuilderStep(1)}
         preselectNotice={preselectNotice}
         onDismissPreselectNotice={() => setPreselectNotice(null)}
         savedBannerMessage={savedBannerMessage}
@@ -147,7 +131,6 @@ export const EpisodeBuilderView: React.FC = () => {
         isOpen={activeBuilderStep === 1}
         onToggle={() => setActiveBuilderStep(1)}
         onNextStep={() => setActiveBuilderStep(2)}
-        onSkipToStep3={() => setActiveBuilderStep(3)}
         groupStockStats={groupStockStats}
         selectedGroupId={selectedGroupId}
         activeGroup={activeGroup}
@@ -165,24 +148,9 @@ export const EpisodeBuilderView: React.FC = () => {
         onSelectVarietyMode={handleSelectVarietyMode}
         onSelectSoloMode={handleSelectSoloMode}
         onSelectSubcategory={handleSelectSubcategory}
-        onOpenStatusRuleModal={() => setIsStatusRuleModalOpen(true)}
       />
 
-      {/* Step 2: 1-Click Smart Mix Recipe Selector */}
-      <SmartMixRecipeSelector
-        isOpen={activeBuilderStep === 2}
-        onToggle={() => setActiveBuilderStep(2)}
-        onSkipToStep3={() => setActiveBuilderStep(3)}
-        selectedFootages={selectedFootageObjects}
-        activeRecipe={activeRecipe}
-        activeCategoryStat={activeCategoryStat}
-        onSelectRecipeAndMix={(recipe) => {
-          applyRecipeForCategory(mainCategoryTagId, recipe);
-          setActiveBuilderStep(3);
-        }}
-      />
-
-      {/* Diversity & Collision Guard Banners (Only visible when actual issues exist) */}
+      {/* Diversity & Collision Guard Banners */}
       <DiversityCollisionBanner
         duplicateSubcategories={duplicateSubcategories}
       />
@@ -191,11 +159,11 @@ export const EpisodeBuilderView: React.FC = () => {
         selectedCount={selectedFootageIds.length}
       />
 
-      {/* Step 3: 5-Slot Ranking Workspace & Draggable Footage Pool */}
-      <BuilderStep3RankingWorkspace
-        isOpen={activeBuilderStep === 3}
-        onToggle={() => setActiveBuilderStep(3)}
-        onNextStep={() => setActiveBuilderStep(4)}
+      {/* Step 2: Merged 5-Slot Ranking Board & Draggable Candidate Pool with Quick Recipe Formula Bar */}
+      <BuilderStep2RankingWorkspace
+        isOpen={activeBuilderStep === 2}
+        onToggle={() => setActiveBuilderStep(2)}
+        onNextStep={() => setActiveBuilderStep(3)}
         rankings={rankings}
         computedFootageMap={computedFootageMap}
         selectedFootageIds={selectedFootageIds}
@@ -213,6 +181,10 @@ export const EpisodeBuilderView: React.FC = () => {
         activeCategoryStat={activeCategoryStat}
         productionTarget={productionTarget}
         activeSubcategory={activeSubcategory}
+        currentSubcategories={currentSubcategories}
+        poolSubcategoryFilterId={poolSubcategoryFilterId}
+        onChangePoolSubcategoryFilterId={setPoolSubcategoryFilterId}
+        computedFootage={computedFootage}
         liveCategoryStock={liveCategoryStock}
         allowCrossCategory={allowCrossCategory}
         onToggleCrossCategory={() => setAllowCrossCategory((prev) => !prev)}
@@ -233,12 +205,14 @@ export const EpisodeBuilderView: React.FC = () => {
         onPageSizeChange={setPickerPageSize}
         tagMap={tagMap}
         settings={settings}
+        activeRecipe={activeRecipe}
+        onApplyRecipe={(recipe) => applyRecipeForCategory(mainCategoryTagId, recipe)}
       />
 
-      {/* Step 4: Auto-Generated Headline, Schedule & Save Form */}
+      {/* Step 3: Metadata Form & Save Episode */}
       <BuilderStep4MetadataForm
-        isOpen={activeBuilderStep === 4}
-        onToggle={() => setActiveBuilderStep(4)}
+        isOpen={activeBuilderStep === 3}
+        onToggle={() => setActiveBuilderStep(3)}
         nextEpisodeId={nextEpisodeId}
         selectedCount={selectedFootageIds.length}
         previewMasterFileName={previewMasterFileName}
@@ -278,7 +252,7 @@ export const EpisodeBuilderView: React.FC = () => {
         onConfirmSave={performActualSave}
       />
 
-      {/* Post-Save Success Modal with Action Options & Google Drive File Name */}
+      {/* Post-Save Success Modal */}
       <EpisodeCreatedSuccessModal
         episode={newlyCreatedEpisode}
         isOpen={Boolean(newlyCreatedEpisode)}

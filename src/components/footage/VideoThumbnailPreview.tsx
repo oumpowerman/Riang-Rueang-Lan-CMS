@@ -13,7 +13,7 @@ interface VideoThumbnailPreviewProps {
     'id' | 'title' | 'driveFileUrl' | 'originalUrl' | 'thumbnailUrl' | 'timestampRange' | 'durationSec'
   >;
   onClick?: (e: React.MouseEvent) => void;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
 }
 
 export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
@@ -45,7 +45,9 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
   };
 
   const sizeClasses =
-    size === 'sm'
+    size === 'xs'
+      ? 'w-12 sm:w-14 aspect-video rounded-lg'
+      : size === 'sm'
       ? 'w-16 sm:w-20 aspect-video rounded-lg'
       : 'w-24 sm:w-28 aspect-video rounded-xl';
 
@@ -60,7 +62,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
           ? 'คลิกเพื่อเปิดดูวิดีโอตัวอย่าง (Quick Player)'
           : 'ดูรายละเอียดวิดีโอตัวอย่าง'
       }
-      className={`group/thumb relative ${sizeClasses} overflow-hidden shrink-0 border border-slate-200/90 bg-gradient-to-br from-indigo-50/80 via-slate-50 to-sky-50/80 hover:border-indigo-400 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400`}
+      className={`group/thumb relative ${sizeClasses} overflow-hidden shrink-0 border border-[#e2d8cb] bg-gradient-to-br from-[#faf7f2] via-[#fdfbf7] to-[#edf4ed]/90 hover:border-[#3b6845] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#3b6845]/40 shadow-2xs`}
     >
       {canShowImage ? (
         <img
@@ -72,42 +74,78 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
           className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-200"
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-0.5 text-slate-400">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-0.5 text-[#8c8275]">
           {preview.provider === 'DRIVE' ? (
-            <GoogleDriveIcon className={size === 'sm' ? 'w-4 h-4 opacity-80' : 'w-5 h-5 opacity-85'} />
+            <GoogleDriveIcon
+              className={
+                size === 'xs'
+                  ? 'w-3.5 h-3.5 opacity-80'
+                  : size === 'sm'
+                  ? 'w-4 h-4 opacity-80'
+                  : 'w-5 h-5 opacity-85'
+              }
+            />
           ) : preview.provider === 'YOUTUBE' ? (
-            <Youtube className={size === 'sm' ? 'w-4 h-4 text-rose-500' : 'w-5 h-5 text-rose-500'} />
+            <Youtube
+              className={
+                size === 'xs'
+                  ? 'w-3.5 h-3.5 text-[#c95b48]'
+                  : size === 'sm'
+                  ? 'w-4 h-4 text-[#c95b48]'
+                  : 'w-5 h-5 text-[#c95b48]'
+              }
+            />
           ) : (
-            <Film className={size === 'sm' ? 'w-4 h-4 text-slate-400' : 'w-5 h-5 text-slate-400'} />
+            <Film
+              className={
+                size === 'xs'
+                  ? 'w-3.5 h-3.5 text-[#8c8275]'
+                  : size === 'sm'
+                  ? 'w-4 h-4 text-[#8c8275]'
+                  : 'w-5 h-5 text-[#8c8275]'
+              }
+            />
           )}
         </div>
       )}
 
-      {/* Subtle hover dark overlay + centered Play icon */}
-      <div className="absolute inset-0 bg-slate-900/15 group-hover/thumb:bg-slate-900/35 transition-colors flex items-center justify-center">
+      {/* Subtle warm earth overlay + centered Play icon */}
+      <div className="absolute inset-0 bg-[#4d4740]/10 group-hover/thumb:bg-[#3b6845]/25 transition-colors flex items-center justify-center">
         <span
           className={`${
-            size === 'sm' ? 'w-5 h-5' : 'w-6 h-6'
-          } rounded-full bg-white/95 text-indigo-600 shadow-sm flex items-center justify-center group-hover/thumb:scale-110 group-hover/thumb:bg-indigo-600 group-hover/thumb:text-white transition-all`}
+            size === 'xs'
+              ? 'w-4 h-4'
+              : size === 'sm'
+              ? 'w-5 h-5'
+              : 'w-6 h-6'
+          } rounded-full bg-[#fdfbf7]/95 text-[#3b6845] border border-[#bad8b9] shadow-2xs flex items-center justify-center group-hover/thumb:scale-110 group-hover/thumb:bg-[#3b6845] group-hover/thumb:text-white transition-all`}
         >
-          <Play className={size === 'sm' ? 'w-2.5 h-2.5 fill-current ml-0.5' : 'w-3 h-3 fill-current ml-0.5'} />
+          <Play
+            className={
+              size === 'xs'
+                ? 'w-2 h-2 fill-current ml-0.5'
+                : size === 'sm'
+                ? 'w-2.5 h-2.5 fill-current ml-0.5'
+                : 'w-3 h-3 fill-current ml-0.5'
+            }
+          />
         </span>
       </div>
 
       {/* Top-left mini provider indicator when image is loaded */}
-      {canShowImage && preview.provider !== 'NONE' && (
-        <span className="absolute top-1 left-1 p-0.5 rounded bg-white/90 shadow-2xs backdrop-blur-xs">
+      {canShowImage && preview.provider !== 'NONE' && size !== 'xs' && (
+        <span className="absolute top-1 left-1 p-0.5 rounded bg-[#fdfbf7]/95 border border-[#e8dfd3] shadow-2xs backdrop-blur-xs">
           {preview.provider === 'DRIVE' ? (
             <GoogleDriveIcon className="w-2.5 h-2.5" />
           ) : (
-            <Youtube className="w-2.5 h-2.5 text-rose-600" />
+            <Youtube className="w-2.5 h-2.5 text-[#c95b48]" />
           )}
         </span>
       )}
 
-      {/* Bottom-right duration / timestamp pill */}
+      {/* Bottom-right duration / timestamp pill in light pastel earth tone */}
       {durationBadge && size === 'md' && (
-        <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded bg-slate-900/75 text-white font-mono text-[9px] font-bold leading-tight tabular-nums backdrop-blur-xs">
+        <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded bg-[#fdfbf7]/95 text-[#2d2926] border border-[#e2d8cb] font-mono text-[9px] font-bold leading-tight tabular-nums shadow-2xs">
           {durationBadge}
         </span>
       )}

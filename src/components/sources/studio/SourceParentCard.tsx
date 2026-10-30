@@ -7,10 +7,12 @@ import {
   Rocket,
   Zap,
 } from 'lucide-react';
+import { useCMS } from '../../../context/CMSContext';
 import { ComputedFootage } from '../../../types/footage.types';
 import { RawSource } from '../../../types/source.types';
 import { CategoryTag, SystemSettings } from '../../../types/tag.types';
 import { formatThaiDate } from '../../../utils/fileNameGenerator';
+import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { TagPill } from '../../ui/TagPill';
 import { SourceTimelineBar } from '../SourceTimelineBar';
 import { SourceChildClipsTable } from './SourceChildClipsTable';
@@ -58,6 +60,8 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
   onChildPageChange,
   onChildPageSizeChange,
 }) => {
+  const { setPreviewFootageId } = useCMS();
+
   const childFootages = source.splitFootageIds
     .map((fid) => computedFootageMap[fid])
     .filter(Boolean);
@@ -78,63 +82,85 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
     )
   );
 
+  // Representative preview metadata for the parent live source
+  const sourcePreviewTarget = {
+    id: source.id,
+    title: source.title,
+    originalUrl: source.originalUrl || '',
+    driveFileUrl: childFootages[0]?.driveFileUrl || '',
+    thumbnailUrl: childFootages[0]?.thumbnailUrl || '',
+    timestampRange: source.totalDuration || null,
+    durationSec: undefined,
+  };
+
   return (
-    <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
+    <div className="bg-[#fdfbf7] border border-[#e8dfd3] rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
       {/* Source Top Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="font-mono font-bold text-indigo-700 text-xs bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/70">
-              {source.id}
-            </span>
-            <span className="font-semibold text-slate-700">{source.platform}</span>
-            <span aria-hidden="true">·</span>
-            <span className="truncate">{source.channelOrCreator}</span>
-            {source.totalDuration && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums">{source.totalDuration}</span>
-              </>
-            )}
-            <span aria-hidden="true">·</span>
-            <span>{formatThaiDate(source.createdAt)}</span>
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 border-b border-[#eee6da] pb-3.5">
+        <div className="flex items-start gap-3.5 min-w-0 flex-1">
+          <VideoThumbnailPreview
+            footage={sourcePreviewTarget}
+            size="md"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewFootageId(source.id);
+            }}
+          />
 
-            {isUnderMined && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-bold text-[11px]">
-                <AlertTriangle className="w-3 h-3 text-amber-600" />
-                <span>หั่นน้อย ({childFootages.length})</span>
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[#787066]">
+              <span className="font-mono font-bold text-[#244b2f] text-xs bg-[#edf4ed] px-2 py-0.5 rounded-md border border-[#bad8b9]">
+                {source.id}
               </span>
+              <span className="font-semibold text-[#4d4740]">{source.platform}</span>
+              <span aria-hidden="true">·</span>
+              <span className="truncate">{source.channelOrCreator}</span>
+              {source.totalDuration && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-mono tabular-nums">{source.totalDuration}</span>
+                </>
+              )}
+              <span aria-hidden="true">·</span>
+              <span>{formatThaiDate(source.createdAt)}</span>
+
+              {isUnderMined && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#fef8ed] border border-[#f0e2ca] text-[#7d5622] font-bold text-[11px]">
+                  <AlertTriangle className="w-3 h-3 text-[#b37731]" />
+                  <span>หั่นน้อย ({childFootages.length})</span>
+                </span>
+              )}
+            </div>
+
+            <h2 className="text-base sm:text-lg font-bold text-[#2d2926] truncate">
+              {source.title}
+            </h2>
+
+            {source.notes && (
+              <p className="text-xs text-[#787066] line-clamp-1">{source.notes}</p>
             )}
-          </div>
 
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-            {source.title}
-          </h2>
-
-          {source.notes && (
-            <p className="text-xs text-slate-500 line-clamp-1">{source.notes}</p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {source.tags.map((tid) => (
-              <TagPill key={tid} tag={tagMap[tid]} />
-            ))}
-            {extraChildTagIds.map((tid) => (
-              <TagPill key={tid} tag={tagMap[tid]} size="sm" />
-            ))}
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              {source.tags.map((tid) => (
+                <TagPill key={tid} tag={tagMap[tid]} />
+              ))}
+              {extraChildTagIds.map((tid) => (
+                <TagPill key={tid} tag={tagMap[tid]} size="sm" />
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Right Side Badges & Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-mono tabular-nums">
-            <span className="inline-flex items-center gap-1 font-bold text-slate-800">
-              <Film className="w-3.5 h-3.5 text-indigo-600" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#faf7f2] border border-[#e8dfd3] rounded-xl text-xs font-mono tabular-nums">
+            <span className="inline-flex items-center gap-1 font-bold text-[#2d2926]">
+              <Film className="w-3.5 h-3.5 text-[#3b6845]" />
               <span>{childFootages.length} คลิป</span>
             </span>
-            <span className="text-slate-300">|</span>
-            <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
-              <Zap className="w-3 h-3 text-emerald-600" />
+            <span className="text-[#d5cbc0]">|</span>
+            <span className="inline-flex items-center gap-1 font-bold text-[#244b2f]">
+              <Zap className="w-3 h-3 text-[#3b6845]" />
               <span>พร้อมใช้ {usableChildrenCount}</span>
             </span>
           </div>
@@ -143,7 +169,7 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
             href={source.originalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-[#4d4740] bg-[#f4eee4] hover:bg-[#eae1d4] border border-[#e2d8cb] rounded-xl transition-colors whitespace-nowrap"
             title="เปิดคลิปต้นฉบับ"
           >
             <ExternalLink className="w-3.5 h-3.5" />
@@ -153,7 +179,7 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
           <button
             type="button"
             onClick={() => onLaunchEpisodeForCategory(primaryTagId)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-[#244b2f] bg-[#edf4ed] hover:bg-[#dceadc] border border-[#bad8b9] rounded-xl transition-colors whitespace-nowrap cursor-pointer"
           >
             <Rocket className="w-3.5 h-3.5" />
             <span>จัด 5 อันดับ</span>
@@ -162,7 +188,7 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
           <button
             type="button"
             onClick={() => onOpenSourceSplitter(source)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-[#3b6845] hover:bg-[#2c5234] rounded-xl transition-colors whitespace-nowrap cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>หั่นเพิ่ม</span>

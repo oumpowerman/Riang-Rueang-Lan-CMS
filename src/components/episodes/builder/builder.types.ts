@@ -3,7 +3,7 @@ import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
 
 export type RankNumber = 1 | 2 | 3 | 4 | 5;
 
-export type BuilderStepNumber = 1 | 2 | 3 | 4;
+export type BuilderStepNumber = 1 | 2 | 3;
 
 export const RANK_ORDER_1_TO_5: RankNumber[] = [1, 2, 3, 4, 5];
 
