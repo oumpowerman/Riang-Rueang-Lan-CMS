@@ -21,28 +21,7 @@
     --font-mono: 'JetBrains Mono', monospace;
   }
 
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: #D7CEC7 transparent;
-  }
 
-  *::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    background-color: #D7CEC7;
-    border-radius: 9999px;
-  }
-
-  *::-webkit-scrollbar-thumb:hover {
-    background-color: #C4B4A0;
-  }
 
   html {
     font-size: 16.5px;
@@ -94,30 +73,60 @@
     inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 
-/* Slim elegant pastel earth-tone scrollbar (4px, soft sand/cream) */
-.scrollbar-thin,
-.scrollbar-earth {
-  scrollbar-width: thin;
-  scrollbar-color: #D7CEC7 rgba(245, 240, 232, 0.45);
-}
+/* ==========================================================================
+   Ultra-Slim 2px Translucent Scrollbars (Global & Utility Classes)
+   ========================================================================== */
+*::-webkit-scrollbar,
+::-webkit-scrollbar,
 .scrollbar-thin::-webkit-scrollbar,
-.scrollbar-earth::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-.scrollbar-thin::-webkit-scrollbar-track,
-.scrollbar-earth::-webkit-scrollbar-track {
-  background: rgba(245, 240, 232, 0.45);
-  border-radius: 9999px;
-}
-.scrollbar-thin::-webkit-scrollbar-thumb,
-.scrollbar-earth::-webkit-scrollbar-thumb {
-  background-color: #D7CEC7;
-  border-radius: 9999px;
-}
-.scrollbar-thin::-webkit-scrollbar-thumb:hover,
-.scrollbar-earth::-webkit-scrollbar-thumb:hover {
-  background-color: #C4B4A0;
+.scrollbar-earth::-webkit-scrollbar,
+.thin-scrollbar::-webkit-scrollbar,
+.scrollbar-ultraslim::-webkit-scrollbar {
+  width: 2px !important;
+  height: 2px !important;
 }
 
+*::-webkit-scrollbar-button,
+::-webkit-scrollbar-button,
+.scrollbar-thin::-webkit-scrollbar-button,
+.scrollbar-earth::-webkit-scrollbar-button,
+.thin-scrollbar::-webkit-scrollbar-button,
+.scrollbar-ultraslim::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+*::-webkit-scrollbar-track,
+::-webkit-scrollbar-track,
+.scrollbar-thin::-webkit-scrollbar-track,
+.scrollbar-earth::-webkit-scrollbar-track,
+.thin-scrollbar::-webkit-scrollbar-track,
+.scrollbar-ultraslim::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb,
+.scrollbar-thin::-webkit-scrollbar-thumb,
+.scrollbar-earth::-webkit-scrollbar-thumb,
+.thin-scrollbar::-webkit-scrollbar-thumb,
+.scrollbar-ultraslim::-webkit-scrollbar-thumb {
+  background-color: rgba(196, 180, 160, 0.22) !important;
+  border-radius: 9999px !important;
+}
+
+*::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover,
+.scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.scrollbar-earth::-webkit-scrollbar-thumb:hover,
+.thin-scrollbar::-webkit-scrollbar-thumb:hover,
+.scrollbar-ultraslim::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(150, 130, 108, 0.85) !important;
+}
+
+*::-webkit-scrollbar-corner,
+::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
 

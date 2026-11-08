@@ -11,6 +11,7 @@ interface ArchiveOverviewHeaderProps {
   categoryFilter: string;
   onCategoryFilterChange: (catId: string) => void;
   sortedEpisodesCount: number;
+  onOpenSupabaseSync?: () => void;
 }
 
 export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
@@ -21,6 +22,7 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
   categoryFilter,
   onCategoryFilterChange,
   sortedEpisodesCount,
+  onOpenSupabaseSync,
 }) => {
   return (
     <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
@@ -37,32 +39,47 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
           </p>
         </div>
 
-        {/* Dual View Mode Switcher: รายตอน vs คลังชั้นวางซีรีส์ */}
-        <div className="flex items-center gap-1 p-1 bg-[#F5EFE6] border border-[#E2D6C5] rounded-xl self-start sm:self-auto shadow-2xs">
-          <button
-            type="button"
-            onClick={() => onTabChange('EPISODES')}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-              archiveTab === 'EPISODES'
-                ? 'bg-[#E6F2E6] text-[#224A2D] border-[#9EC49C] shadow-2xs'
-                : 'border-transparent text-[#5C544C] hover:text-[#2D2926] hover:bg-white/60'
-            }`}
-          >
-            <Film className="w-3.5 h-3.5" />
-            <span>มุมมองรายตอน ({sortedEpisodesCount.toLocaleString()})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange('SERIES_SHELF')}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-              archiveTab === 'SERIES_SHELF'
-                ? 'bg-[#E6F2E6] text-[#224A2D] border-[#9EC49C] shadow-2xs'
-                : 'border-transparent text-[#5C544C] hover:text-[#2D2926] hover:bg-white/60'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>คลังชั้นวางซีรีส์ ({categoryRanking.length})</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {/* Dual View Mode Switcher: รายตอน vs คลังชั้นวางซีรีส์ */}
+          <div className="flex items-center gap-1 p-1 bg-[#F5EFE6] border border-[#E2D6C5] rounded-xl shadow-2xs">
+            <button
+              type="button"
+              onClick={() => onTabChange('EPISODES')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                archiveTab === 'EPISODES'
+                  ? 'bg-[#E6F2E6] text-[#224A2D] border-[#9EC49C] shadow-2xs'
+                  : 'border-transparent text-[#5C544C] hover:text-[#2D2926] hover:bg-white/60'
+              }`}
+            >
+              <Film className="w-3.5 h-3.5" />
+              <span>มุมมองรายตอน ({sortedEpisodesCount.toLocaleString()})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange('SERIES_SHELF')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                archiveTab === 'SERIES_SHELF'
+                  ? 'bg-[#E6F2E6] text-[#224A2D] border-[#9EC49C] shadow-2xs'
+                  : 'border-transparent text-[#5C544C] hover:text-[#2D2926] hover:bg-white/60'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>คลังชั้นวางซีรีส์ ({categoryRanking.length})</span>
+            </button>
+          </div>
+
+          {/* Sync to Supabase Central Contents Table Button */}
+          {onOpenSupabaseSync && (
+            <button
+              type="button"
+              onClick={onOpenSupabaseSync}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#EEF5EE] hover:bg-[#E2EFE2] text-[#1C4824] border border-[#BAD8BF] shadow-2xs transition-all cursor-pointer active:scale-98"
+              title="ส่งออกและซิงก์ข้อมูลสู่ตาราง contents ในฐานข้อมูล Supabase กลาง พร้อมตรวจจับความซ้ำ"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#2E7D32] animate-pulse" />
+              <span>ซิงก์สู่ Supabase กลาง</span>
+            </button>
+          )}
         </div>
       </div>
 

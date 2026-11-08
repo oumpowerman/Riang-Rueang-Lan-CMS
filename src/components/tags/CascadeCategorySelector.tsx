@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronDown,
   ChevronRight,
-  Folder,
   FolderTree,
   Inbox,
   Check,
@@ -12,6 +11,9 @@ import {
   Search,
   Settings,
   X,
+  Tags,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import {
@@ -35,8 +37,8 @@ interface CascadeCategorySelectorProps {
 export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = ({
   selectedTagIds,
   onChange,
-  label = 'หมวดหมู่หลัก & หัวข้อย่อย (ไล่ทีละสเต็ป)',
-  helperText = 'คลิกเลือกกลุ่มหมวดหมู่ก่อน เพื่อกางหมวดหมู่หลักและหมวดหมู่ย่อยตามลำดับ',
+  label = 'ระบบแท็กหลายมิติ (Multi-Dimensional Tagging)',
+  helperText = 'เลือกแท็กได้หลายมิติพร้อมกันอย่างอิสระ (เช่น ติดทั้ง #ดาราฮาๆ #แกล้งสุดฮา #พี่แจ๊ส เพื่อให้คลิปแสดงในทุกซีรีส์ที่เกี่ยวข้อง)',
   allowMultipleSubcategories = true,
 }) => {
   const {
@@ -49,7 +51,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
     setIsThreeTierManagerOpen,
   } = useCMS();
 
-  // Default to collapsed (null / '') so Tier 1 and Tier 2 stay folded initially
+  // Active cluster for browsing (null = collapsed, or group ID, or 'ALL')
   const [activeCluster, setActiveCluster] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeMainCatId, setActiveMainCatId] = useState<string>('');
@@ -61,11 +63,27 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
   const activeMainCat = activeMainCatId ? tagMap[activeMainCatId] : undefined;
   const isCurrentlyInStaging = isFootageInStaging(selectedTagIds);
 
+  // Active real tags (excluding staging)
+  const realSelectedTagIds = useMemo(() => {
+    return selectedTagIds.filter((id) => Boolean(id) && !isStagingTagId(id));
+  }, [selectedTagIds]);
+
   const handleSelectStagingDefault = () => {
     setActiveCluster(null);
     setActiveMainCatId('');
     setIsAddingNewSub(false);
     onChange([STAGING_TAG_ID]);
+  };
+
+  const handleRemoveSingleTag = (tagIdToRemove: string) => {
+    const remaining = selectedTagIds.filter(
+      (id) => id !== tagIdToRemove && !isStagingTagId(id)
+    );
+    onChange(remaining.length > 0 ? remaining : [STAGING_TAG_ID]);
+  };
+
+  const handleClearAllTags = () => {
+    handleSelectStagingDefault();
   };
 
   // Dynamic Clusters Ribbon
@@ -74,10 +92,10 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
       ...categoryGroups.map((g) => ({
         id: g.id,
         label: g.name,
-        icon: g.icon || '📁',
+        icon: g.icon || 'folder',
         hint: g.description || g.name,
       })),
-      { id: 'ALL', label: 'ดูทั้งหมด', icon: '📁', hint: 'แสดงทุกหมวดหมู่หลัก' },
+      { id: 'ALL', label: 'ดูทุกมิติ', icon: 'folder', hint: 'แสดงป้ายแท็กหลักจากทุกกลุ่ม' },
     ];
   }, [categoryGroups]);
 
@@ -111,7 +129,6 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
     const query = searchQuery.trim().toLowerCase();
 
     return mainCategories.filter((mc) => {
-      // When searching, search across all clusters unless user specifically filtered
       if (!query) {
         if (!activeCluster) return false;
         if (activeCluster !== 'ALL') {
@@ -125,7 +142,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
         return true;
       }
 
-      // Search query match (matches main cat name/desc OR any of its subcategories)
+      // Search query match (matches main cat name/desc OR any child subcategories)
       const mainMatches =
         mc.name.toLowerCase().includes(query) ||
         (mc.description && mc.description.toLowerCase().includes(query));
@@ -136,11 +153,10 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
     });
   }, [mainCategories, activeCluster, searchQuery, getSubcategoriesByParent]);
 
-  // Subcategories to display (either under activeMainCat, or matching searchQuery when searching)
+  // Subcategories to display (either under activeMainCat, or matching searchQuery)
   const displayedSubcategories = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (query) {
-      // When searching, show subcategories matching query (or all under activeMainCat if it matches)
       const directMatches = subcategories.filter(
         (sub) =>
           sub.name.toLowerCase().includes(query) ||
@@ -157,7 +173,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
   const isTier1Open = Boolean(activeCluster) || isSearching;
   const isTier2Open = Boolean(activeMainCat) || (isSearching && displayedSubcategories.length > 0);
 
-  // Current active sub-step (1 = Group, 2 = Main Cat, 3 = Subcat)
+  // Current active sub-step (1 = Group/Dimension, 2 = Main Tag, 3 = Sub-Tag)
   const currentSubStep: 1 | 2 | 3 = isTier2Open ? 3 : isTier1Open ? 2 : 1;
 
   // Handle Cluster selection (Step 1 -> expands Step 2)
@@ -167,51 +183,50 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
       return;
     }
     if (activeCluster === clusterId && !isSearching) {
-      // Clicking active cluster collapses Tier 1 & Tier 2 back
       setActiveCluster(null);
       setActiveMainCatId('');
       setIsAddingNewSub(false);
       return;
     }
     setActiveCluster(clusterId);
-    // Keep Tier 2 collapsed until user explicitly picks a Main Category in this cluster
     setActiveMainCatId('');
     setIsAddingNewSub(false);
   };
 
-  // Handle Main Category selection (Step 2 -> expands Step 3)
+  // Handle Main Category selection (Multi-Tag: toggle selection without clearing other tags!)
   const handleSelectMainCategory = (mainCatId: string) => {
     if (isStagingTagId(mainCatId)) {
       handleSelectStagingDefault();
       return;
     }
 
-    if (activeMainCatId === mainCatId && !isSearching) {
-      // Toggle collapse of Tier 2 if clicking same active main category
-      setActiveMainCatId('');
-      setIsAddingNewSub(false);
-      return;
-    }
+    const baseWithoutStaging = selectedTagIds.filter((id) => !isStagingTagId(id));
+    const isAlreadySelected = baseWithoutStaging.includes(mainCatId);
 
-    setActiveMainCatId(mainCatId);
-
-    // Ensure main category is added to selectedTagIds and strip STAGING_TAG_ID
-    const otherMainCatIds = mainCategories.map((m) => m.id);
-    const filtered = selectedTagIds.filter(
-      (id) => !otherMainCatIds.includes(id) && !isStagingTagId(id)
-    );
-    if (!filtered.includes(mainCatId)) {
-      filtered.push(mainCatId);
+    // If user clicked the same active main category that was already selected, clicking it again toggles it off
+    // If clicking a different category, switch active browsing view and add to selection if not present
+    if (activeMainCatId === mainCatId) {
+      if (isAlreadySelected) {
+        // Toggle off
+        const updated = baseWithoutStaging.filter((id) => id !== mainCatId);
+        onChange(updated.length > 0 ? updated : [STAGING_TAG_ID]);
+      } else {
+        onChange([...baseWithoutStaging, mainCatId]);
+      }
+    } else {
+      setActiveMainCatId(mainCatId);
+      if (!isAlreadySelected) {
+        onChange([...baseWithoutStaging, mainCatId]);
+      }
     }
-    onChange(filtered);
   };
 
-  // Toggle Subcategory (Step 3)
+  // Toggle Subcategory (Multi-Tag: keep all other tags, ensure parent is present)
   const handleToggleSubcategory = (sub: CategoryTag) => {
     const subId = sub.id;
     const parentId = sub.parentId || activeMainCatId;
-    const isSelected = selectedTagIds.includes(subId);
     const baseWithoutStaging = selectedTagIds.filter((id) => !isStagingTagId(id));
+    const isSelected = baseWithoutStaging.includes(subId);
     let updated: string[];
 
     if (isSelected) {
@@ -225,10 +240,9 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
         );
         updated = [...baseWithoutStaging.filter((id) => !siblingIds.includes(id)), subId];
       }
-      // Ensure parent main category is also selected
+      // Ensure parent main category is also included so the clip is categorized broadly and specifically
       if (parentId && !updated.includes(parentId)) {
-        const otherMainCatIds = mainCategories.map((m) => m.id);
-        updated = [...updated.filter((id) => !otherMainCatIds.includes(id)), parentId];
+        updated.push(parentId);
       }
       if (parentId && activeMainCatId !== parentId) {
         setActiveMainCatId(parentId);
@@ -272,68 +286,121 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
   );
 
   return (
-    <div className="space-y-3.5 bg-slate-50/90 p-4 rounded-xl border border-slate-200/90">
-      {/* Header bar with Progressive Micro-Stepper */}
+    <div className="space-y-3.5 bg-[#faf8f5] p-4 rounded-2xl border border-[#e8e2d8] shadow-2xs">
+      {/* Header bar with Studio Settings Link */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div>
-          <label className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-            <FolderTree className="w-4 h-4 text-indigo-600 shrink-0" />
+          <label className="text-sm font-bold text-[#3d3429] flex items-center gap-1.5">
+            <Tags className="w-4 h-4 text-[#7d5630] shrink-0" />
             {label}
           </label>
-          {helperText && <p className="text-xs text-slate-600 mt-0.5">{helperText}</p>}
+          {helperText && <p className="text-xs text-[#706456] mt-0.5 leading-relaxed">{helperText}</p>}
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsThreeTierManagerOpen(true)}
-            className="text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/90 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
-            title="เปิดหน้าต่างจัดการโครงสร้างกลุ่ม หมวดหลัก และหมวดย่อย"
+            className="text-xs font-bold text-[#5c4426] hover:text-[#382613] bg-[#f2ebd9] hover:bg-[#eae0cb] border border-[#dfd4be] px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+            title="เปิดสตูดิโอจัดการมิติกลุ่มแท็ก ป้ายแท็กหลัก และคุณลักษณะ"
           >
-            <Settings className="w-3.5 h-3.5 text-indigo-600" />
-            <span>จัดการหมวดหมู่ 3 ชั้น</span>
+            <Settings className="w-3.5 h-3.5 text-[#7d5630]" />
+            <span>สตูดิโอกลุ่มแท็กหลายมิติ</span>
           </button>
         </div>
       </div>
 
-      {/* Quick Staging Area Default Toggle Banner */}
+      {/* =====================================================================
+          MULTI-TAG TRAY: Selected Tags on this Footage (Light Pastel Earth-Tone)
+      ====================================================================== */}
+      <div className="bg-white rounded-xl p-3 border border-[#e5ded4] shadow-2xs space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-bold text-[#3e3428] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#8c673b]" />
+              <span>ป้ายแท็กที่ติดกับคลิปนี้ ({realSelectedTagIds.length}):</span>
+            </span>
+            {realSelectedTagIds.length > 0 && (
+              <span className="text-[11px] font-semibold text-[#2c5338] bg-[#eaf4ec] px-2 py-0.5 rounded-full border border-[#cbe3cf]">
+                พร้อมแสดงใน {realSelectedTagIds.length} ซีรีส์
+              </span>
+            )}
+          </div>
+
+          {realSelectedTagIds.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAllTags}
+              className="text-[11px] font-semibold text-[#8b4336] hover:text-[#5a231a] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>ล้างแท็กทั้งหมด</span>
+            </button>
+          )}
+        </div>
+
+        {isCurrentlyInStaging ? (
+          <div className="flex items-center gap-2 p-2 bg-[#fef9f0] border border-[#f2e1c4] rounded-lg text-xs text-[#7e5522]">
+            <Inbox className="w-4 h-4 text-[#a67438] shrink-0" />
+            <span className="font-medium">
+              คลิปนี้ยังไม่ได้ติดแท็ก (อยู่ในพื้นที่พักรอจัดหมวดหมู่ Staging Area) — คลิกเลือกแท็กด้านล่างเพื่อเริ่มติดแท็ก
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {realSelectedTagIds.map((tid) => {
+              const tag = tagMap[tid];
+              if (!tag) return null;
+              return (
+                <TagPill
+                  key={tag.id}
+                  tag={tag}
+                  showEntityIcon={true}
+                  onRemove={() => handleRemoveSingleTag(tag.id)}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Quick Staging Area Default Toggle Banner (Pastel Earth Tone) */}
       <div
-        className={`rounded-xl p-3.5 border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+        className={`rounded-xl p-3 border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
           isCurrentlyInStaging
-            ? 'bg-amber-50/95 border-2 border-amber-400 shadow-2xs'
-            : 'bg-white border-slate-200/90'
+            ? 'bg-[#fef8ed] border border-[#ebcf9e] shadow-2xs'
+            : 'bg-white/80 border-[#e8e2d8]'
         }`}
       >
         <div className="flex items-start sm:items-center gap-3 min-w-0">
           <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
               isCurrentlyInStaging
-                ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
-                : 'bg-slate-100 text-slate-600'
+                ? 'bg-[#ebd3a8] text-[#5e3e14] font-bold'
+                : 'bg-[#f4efe8] text-[#7d7162]'
             }`}
           >
-            <Inbox className="w-5 h-5" />
+            <Inbox className="w-4 h-4" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-bold text-slate-900">
+              <span className="text-xs font-bold text-[#3d3326]">
                 พื้นที่พักรอจัดหมวดหมู่ (Staging Area)
               </span>
               {isCurrentlyInStaging ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-amber-400/90 text-slate-950 rounded-md">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>ค่าเริ่มต้นอัตโนมัติ (ยังไม่เลือกหมวดหมู่จริง)</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold bg-[#f3e3c3] text-[#5e3e14] rounded-md border border-[#e4cca0]">
+                  <Check className="w-3 h-3" />
+                  <span>ยังไม่ได้เลือกแท็กจริง (สถานะพักรอ)</span>
                 </span>
               ) : (
-                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                  จัดเข้าหมวดหมู่จริงแล้ว
+                <span className="text-[11px] font-semibold text-[#245233] bg-[#edf6ef] border border-[#c6e1cb] px-2 py-0.5 rounded-md">
+                  ติดแท็กจริงแล้ว ({realSelectedTagIds.length} แท็ก)
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-[11px] text-[#716557] mt-0.5">
               {isCurrentlyInStaging
-                ? 'สามารถกดบันทึกเข้าพื้นที่พักได้ทันทีโดยไม่ต้องเลือกแท็กด้านล่าง (ยังไม่นับรวมโควตา 5 ฟุต = 1 EP จนกว่าจะจัดหมวดหมู่จริง)'
-                : 'หากยังไม่แน่ใจว่าจะจัดเข้าหมวดไหน สามารถกดปุ่มด้านขวาเพื่อย้ายกลับไปพักไว้ก่อนได้'}
+                ? 'คลิปในพื้นที่พักจะไม่ถูกนับในโควตาสร้าง 5 อันดับ จนกว่าจะเลือกแท็กจริง'
+                : 'สามารถย้ายกลับพื้นที่พักได้หากต้องการคัดแยกแท็กใหม่ในภายหลัง'}
             </p>
           </div>
         </div>
@@ -341,105 +408,105 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
         <button
           type="button"
           onClick={handleSelectStagingDefault}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
             isCurrentlyInStaging
-              ? 'bg-amber-500 text-slate-950 shadow-2xs'
-              : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+              ? 'bg-[#ebd3a8] text-[#4f320e] border border-[#dcbc86]'
+              : 'bg-[#fbf7f0] hover:bg-[#f3ebd9] text-[#735123] border border-[#e3d7bf]'
           }`}
         >
           <span>
             {isCurrentlyInStaging
-              ? '✓ เก็บในพื้นที่พักรอจัดหมวดหมู่'
+              ? '✓ อยู่ในพื้นที่พักแล้ว'
               : 'ย้ายไปพื้นที่พักรอจัดหมวดหมู่'}
           </span>
         </button>
       </div>
 
-      {/* 3-Stage Mini Progress Pill Bar */}
-      <div className="flex items-center gap-2 text-xs bg-white px-3.5 py-2 rounded-lg border border-slate-200/80 overflow-x-auto scrollbar-none">
+      {/* 3-Stage Mini Stepper Pill Bar */}
+      <div className="flex items-center gap-2 text-xs bg-white px-3.5 py-2 rounded-xl border border-[#e5dfd5] overflow-x-auto scrollbar-none">
         <span
           className={`font-semibold whitespace-nowrap flex items-center gap-1.5 ${
             currentSubStep === 1
-              ? 'text-indigo-700 font-bold'
+              ? 'text-[#614524] font-bold'
               : isTier1Open
-              ? 'text-emerald-700'
-              : 'text-slate-500'
+              ? 'text-[#2e593a]'
+              : 'text-[#8b8071]'
           }`}
         >
           <span
             className={`w-5 h-5 rounded-full text-xs font-mono font-bold flex items-center justify-center ${
               currentSubStep === 1
-                ? 'bg-indigo-600 text-white ring-2 ring-indigo-300/60'
+                ? 'bg-[#eedbc0] text-[#523715] ring-2 ring-[#e4cb9f]'
                 : isTier1Open
-                ? 'bg-emerald-500 text-white'
-                : 'bg-slate-200 text-slate-600'
+                ? 'bg-[#d2ead7] text-[#1b4327]'
+                : 'bg-[#ede7dd] text-[#7b7062]'
             }`}
           >
             1
           </span>
-          <span>เลือกกลุ่ม{activeClusterObj ? `: ${activeClusterObj.label}` : ''}</span>
+          <span>มิติแท็ก{activeClusterObj ? `: ${activeClusterObj.label}` : ''}</span>
         </span>
 
-        <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+        <ChevronRight className="w-3.5 h-3.5 text-[#d4cbbe] shrink-0" />
 
         <span
           className={`font-semibold whitespace-nowrap flex items-center gap-1.5 ${
             currentSubStep === 2
-              ? 'text-sky-700 font-bold'
+              ? 'text-[#2a4d6c] font-bold'
               : isTier2Open
-              ? 'text-emerald-700'
-              : 'text-slate-400'
+              ? 'text-[#2e593a]'
+              : 'text-[#8b8071]'
           }`}
         >
           <span
             className={`w-5 h-5 rounded-full text-xs font-mono font-bold flex items-center justify-center ${
               currentSubStep === 2
-                ? 'bg-sky-600 text-white ring-2 ring-sky-300/60'
+                ? 'bg-[#d3e5f4] text-[#1c3a54] ring-2 ring-[#bbd8f0]'
                 : isTier2Open
-                ? 'bg-emerald-500 text-white'
-                : 'bg-slate-200 text-slate-500'
+                ? 'bg-[#d2ead7] text-[#1b4327]'
+                : 'bg-[#ede7dd] text-[#7b7062]'
             }`}
           >
             2
           </span>
-          <span>หมวดหลัก{activeMainCat ? `: ${activeMainCat.name}` : ''}</span>
+          <span>แท็กหลัก{activeMainCat ? `: ${activeMainCat.name}` : ''}</span>
         </span>
 
-        <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+        <ChevronRight className="w-3.5 h-3.5 text-[#d4cbbe] shrink-0" />
 
         <span
           className={`font-semibold whitespace-nowrap flex items-center gap-1.5 ${
-            currentSubStep === 3 ? 'text-amber-800 font-bold' : 'text-slate-400'
+            currentSubStep === 3 ? 'text-[#6e4b1c] font-bold' : 'text-[#8b8071]'
           }`}
         >
           <span
             className={`w-5 h-5 rounded-full text-xs font-mono font-bold flex items-center justify-center ${
               currentSubStep === 3
-                ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300/70'
-                : 'bg-slate-200 text-slate-500'
+                ? 'bg-[#f4e4cb] text-[#553810] ring-2 ring-[#e5cca4]'
+                : 'bg-[#ede7dd] text-[#7b7062]'
             }`}
           >
             3
           </span>
-          <span>หมวดย่อย / บุคคล</span>
+          <span>ป้ายแท็กย่อย / บุคคล</span>
         </span>
       </div>
 
-      {/* Quick Search (Instant Bypass to reveal matching Main & Subcategories) */}
+      {/* Quick Search (Fast Search Across All Tag Dimensions) */}
       <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-4 h-4 text-[#9c9183] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="ค้นหาด่วน (พิมพ์ชื่อดารา สตรีมเมอร์ หรือหมวดหมู่ เพื่อกางผลลัพธ์ทันที)..."
-          className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-slate-200 rounded-xl placeholder:text-slate-400 text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+          placeholder="ค้นหาแท็กด่วน (พิมพ์ชื่อดารา มุก หรือหัวข้อ เพื่อกางผลลัพธ์ทันที)..."
+          className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#dfd7ca] rounded-xl placeholder:text-[#9e9487] text-[#3a3125] focus:outline-hidden focus:ring-2 focus:ring-[#d5c2a5] focus:border-[#c2ae8f] transition-all"
         />
         {searchQuery && (
           <button
             type="button"
             onClick={() => setSearchQuery('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9e9487] hover:text-[#524637] p-0.5 cursor-pointer"
             title="ล้างคำค้นหา"
           >
             <X className="w-4 h-4" />
@@ -448,19 +515,19 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
       </div>
 
       {/* =====================================================================
-          STAGE 1 (Always Visible): Super-Category Clusters (กลุ่มหมวดหมู่)
+          STAGE 1: Super-Category Dimensions (มิติกลุ่มแท็ก)
       ====================================================================== */}
       <div
         className={`rounded-xl p-3.5 transition-all duration-200 ${
           currentSubStep === 1 && !isSearching
-            ? 'bg-white border-2 border-indigo-400 ring-4 ring-indigo-500/10 shadow-[0_2px_16px_rgba(99,102,241,0.12)]'
-            : 'bg-white/90 border border-slate-200/80'
+            ? 'bg-white border-2 border-[#d6c4a8] ring-2 ring-[#ede3d1]'
+            : 'bg-white border border-[#e5dfd5]'
         }`}
       >
         <div className="flex items-center justify-between mb-2.5">
-          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-            <Layers className="w-4 h-4 text-indigo-600" />
-            ขั้นที่ 1 — เลือกกลุ่มหมวดหมู่ (คลิกเพื่อกางหมวดหมู่หลัก):
+          <span className="text-xs font-bold text-[#42372a] flex items-center gap-1.5">
+            <Layers className="w-4 h-4 text-[#7d5630]" />
+            <span>ขั้นที่ 1 — เลือกมิติกลุ่มแท็ก (คลิกเพื่อดูกลุ่มแท็กหลัก):</span>
           </span>
           {activeCluster && !isSearching && (
             <button
@@ -469,7 +536,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                 setActiveCluster(null);
                 setActiveMainCatId('');
               }}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+              className="text-xs font-semibold text-[#736657] hover:text-[#382f23] flex items-center gap-1 cursor-pointer"
             >
               <span>พับเก็บ</span>
               <ChevronDown className="w-3.5 h-3.5 rotate-180" />
@@ -478,17 +545,17 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
         </div>
 
         {categoryGroups.length === 0 && mainCategories.length === 0 ? (
-          <div className="p-3.5 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-center space-y-2">
-            <p className="text-sm text-slate-600 font-medium">
-              ยังไม่มีกลุ่มหมวดหมู่ในระบบ (หรือเพิ่งล้างข้อมูลเพื่อเริ่มต้นใหม่)
+          <div className="p-3.5 bg-[#fbf9f6] rounded-lg border border-dashed border-[#dfd7ca] text-center space-y-2">
+            <p className="text-sm text-[#736758] font-medium">
+              ยังไม่มีมิติกลุ่มแท็กในระบบ
             </p>
             <button
               type="button"
               onClick={() => setIsThreeTierManagerOpen(true)}
-              className="px-3.5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 bg-[#78593a] text-white rounded-lg text-xs font-bold hover:bg-[#62462a] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>สร้างกลุ่มและหมวดหมู่ 3 ชั้น</span>
+              <span>สร้างมิติกลุ่มแท็ก</span>
             </button>
           </div>
         ) : (
@@ -503,19 +570,19 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                   onClick={() => handleSelectCluster(cluster.id)}
                   className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/50 border border-indigo-600'
-                      : 'bg-slate-50 text-slate-800 border border-slate-200/90 hover:bg-indigo-50/60 hover:border-indigo-200 hover:text-indigo-900'
+                      ? 'bg-[#ede0c8] text-[#473016] border border-[#d2be9b] shadow-2xs'
+                      : 'bg-[#faf7f2] text-[#4d4234] border border-[#e4ded4] hover:bg-[#f3ebd9] hover:border-[#d9cbaf]'
                   }`}
                   title={cluster.hint}
                 >
                   <CategoryGroupIcon
                     icon={cluster.id === 'ALL' ? 'folder' : cluster.icon}
-                    className="w-4 h-4 shrink-0"
+                    className="w-4 h-4 shrink-0 text-[#694b29]"
                   />
                   <span>{cluster.label}</span>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-mono tabular-nums ${
-                      isActive ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-200/80 text-slate-700'
+                      isActive ? 'bg-[#dfceb0] text-[#3d2912]' : 'bg-[#ede7dd] text-[#695d4f]'
                     }`}
                   >
                     {count}
@@ -528,7 +595,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
       </div>
 
       {/* =====================================================================
-          STAGE 2 (Framer Motion Collapsible): Main Categories (Tier 1)
+          STAGE 2: Primary Tags (Tier 1 Main Tags)
       ====================================================================== */}
       <AnimatePresence initial={false}>
         {isTier1Open && (
@@ -537,43 +604,43 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden p-0 m-0 border-none"
           >
             <div
               className={`rounded-xl p-3.5 space-y-2.5 transition-all duration-200 ${
                 currentSubStep === 2
-                  ? 'bg-white border-2 border-sky-400 ring-4 ring-sky-500/12 shadow-[0_2px_16px_rgba(14,165,233,0.12)]'
-                  : 'bg-white/90 border border-slate-200/90'
+                  ? 'bg-white border-2 border-[#b5cde2] ring-2 ring-[#e4eff8]'
+                  : 'bg-white border border-[#e5dfd5]'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 text-xs font-mono font-bold flex items-center justify-center">
+                <span className="text-xs font-bold text-[#35465c] flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-[#dbe8f4] text-[#1b3d5d] text-xs font-mono font-bold flex items-center justify-center">
                     2
                   </span>
                   <span>
-                    ขั้นที่ 2 — เลือกหมวดหมู่หลัก{' '}
+                    ขั้นที่ 2 — ป้ายแท็กหลัก (คลิกเพื่อติดแท็ก/ดูกลุ่มย่อย){' '}
                     {isSearching
-                      ? `(ผลการค้นหา "${searchQuery}")`
+                      ? `(ผลค้นหา "${searchQuery}")`
                       : activeClusterObj
-                      ? `ในกลุ่ม "${activeClusterObj.label}"`
+                      ? `ในมิติ "${activeClusterObj.label}"`
                       : ''}
                     :
                   </span>
                 </span>
                 {activeMainCat && !isSearching && (
-                  <span className="text-xs text-sky-700 font-bold">
-                    เลือกแล้ว: {activeMainCat.name}
+                  <span className="text-xs text-[#2b4c6b] font-bold">
+                    กำลังดู: #{activeMainCat.name}
                   </span>
                 )}
               </div>
 
               {filteredMainCategories.length === 0 ? (
-                <div className="text-xs text-slate-500 italic py-2.5 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                <div className="text-xs text-[#8c8072] italic py-2.5 text-center bg-[#faf7f2] rounded-lg border border-dashed border-[#e3dbcf]">
                   {isSearching
-                    ? `ไม่พบหมวดหมู่หลักที่ตรงกับ "${searchQuery}"`
-                    : 'ยังไม่มีหมวดหมู่หลักในกลุ่มนี้ สามารถกดปุ่ม "จัดการหมวดหมู่ 3 ชั้น" เพื่อเพิ่มได้'}
+                    ? `ไม่พบป้ายแท็กหลักที่ตรงกับ "${searchQuery}"`
+                    : 'ยังไม่มีป้ายแท็กหลักในมิตินี้'}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -586,15 +653,26 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                         key={mainCat.id}
                         type="button"
                         onClick={() => handleSelectMainCategory(mainCat.id)}
-                        className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center justify-center transition-all cursor-pointer whitespace-nowrap ${
-                          isActive
-                            ? 'bg-sky-600 text-white shadow-xs ring-2 ring-sky-400/50 border border-sky-600'
+                        className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                          isSelected && isActive
+                            ? 'bg-[#d8eaf6] text-[#143d60] border border-[#a8cee9] shadow-2xs ring-2 ring-[#c0dcf2]'
                             : isSelected
-                            ? 'bg-sky-50 text-sky-900 border border-sky-300 ring-1 ring-sky-300/60'
-                            : 'bg-slate-50 text-slate-800 border border-slate-200 hover:bg-sky-50/60 hover:border-sky-200'
+                            ? 'bg-[#e7f1f9] text-[#1c476d] border border-[#b8d6ec]'
+                            : isActive
+                            ? 'bg-[#faf8f5] text-[#33465e] border border-[#b8cee2]'
+                            : 'bg-[#faf7f2] text-[#4d4234] border border-[#e4ded4] hover:bg-[#f3ebd9]'
                         }`}
+                        title={mainCat.description || mainCat.name}
                       >
-                        <span>{mainCat.name}</span>
+                        {isSelected ? (
+                          <Check className="w-3.5 h-3.5 text-[#1b5585] shrink-0" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5 text-[#889cb2] shrink-0" />
+                        )}
+                        <span>#{mainCat.name}</span>
+                        {isActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#1b5585] ml-0.5" />
+                        )}
                       </button>
                     );
                   })}
@@ -606,7 +684,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
       </AnimatePresence>
 
       {/* =====================================================================
-          STAGE 3 (Framer Motion Collapsible): Subcategories / Entities (Tier 2)
+          STAGE 3: Sub-Tags & Attributes (Tier 2)
       ====================================================================== */}
       <AnimatePresence initial={false}>
         {isTier2Open && (
@@ -615,34 +693,34 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden p-0 m-0 border-none"
           >
             <div
               className={`rounded-xl p-3.5 space-y-2.5 transition-all duration-200 ${
                 currentSubStep === 3
-                  ? 'bg-white border-2 border-emerald-400 ring-4 ring-emerald-500/12 shadow-[0_2px_16px_rgba(16,185,129,0.12)]'
-                  : 'bg-white/90 border border-slate-200/90'
+                  ? 'bg-white border-2 border-[#c2dac7] ring-2 ring-[#e8f5ec]'
+                  : 'bg-white border border-[#e5dfd5]'
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-mono font-bold flex items-center justify-center">
+                  <span className="w-5 h-5 rounded-full bg-[#d6eedc] text-[#1c4b2a] text-xs font-mono font-bold flex items-center justify-center">
                     3
                   </span>
-                  <span className="text-xs font-bold text-slate-800">
-                    ขั้นที่ 3 — เลือกหมวดหมู่ย่อย / บุคคล{' '}
+                  <span className="text-xs font-bold text-[#354a39]">
+                    ขั้นที่ 3 — ป้ายแท็กย่อย / บุคคล{' '}
                     {isSearching ? (
-                      <span className="text-emerald-700 font-bold">(ที่ตรงกับคำค้นหา)</span>
+                      <span className="text-[#245b34] font-bold">(ตรงกับคำค้นหา)</span>
                     ) : (
                       <>
-                        ใต้ <span className="text-emerald-700 font-bold">{activeMainCat?.name}</span>
+                        ใต้ <span className="text-[#245b34] font-bold">#{activeMainCat?.name}</span>
                       </>
                     )}
                     :
                   </span>
                   {activeCatSelectedSubCount > 0 && (
-                    <span className="text-xs font-mono font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 tabular-nums">
+                    <span className="text-xs font-mono font-semibold text-[#1f4e2c] bg-[#edf7ef] px-2 py-0.5 rounded-md border border-[#cbe5d2] tabular-nums">
                       เลือกแล้ว {activeCatSelectedSubCount}
                     </span>
                   )}
@@ -652,42 +730,42 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                   <button
                     type="button"
                     onClick={() => setIsAddingNewSub(true)}
-                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-[#2e623b] hover:text-[#184423] hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>เพิ่มหัวข้อย่อยใหม่</span>
+                    <span>เพิ่มป้ายแท็กย่อยใหม่</span>
                   </button>
                 )}
               </div>
 
-              {/* Inline Add New Subcategory Form */}
+              {/* Inline Add New Subcategory Form (Pastel Earth Tone) */}
               <AnimatePresence initial={false}>
                 {isAddingNewSub && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.18 }}
+                    transition={{ duration: 0.16 }}
                     className="overflow-hidden p-0 m-0 border-none"
                   >
                     <form
                       onSubmit={handleCreateSubcategory}
-                      className="bg-amber-50/90 border border-amber-200 p-3 rounded-lg space-y-2 mb-1"
+                      className="bg-[#faf5eb] border border-[#e3d3ba] p-3 rounded-xl space-y-2 mb-1"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <input
                           type="text"
-                          placeholder="เช่น พี่แจ๊ส, เอก HRK, คอร์กี้, เกม FiveM, สัมภาษณ์..."
+                          placeholder="เช่น พี่แจ๊ส, FiveM, ในกองถ่าย, จังหวะหลุดขำ..."
                           value={newSubName}
                           onChange={(e) => setNewSubName(e.target.value)}
                           autoFocus
-                          className="flex-1 min-w-[160px] bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                          className="flex-1 min-w-[160px] bg-white border border-[#d8c5a6] rounded-lg px-3 py-1.5 text-sm text-[#3d3326] focus:outline-hidden focus:ring-1 focus:ring-[#9e7c4f]"
                         />
 
                         <select
                           value={newSubType}
                           onChange={(e) => setNewSubType(e.target.value as EntitySubtype)}
-                          className="bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-hidden"
+                          className="bg-white border border-[#d8c5a6] rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#4f4233] focus:outline-hidden"
                         >
                           <option value="PERSON">บุคคล / สตรีมเมอร์</option>
                           <option value="ANIMAL">สัตว์</option>
@@ -699,14 +777,14 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                         <button
                           type="submit"
                           disabled={!newSubName.trim()}
-                          className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg font-bold shrink-0 cursor-pointer"
+                          className="bg-[#78593a] hover:bg-[#604427] disabled:opacity-50 text-white text-xs px-3.5 py-1.5 rounded-lg font-bold shrink-0 cursor-pointer transition-colors"
                         >
-                          บันทึก
+                          บันทึกแท็ก
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsAddingNewSub(false)}
-                          className="text-xs text-slate-600 hover:text-slate-900 px-1.5 font-semibold cursor-pointer"
+                          className="text-xs text-[#7d7162] hover:text-[#3d3429] px-2 py-1.5 font-semibold cursor-pointer"
                         >
                           ยกเลิก
                         </button>
@@ -716,11 +794,11 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                 )}
               </AnimatePresence>
 
-              {/* Capped Subcategory Pills Container (Zero Layout Shift) */}
-              <div className="max-h-40 sm:max-h-44 overflow-y-auto pr-1 p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/80 overscroll-contain">
+              {/* Subcategory Pills Container */}
+              <div className="max-h-44 overflow-y-auto pr-1 p-2.5 rounded-xl bg-[#faf8f5] border border-[#e5dfd5] overscroll-contain">
                 {displayedSubcategories.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic py-1.5 text-center">
-                    ยังไม่มีหมวดหมู่ย่อยใต้หมวดนี้ กด &quot;+ เพิ่มหัวข้อย่อยใหม่&quot; เพื่อสร้างรายการแรกได้ทันที
+                  <p className="text-xs text-[#8c8072] italic py-1.5 text-center">
+                    ยังไม่มีป้ายแท็กย่อยใต้หมวดนี้ กด &quot;+ เพิ่มป้ายแท็กย่อยใหม่&quot; เพื่อสร้างแท็กแรกได้ทันที
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2 items-center">
@@ -733,12 +811,17 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                           onClick={() => handleToggleSubcategory(sub)}
                           className={`text-sm px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                             isSelected
-                              ? 'bg-amber-500 text-slate-950 font-bold shadow-xs ring-2 ring-amber-300/80 border border-amber-500'
-                              : 'bg-white text-slate-800 border border-slate-200 hover:bg-amber-50/70 hover:border-amber-200 font-medium'
+                              ? 'bg-[#d5ebda] text-[#144220] font-bold border border-[#aed7b7] shadow-2xs ring-2 ring-[#c5e6cd]'
+                              : 'bg-white text-[#4a3f31] border border-[#dfd7ca] hover:bg-[#edf6f0] hover:border-[#c5dfcc]'
                           }`}
                         >
+                          {isSelected ? (
+                            <Check className="w-3.5 h-3.5 text-[#1b572a] shrink-0" />
+                          ) : (
+                            <Plus className="w-3.5 h-3.5 text-[#88a891] shrink-0" />
+                          )}
                           <span className="text-sm shrink-0">{getEntityIcon(sub)}</span>
-                          <span>{sub.name}</span>
+                          <span>#{sub.name}</span>
                         </button>
                       );
                     })}
@@ -749,41 +832,6 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Currently Selected Summary Strip */}
-      <div className="pt-2.5 border-t border-slate-200/80 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-slate-600 font-bold">
-          {isCurrentlyInStaging
-            ? 'สถานะหมวดหมู่ปัจจุบัน (ค่าเริ่มต้น):'
-            : `ป้ายหมวดหมู่จริงที่ติดกับคลิปนี้ (${selectedTagIds.filter((id) => !isStagingTagId(id)).length}):`}
-        </span>
-        {isCurrentlyInStaging ? (
-          <TagPill
-            tag={tagMap[STAGING_TAG_ID]}
-            showEntityIcon={true}
-          />
-        ) : (
-          selectedTagIds
-            .filter((tid) => !isStagingTagId(tid))
-            .map((tid) => {
-              const tag = tagMap[tid];
-              if (!tag) return null;
-              return (
-                <TagPill
-                  key={tag.id}
-                  tag={tag}
-                  showEntityIcon={true}
-                  onRemove={() => {
-                    const remaining = selectedTagIds.filter(
-                      (id) => id !== tag.id && !isStagingTagId(id)
-                    );
-                    onChange(remaining.length > 0 ? remaining : [STAGING_TAG_ID]);
-                  }}
-                />
-              );
-            })
-        )}
-      </div>
     </div>
   );
 };

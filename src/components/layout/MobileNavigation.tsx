@@ -296,7 +296,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                     </span>
                   </button>
 
-                  {/* 3-Tier Category Studio */}
+                  {/* Unified 3-Tier Tag Studio & Cooldown Rules */}
                   <button
                     type="button"
                     onClick={() => {
@@ -307,27 +307,9 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                   >
                     <span className="flex items-center gap-2.5 truncate">
                       <FolderTree className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span className="truncate">จัดการหมวดหมู่ 3 ชั้น (กลุ่ม ➔ หลัก ➔ ย่อย)</span>
+                      <span className="truncate">สตูดิโอแท็ก 3 ชั้น & ตั้งค่ากฎพักฟุต</span>
                     </span>
                     <span className="font-mono tabular-nums text-[11px] text-indigo-700 shrink-0">
-                      3 ชั้น
-                    </span>
-                  </button>
-
-                  {/* Category & Cooldown Tag Manager */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      setIsTagManagerOpen(true);
-                    }}
-                    className="w-full min-h-[46px] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-violet-50/80 hover:bg-violet-100/80 border border-violet-200/80 text-violet-950 text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2.5 truncate">
-                      <Settings2 className="w-4 h-4 text-violet-600 shrink-0" />
-                      <span className="truncate">จัดการหมวดหมู่ & กฎพักฟุต</span>
-                    </span>
-                    <span className="font-mono tabular-nums text-[11px] text-violet-700 shrink-0">
                       {tags.length} หมวด
                     </span>
                   </button>

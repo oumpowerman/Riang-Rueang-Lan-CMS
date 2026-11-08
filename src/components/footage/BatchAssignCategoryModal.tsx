@@ -86,35 +86,35 @@ export const BatchAssignCategoryModal: React.FC = () => {
   const hasRealTagSelected = selectedTagIds.some((t) => !isStagingTagId(t));
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-[#2a221b]/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 12 }}
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="bg-[#faf8f5] rounded-3xl shadow-xl border border-[#e5ded4] w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh]"
       >
-        {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800">
+        {/* Header (Pastel Earth Tone) */}
+        <div className="bg-[#faf7f2] text-[#3e3427] px-6 py-4 flex items-center justify-between border-b border-[#e5ded4]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-400">
+            <div className="w-10 h-10 rounded-2xl bg-[#eedbc0] border border-[#dfc6a3] flex items-center justify-center text-[#6e491c]">
               <Tag className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-bold flex items-center gap-2">
-                <span>จัดหมวดหมู่แบบกลุ่ม (Batch Categorization)</span>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                <span>จัดแท็กแบบกลุ่ม (Batch Multi-Tagging)</span>
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#eaf4ec] text-[#245233] border border-[#c6e1cb]">
                   {selectedFootageIdsForBatch.length} ฟุตเทจ
                 </span>
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                เลือกหมวดหมู่หลักและหมวดย่อยเพื่ออัปเดตให้กับฟุตเทจที่เลือกพร้อมกันทั้งหมด
+              <p className="text-xs text-[#786b5c] mt-0.5">
+                เลือกป้ายแท็กหลายมิติเพื่ออัปเดตให้กับฟุตเทจที่เลือกพร้อมกันทั้งหมด
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-xl bg-white hover:bg-[#eee7dc] text-[#786b5c] hover:text-[#3e3427] border border-[#e5ded4] flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -207,37 +207,37 @@ export const BatchAssignCategoryModal: React.FC = () => {
                     onClick={() => setUpdateMode('APPEND')}
                     className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       updateMode === 'APPEND'
-                        ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200 font-bold text-indigo-950'
-                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                        ? 'bg-[#f0e4d2] border-[#dcbe93] ring-2 ring-[#e5cdab] font-bold text-[#3d2912]'
+                        : 'bg-white border-[#e5ded4] hover:bg-[#faf7f2] text-[#4d4133]'
                     }`}
                   >
                     <div className="flex items-center justify-between text-xs">
-                      <span>เพิ่มหมวดนี้เข้าไป (คงหมวดเดิมไว้)</span>
-                      {updateMode === 'APPEND' && <Check className="w-4 h-4 text-indigo-600" />}
+                      <span>เพิ่มแท็กเหล่านี้เข้าไป (คงแท็กเดิมไว้)</span>
+                      {updateMode === 'APPEND' && <Check className="w-4 h-4 text-[#78593a]" />}
                     </div>
-                    <p className="text-[11px] font-normal text-slate-500 mt-1">
-                      คงหมวดหมู่ที่มีอยู่เดิมไว้ และเพิ่มหมวดใหม่เข้าไปพร้อมกัน
+                    <p className="text-[11px] font-normal text-[#786b5c] mt-1">
+                      คงป้ายแท็กที่มีอยู่เดิมไว้ และเพิ่มแท็กใหม่เข้าไปพร้อมกัน
                     </p>
                   </button>
                 </div>
               </div>
 
               {/* Cascade Category Selector */}
-              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3">
+              <div className="border border-[#e5ded4] rounded-2xl p-4 bg-white space-y-3">
                 <CascadeCategorySelector
                   selectedTagIds={selectedTagIds}
                   onChange={setSelectedTagIds}
-                  label="เลือกหมวดหมู่ที่จะกำหนดให้กับคลิปทั้งหมด:"
-                  helperText="เลือกกลุ่มหมวดหมู่ -> เลือกหมวดหลัก (Tier 1) -> เลือกหมวดย่อย (Tier 2)"
+                  label="เลือกป้ายแท็กที่จะกำหนดให้กับคลิปทั้งหมด (แท็กหลายมิติ):"
+                  helperText="เลือกมิติกลุ่มแท็ก ➔ ป้ายแท็กหลัก ➔ ป้ายแท็กย่อย / คุณลักษณะ (เลือกได้หลายแท็กอิสระ)"
                   allowMultipleSubcategories={true}
                 />
               </div>
 
               {/* Selected Categories Preview */}
               {selectedTagIds.length > 0 && (
-                <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="bg-[#faf7f2] border border-[#e5ded4] rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="font-bold text-indigo-900">หมวดหมู่ที่จะได้รับ:</span>
+                    <span className="font-bold text-[#3d3326]">ป้ายแท็กที่จะได้รับ:</span>
                     {selectedTagIds.map((tid) => {
                       const tag = tagMap[tid];
                       return (
@@ -259,11 +259,11 @@ export const BatchAssignCategoryModal: React.FC = () => {
 
         {/* Footer */}
         {!isSuccess && (
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+          <div className="px-6 py-4 bg-[#faf7f2] border-t border-[#e5ded4] flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-white border border-[#dfd7ca] text-[#5c5042] hover:bg-[#f4eee5] text-xs font-bold cursor-pointer transition-colors"
             >
               ยกเลิก
             </button>
@@ -272,11 +272,11 @@ export const BatchAssignCategoryModal: React.FC = () => {
               type="button"
               onClick={handleApplyBatchTags}
               disabled={isSubmitting || !hasRealTagSelected || selectedFootageIdsForBatch.length === 0}
-              className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-[#78593a] hover:bg-[#62462a] disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
             >
-              <Tag className="w-3.5 h-3.5 text-amber-400" />
+              <Tag className="w-3.5 h-3.5 text-[#f3dec3]" />
               <span>
-                ยืนยันจัดหมวดหมู่ {selectedFootageIdsForBatch.length} ฟุตเทจพร้อมกัน
+                ยืนยันติดแท็ก {selectedFootageIdsForBatch.length} ฟุตเทจพร้อมกัน
               </span>
             </button>
           </div>

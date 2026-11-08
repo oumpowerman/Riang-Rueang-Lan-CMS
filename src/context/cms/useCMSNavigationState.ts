@@ -7,13 +7,32 @@ import { ActiveNavTab, BuilderPreselectRequest } from './cms.types';
 export function useCMSNavigationState() {
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('DASHBOARD');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string[]>([]);
-  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  // Unified Tag Studio & Cooldown Rules Modal state
   const [isThreeTierManagerOpen, setIsThreeTierManagerOpen] = useState(false);
-  const [isStatusRuleModalOpen, setIsStatusRuleModalOpen] = useState(false);
+  const [threeTierStudioTab, setThreeTierStudioTab] =
+    useState<'STUDIO_3TIER' | 'COOLDOWN_RULES'>('STUDIO_3TIER');
+
+  const openThreeTierStudio = (tab: 'STUDIO_3TIER' | 'COOLDOWN_RULES' = 'STUDIO_3TIER') => {
+    setThreeTierStudioTab(tab);
+    setIsThreeTierManagerOpen(true);
+  };
+
+  const isStatusRuleModalOpen = isThreeTierManagerOpen && threeTierStudioTab === 'COOLDOWN_RULES';
+  const setIsStatusRuleModalOpen = (open: boolean) => {
+    if (open) {
+      openThreeTierStudio('COOLDOWN_RULES');
+    } else {
+      setIsThreeTierManagerOpen(false);
+    }
+  };
+
   const [isClearClipsModalOpen, setIsClearClipsModalOpen] = useState(false);
   const [isDirectFootageModalOpen, setIsDirectFootageModalOpen] = useState(false);
   const [isGoogleDriveBatchModalOpen, setIsGoogleDriveBatchModalOpen] = useState(false);
   const [isBatchAssignCategoryModalOpen, setIsBatchAssignCategoryModalOpen] = useState(false);
+  const [isSheetTagImportModalOpen, setIsSheetTagImportModalOpen] = useState(false);
+  const [isSupabaseSyncModalOpen, setIsSupabaseSyncModalOpen] = useState(false);
+  const [isSupabaseConfigModalOpen, setIsSupabaseConfigModalOpen] = useState(false);
   const [selectedFootageIdsForBatch, setSelectedFootageIdsForBatch] = useState<string[]>([]);
   const [activeDragFootageIds, setActiveDragFootageIds] = useState<string[]>([]);
   const [lastSelectedFootageId, setLastSelectedFootageId] = useState<string | null>(null);
@@ -70,10 +89,14 @@ export function useCMSNavigationState() {
     setActiveTab,
     selectedTagFilter,
     setSelectedTagFilter,
-    isTagManagerOpen,
-    setIsTagManagerOpen,
+    // Both isTagManagerOpen and isThreeTierManagerOpen route to the unified Studio Modal
+    isTagManagerOpen: isThreeTierManagerOpen,
+    setIsTagManagerOpen: setIsThreeTierManagerOpen,
     isThreeTierManagerOpen,
     setIsThreeTierManagerOpen,
+    threeTierStudioTab,
+    setThreeTierStudioTab,
+    openThreeTierStudio,
     isStatusRuleModalOpen,
     setIsStatusRuleModalOpen,
     isClearClipsModalOpen,
@@ -84,6 +107,12 @@ export function useCMSNavigationState() {
     setIsGoogleDriveBatchModalOpen,
     isBatchAssignCategoryModalOpen,
     setIsBatchAssignCategoryModalOpen,
+    isSheetTagImportModalOpen,
+    setIsSheetTagImportModalOpen,
+    isSupabaseSyncModalOpen,
+    setIsSupabaseSyncModalOpen,
+    isSupabaseConfigModalOpen,
+    setIsSupabaseConfigModalOpen,
     selectedFootageIdsForBatch,
     setSelectedFootageIdsForBatch,
     activeDragFootageIds,

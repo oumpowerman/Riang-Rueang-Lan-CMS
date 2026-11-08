@@ -38,7 +38,7 @@ export const SeriesNavigationFilterBar: React.FC<SeriesNavigationFilterBarProps>
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-earth">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-ultraslim">
           <button
             type="button"
             onClick={() => {
@@ -119,7 +119,7 @@ export const SeriesNavigationFilterBar: React.FC<SeriesNavigationFilterBarProps>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-earth">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-ultraslim">
           <button
             type="button"
             onClick={() => onSelectCategory('ALL')}

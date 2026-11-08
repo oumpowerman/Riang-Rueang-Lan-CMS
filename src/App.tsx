@@ -11,6 +11,7 @@ import { EpisodeDetailModal } from './components/episodes/EpisodeDetailModal';
 import { MasterEpisodeArchiveView } from './components/episodes/MasterEpisodeArchiveView';
 import { DirectFootageModal } from './components/footage/DirectFootageModal';
 import { GoogleDriveBatchImportModal } from './components/footage/GoogleDriveBatchImportModal';
+import { SheetTagImportModal } from './components/footage/SheetTagImportModal';
 import { BatchAssignCategoryModal } from './components/footage/BatchAssignCategoryModal';
 import { BatchCategorizeFloatingBar } from './components/footage/BatchCategorizeFloatingBar';
 import { FootageLibraryView } from './components/footage/FootageLibraryView';
@@ -21,17 +22,23 @@ import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { SourceLibraryView } from './components/sources/SourceLibraryView';
 import { SourceSplitterModal } from './components/sources/SourceSplitterModal';
-import { CategoryTagManagerModal } from './components/tags/CategoryTagManagerModal';
 import { ThreeTierCategoryManagerModal } from './components/tags/ThreeTierCategoryManagerModal';
-import { StatusColorRulesModal } from './components/settings/StatusColorRulesModal';
 import { ClearAllClipsModal } from './components/settings/ClearAllClipsModal';
 import { E2EPipelineBoard } from './components/workflow/E2EPipelineBoard';
 import { AuthModal } from './components/auth/AuthModal';
+import { SupabaseContentSyncModal } from './components/supabase/SupabaseContentSyncModal';
+import { SupabaseConfigModal } from './components/supabase/SupabaseConfigModal';
 import { CMSProvider, useCMS } from './context/CMSContext';
 import { AuthProvider } from './context/AuthContext';
 
 const MainWorkspace: React.FC = () => {
-  const { activeTab } = useCMS();
+  const {
+    activeTab,
+    isSupabaseSyncModalOpen,
+    setIsSupabaseSyncModalOpen,
+    isSupabaseConfigModalOpen,
+    setIsSupabaseConfigModalOpen,
+  } = useCMS();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
@@ -79,13 +86,21 @@ const MainWorkspace: React.FC = () => {
       <FootageTraceabilityModal />
       <VideoPreviewModal />
       <EpisodeDetailModal />
-      <CategoryTagManagerModal />
       <ThreeTierCategoryManagerModal />
-      <StatusColorRulesModal />
       <ClearAllClipsModal />
       <AuthModal />
       <GoogleDriveBatchImportModal />
+      <SheetTagImportModal />
       <BatchAssignCategoryModal />
+      <SupabaseContentSyncModal
+        isOpen={isSupabaseSyncModalOpen}
+        onClose={() => setIsSupabaseSyncModalOpen(false)}
+        onOpenConfig={() => setIsSupabaseConfigModalOpen(true)}
+      />
+      <SupabaseConfigModal
+        isOpen={isSupabaseConfigModalOpen}
+        onClose={() => setIsSupabaseConfigModalOpen(false)}
+      />
 
       {/* Floating Batch Categorize Action Bar */}
       <BatchCategorizeFloatingBar />

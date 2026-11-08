@@ -96,6 +96,9 @@ export interface CMSContextType {
   setIsTagManagerOpen: (open: boolean) => void;
   isThreeTierManagerOpen: boolean;
   setIsThreeTierManagerOpen: (open: boolean) => void;
+  threeTierStudioTab: 'STUDIO_3TIER' | 'COOLDOWN_RULES';
+  setThreeTierStudioTab: (tab: 'STUDIO_3TIER' | 'COOLDOWN_RULES') => void;
+  openThreeTierStudio: (tab?: 'STUDIO_3TIER' | 'COOLDOWN_RULES') => void;
   isStatusRuleModalOpen: boolean;
   setIsStatusRuleModalOpen: (open: boolean) => void;
   isClearClipsModalOpen: boolean;
@@ -106,6 +109,12 @@ export interface CMSContextType {
   setIsGoogleDriveBatchModalOpen: (open: boolean) => void;
   isBatchAssignCategoryModalOpen: boolean;
   setIsBatchAssignCategoryModalOpen: (open: boolean) => void;
+  isSheetTagImportModalOpen: boolean;
+  setIsSheetTagImportModalOpen: (open: boolean) => void;
+  isSupabaseSyncModalOpen: boolean;
+  setIsSupabaseSyncModalOpen: (open: boolean) => void;
+  isSupabaseConfigModalOpen: boolean;
+  setIsSupabaseConfigModalOpen: (open: boolean) => void;
   selectedFootageIdsForBatch: string[];
   setSelectedFootageIdsForBatch: React.Dispatch<React.SetStateAction<string[]>>;
   activeDragFootageIds: string[];
@@ -246,6 +255,10 @@ export interface CMSContextType {
     newTags: string[],
     mode?: 'REPLACE' | 'APPEND'
   ) => void;
+  batchSyncFootageTagsByMap: (
+    tagsByFootageId: Record<string, string[]>,
+    mode?: 'REPLACE' | 'APPEND'
+  ) => void;
   batchDeleteFootage: (footageIds: string[]) => void;
   lastQuickSortUndoRecord: QuickSortUndoRecord | null;
   quickAssignCategoryToFootage: (footageIds: string[], targetTagId: string) => void;
@@ -259,6 +272,7 @@ export interface CMSContextType {
       masterVideoInfo?: Partial<MasterVideoInfo>;
     }
   ) => Episode;
+  batchUpsertEpisodes: (episodesToUpsert: Episode[]) => void;
   updateEpisodeWorkflowStage: (episodeId: string, stage: EpisodeWorkflowStage) => void;
   updateEpisodeMasterInfo: (episodeId: string, updates: Partial<MasterVideoInfo>) => void;
   deleteEpisode: (episodeId: string) => void;

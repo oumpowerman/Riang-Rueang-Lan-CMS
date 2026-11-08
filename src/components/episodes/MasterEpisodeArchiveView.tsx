@@ -16,7 +16,11 @@ import { EpisodeTableView } from './archive/components/EpisodeTableView';
  * delegating O(1) business logic to custom hooks and UI rendering to sub-components.
  */
 export const MasterEpisodeArchiveView: React.FC = () => {
-  const { setSelectedEpisodeDetailId, launchEpisodeBuilderForCategory } = useCMS();
+  const {
+    setSelectedEpisodeDetailId,
+    launchEpisodeBuilderForCategory,
+    setIsSupabaseSyncModalOpen,
+  } = useCMS();
 
   // 1. Metrics & Precomputed O(1) Maps Hook
   const {
@@ -78,6 +82,7 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         categoryFilter={categoryFilter}
         onCategoryFilterChange={setCategoryFilter}
         sortedEpisodesCount={sortedEpisodes.length}
+        onOpenSupabaseSync={() => setIsSupabaseSyncModalOpen(true)}
       />
 
       {/* 2. Category Distribution & Footage Utilization Drawer */}

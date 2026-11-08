@@ -28,6 +28,7 @@ export const FootageLibraryView: React.FC = () => {
         onClearHierarchySelection={vault.handleClearHierarchySelection}
         onOpenGoogleDriveBatchModal={() => vault.setIsGoogleDriveBatchModalOpen(true)}
         onOpenFullscreenStudio={() => vault.setIsFullscreenStudioOpen(true)}
+        onOpenSheetTagImportModal={() => vault.setIsSheetTagImportModalOpen(true)}
       />
 
       {/* 2. Progressive 3-Tier Category Explorer (Group -> Main Category -> Subcategory) */}

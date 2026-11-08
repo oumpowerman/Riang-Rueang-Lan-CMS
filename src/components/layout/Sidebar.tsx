@@ -4,6 +4,7 @@ import {
   Archive,
   ChevronRight,
   Cloud,
+  Database,
   Film,
   FolderTree,
   LayoutDashboard,
@@ -43,6 +44,7 @@ export const Sidebar: React.FC = () => {
     setIsThreeTierManagerOpen,
     setIsStatusRuleModalOpen,
     setIsClearClipsModalOpen,
+    setIsSupabaseSyncModalOpen,
     isCloudConnected,
     isSeedingToCloud,
     seedToCloud,
@@ -102,9 +104,13 @@ export const Sidebar: React.FC = () => {
       transition={SIDEBAR_SPRING}
       className="hidden md:flex h-screen sticky top-0 z-30 bg-white text-slate-700 flex-col justify-between shrink-0 border-r border-slate-200/90 shadow-xs select-none overflow-hidden"
     >
-      <div className="p-3 space-y-4 overflow-y-auto no-scrollbar">
-        {/* Studio Brand Identity (Fixed Height so items below never shift) */}
-        <div className="h-13 flex items-center gap-3 px-1.5 border-b border-slate-100">
+      {/* Studio Brand Identity (Full-bleed edge-to-edge border and centered avatar when collapsed) */}
+      <div className="h-16 flex items-center border-b border-slate-100 px-3 shrink-0">
+        <div
+          className={`w-full flex items-center ${
+            isHovered ? 'gap-3 px-1' : 'justify-center'
+          }`}
+        >
           <motion.div
             whileHover={{ rotate: -4, scale: 1.05 }}
             onClick={() => setActiveTab('DASHBOARD')}
@@ -142,20 +148,26 @@ export const Sidebar: React.FC = () => {
             )}
           </AnimatePresence>
         </div>
+      </div>
 
-        {/* Primary Navigation Links (Fixed row height h-[52px] to eliminate vertical jumping) */}
-        <nav className="space-y-1">
+      {/* Primary Navigation Links (Square minimal centered icon when collapsed, expansive row when hovered) */}
+      <div className="flex-1 p-3 space-y-4 overflow-y-auto no-scrollbar">
+        <nav className="space-y-1.5 flex flex-col items-center">
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
               <motion.button
                 key={item.id}
                 type="button"
-                whileHover={{ x: isHovered ? 2 : 0 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ x: isHovered ? 2 : 0, scale: !isHovered ? 1.04 : 1 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => setActiveTab(item.id)}
                 title={!isHovered ? item.label : undefined}
-                className={`relative w-full h-[52px] flex items-center justify-between gap-2.5 px-2.5 rounded-xl text-left transition-colors cursor-pointer overflow-hidden ${
+                className={`relative h-12 rounded-xl transition-all cursor-pointer overflow-hidden flex items-center ${
+                  isHovered
+                    ? 'w-full justify-between gap-2.5 px-3 text-left'
+                    : 'w-12 justify-center px-0'
+                } ${
                   isActive
                     ? 'text-indigo-950 font-semibold'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
@@ -170,10 +182,16 @@ export const Sidebar: React.FC = () => {
                   />
                 )}
 
-                <div className="relative z-10 flex items-center gap-3 min-w-0">
+                <div
+                  className={`relative z-10 flex items-center ${
+                    isHovered ? 'gap-3 min-w-0' : 'justify-center w-full'
+                  }`}
+                >
                   <span
                     className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                      isActive ? 'text-indigo-600 bg-indigo-100/70' : 'text-slate-500 group-hover:text-slate-800'
+                      isActive
+                        ? 'text-indigo-600 bg-indigo-100/70'
+                        : 'text-slate-500 group-hover:text-slate-800'
                     }`}
                     aria-hidden="true"
                   >
@@ -230,9 +248,9 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Bottom Section: Neutral System & Configuration Tools */}
-      <div className="p-2.5 border-t border-slate-100 bg-slate-50/50 space-y-1">
+      <div className="p-2.5 border-t border-slate-100 bg-slate-50/50 space-y-1 flex flex-col items-center">
         {/* Fixed-height section header that crossfades between ChevronRight and Title */}
-        <div className="h-6 flex items-center px-2.5 overflow-hidden">
+        <div className={`h-6 flex items-center overflow-hidden ${isHovered ? 'w-full px-2.5' : 'w-full justify-center'}`}>
           <AnimatePresence mode="wait" initial={false}>
             {isHovered ? (
               <motion.div
@@ -260,14 +278,18 @@ export const Sidebar: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        {/* 1. 3-Tier Category Manager */}
+        {/* Unified 3-Tier Tag Studio & Cooldown Rules Manager */}
         <button
           type="button"
           onClick={() => setIsThreeTierManagerOpen(true)}
-          title="จัดการหมวดหมู่ 3 ชั้น (กลุ่ม ➔ หมวดหลัก ➔ หมวดย่อย)"
-          className="w-full h-9 flex items-center justify-between gap-2 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors overflow-hidden cursor-pointer"
+          title="สตูดิโอกลุ่มแท็ก 3 ชั้น & ตั้งค่าเกณฑ์สีพักฟุต (ครบจบในหน้าต่างเดียว)"
+          className={`h-9 flex items-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-all overflow-hidden cursor-pointer ${
+            isHovered
+              ? 'w-full justify-between gap-2 px-3'
+              : 'w-10 justify-center px-0'
+          }`}
         >
-          <span className="inline-flex items-center gap-3 whitespace-nowrap min-w-0">
+          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
             <span className="w-6 flex items-center justify-center shrink-0">
               <FolderTree className="w-4 h-4 text-slate-500 shrink-0" />
             </span>
@@ -281,7 +303,7 @@ export const Sidebar: React.FC = () => {
                   transition={{ duration: 0.18, ease: TEXT_EASE }}
                   className="truncate font-semibold"
                 >
-                  หมวดหมู่ 3 ชั้น
+                  สตูดิโอแท็ก & กฎพักฟุต
                 </motion.span>
               )}
             </AnimatePresence>
@@ -294,93 +316,9 @@ export const Sidebar: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 4 }}
                 transition={{ duration: 0.18, ease: TEXT_EASE }}
-                className="font-mono text-[10px] text-slate-400 shrink-0"
-              >
-                3-Tier
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* 2. Tag & Cooldown Velocity Manager */}
-        <button
-          type="button"
-          onClick={() => setIsTagManagerOpen(true)}
-          title="ตั้งค่าแท็ก & กฎพักฟุต"
-          className="w-full h-9 flex items-center justify-between gap-2 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors overflow-hidden cursor-pointer"
-        >
-          <span className="inline-flex items-center gap-3 whitespace-nowrap min-w-0">
-            <span className="w-6 flex items-center justify-center shrink-0">
-              <Settings2 className="w-4 h-4 text-slate-500 shrink-0" />
-            </span>
-            <AnimatePresence initial={false}>
-              {isHovered && (
-                <motion.span
-                  key="label-tags"
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.18, ease: TEXT_EASE }}
-                  className="truncate font-semibold"
-                >
-                  แท็ก & กฎพักฟุต
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </span>
-          <AnimatePresence initial={false}>
-            {isHovered && (
-              <motion.span
-                key="badge-tags"
-                initial={{ opacity: 0, x: 4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 4 }}
-                transition={{ duration: 0.18, ease: TEXT_EASE }}
                 className="font-mono tabular-nums text-[10px] text-slate-500 font-semibold shrink-0"
               >
                 {tags.length} หมวด
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* 3. Status Color Rules */}
-        <button
-          type="button"
-          onClick={() => setIsStatusRuleModalOpen(true)}
-          title="ตั้งค่าเกณฑ์สีสถานะ (จำนวนวันพัก & จำนวนครั้งที่ใช้ซ้ำ)"
-          className="w-full h-9 flex items-center justify-between gap-2 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors overflow-hidden cursor-pointer"
-        >
-          <span className="inline-flex items-center gap-3 whitespace-nowrap min-w-0">
-            <span className="w-6 flex items-center justify-center shrink-0">
-              <Palette className="w-4 h-4 text-slate-500 shrink-0" />
-            </span>
-            <AnimatePresence initial={false}>
-              {isHovered && (
-                <motion.span
-                  key="label-rules"
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.18, ease: TEXT_EASE }}
-                  className="truncate font-semibold"
-                >
-                  เกณฑ์สีสถานะ
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </span>
-          <AnimatePresence initial={false}>
-            {isHovered && (
-              <motion.span
-                key="badge-rules"
-                initial={{ opacity: 0, x: 4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 4 }}
-                transition={{ duration: 0.18, ease: TEXT_EASE }}
-                className="font-mono tabular-nums text-[10px] text-slate-500 shrink-0"
-              >
-                ≥{settings.greenReadyDays ?? 21}ว.
               </motion.span>
             )}
           </AnimatePresence>
@@ -392,9 +330,13 @@ export const Sidebar: React.FC = () => {
           onClick={seedToCloud}
           disabled={isSeedingToCloud}
           title="ซิงก์ข้อมูลกับ Firestore Cloud"
-          className="w-full h-9 flex items-center justify-between gap-2 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors overflow-hidden cursor-pointer disabled:opacity-60"
+          className={`h-9 flex items-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-all overflow-hidden cursor-pointer disabled:opacity-60 ${
+            isHovered
+              ? 'w-full justify-between gap-2 px-3'
+              : 'w-10 justify-center px-0'
+          }`}
         >
-          <span className="inline-flex items-center gap-3 whitespace-nowrap min-w-0">
+          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
             <span className="w-6 flex items-center justify-center shrink-0">
               {isSeedingToCloud ? (
                 <RefreshCw className="w-4 h-4 text-slate-500 animate-spin shrink-0" />
@@ -438,14 +380,64 @@ export const Sidebar: React.FC = () => {
           </AnimatePresence>
         </button>
 
-        {/* 5. Clear All Clips */}
+        {/* 5. Supabase Central Contents Sync */}
+        <button
+          type="button"
+          onClick={() => setIsSupabaseSyncModalOpen(true)}
+          title="ส่งออกคอนเทนต์สู่ระบบ Supabase กลาง (ตาราง public.contents)"
+          className={`h-9 flex items-center text-xs font-medium text-emerald-800 hover:bg-emerald-50 rounded-xl transition-all overflow-hidden cursor-pointer ${
+            isHovered
+              ? 'w-full justify-between gap-2 px-3'
+              : 'w-10 justify-center px-0'
+          }`}
+        >
+          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
+            <span className="w-6 flex items-center justify-center shrink-0">
+              <Database className="w-4 h-4 text-emerald-600 shrink-0" />
+            </span>
+            <AnimatePresence initial={false}>
+              {isHovered && (
+                <motion.span
+                  key="label-supabase"
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -6 }}
+                  transition={{ duration: 0.18, ease: TEXT_EASE }}
+                  className="truncate font-semibold text-emerald-900"
+                >
+                  ซิงก์สู่ Supabase กลาง
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </span>
+          <AnimatePresence initial={false}>
+            {isHovered && (
+              <motion.span
+                key="badge-supabase"
+                initial={{ opacity: 0, x: 4 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 4 }}
+                transition={{ duration: 0.18, ease: TEXT_EASE }}
+                className="font-mono text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100/80 text-emerald-800 font-bold shrink-0"
+              >
+                contents
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+
+        {/* 6. Clear All Clips */}
         <button
           type="button"
           onClick={() => setIsClearClipsModalOpen(true)}
           title="ล้างคลังคลิปทั้งหมด (เก็บหมวดหมู่ 3 ชั้นและการตั้งค่าไว้)"
-          className="w-full h-9 flex items-center justify-between gap-2 px-3 text-xs font-medium text-slate-600 hover:bg-rose-50/70 hover:text-rose-700 rounded-xl transition-colors overflow-hidden cursor-pointer group"
+          className={`h-9 flex items-center text-xs font-medium text-slate-600 hover:bg-rose-50/70 hover:text-rose-700 rounded-xl transition-all overflow-hidden cursor-pointer group ${
+            isHovered
+              ? 'w-full justify-between gap-2 px-3'
+              : 'w-10 justify-center px-0'
+          }`}
         >
-          <span className="inline-flex items-center gap-3 whitespace-nowrap min-w-0">
+          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
             <span className="w-6 flex items-center justify-center shrink-0">
               <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-rose-600 shrink-0 transition-colors" />
             </span>
@@ -471,9 +463,13 @@ export const Sidebar: React.FC = () => {
           type="button"
           onClick={() => setIsAuthModalOpen(true)}
           title="จัดการบัญชีผู้ใช้งาน และสลับสิทธิ์ Admin / Editor"
-          className="w-full h-9 flex items-center justify-between gap-2 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors overflow-hidden cursor-pointer"
+          className={`h-9 flex items-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-all overflow-hidden cursor-pointer ${
+            isHovered
+              ? 'w-full justify-between gap-2 px-3'
+              : 'w-10 justify-center px-0'
+          }`}
         >
-          <span className="inline-flex items-center gap-3 whitespace-nowrap min-w-0">
+          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
             <span className="w-6 flex items-center justify-center shrink-0">
               {role === 'ADMIN' ? (
                 <ShieldCheck className="w-4 h-4 text-slate-500 shrink-0" />

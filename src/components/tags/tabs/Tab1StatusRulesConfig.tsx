@@ -561,7 +561,7 @@ export const Tab1StatusRulesConfig: React.FC<Tab1StatusRulesConfigProps> = ({
             onClick={handleSaveAndNext}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            <span>บันทึก & ไปเพิ่มหมวดหมู่ (แท็บ 2)</span>
+            <span>บันทึก & กลับไปสตูดิโอแท็ก 3 ชั้น</span>
             <ArrowRight className="w-4 h-4" />
           </motion.button>
         </div>

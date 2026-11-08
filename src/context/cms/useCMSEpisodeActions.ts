@@ -138,8 +138,30 @@ export function useCMSEpisodeActions({
     firestoreService.deleteEpisode(episodeId).catch((err) => console.warn('Firestore deleteEpisode error:', err));
   };
 
+  const batchUpsertEpisodes = (episodesToUpsert: Episode[]) => {
+    if (!episodesToUpsert || episodesToUpsert.length === 0) return;
+
+    setEpisodes((prev) => {
+      const upsertMap = new Map<string, Episode>();
+      episodesToUpsert.forEach((ep) => upsertMap.set(ep.id, ep));
+
+      const existingIds = new Set(prev.map((e) => e.id));
+      const updatedExisting = prev.map((ep) =>
+        upsertMap.has(ep.id) ? upsertMap.get(ep.id)! : ep
+      );
+      const brandNew = episodesToUpsert.filter((ep) => !existingIds.has(ep.id));
+
+      return [...brandNew, ...updatedExisting];
+    });
+
+    firestoreService
+      .batchSaveEpisodes(episodesToUpsert)
+      .catch((err) => console.warn('Firestore batchUpsertEpisodes error:', err));
+  };
+
   return {
     saveEpisode,
+    batchUpsertEpisodes,
     updateEpisodeWorkflowStage,
     updateEpisodeMasterInfo,
     deleteEpisode,

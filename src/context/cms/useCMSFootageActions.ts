@@ -538,6 +538,44 @@ export function useCMSFootageActions({
     setLastQuickSortUndoRecord(null);
   };
 
+  // Batch Sync Individual Footage Tags Map in a single atomic state + Firestore batch
+  const batchSyncFootageTagsByMap = (
+    tagsByFootageId: Record<string, string[]>,
+    mode: 'REPLACE' | 'APPEND' = 'APPEND'
+  ) => {
+    const targetIds = Object.keys(tagsByFootageId);
+    if (targetIds.length === 0) return;
+
+    const updatedFootages: Footage[] = [];
+    setFootage((prev) =>
+      prev.map((ft) => {
+        const incomingTags = tagsByFootageId[ft.id];
+        if (!incomingTags) return ft;
+
+        let mergedTags: string[];
+        if (mode === 'REPLACE') {
+          mergedTags = normalizeFootageTags(incomingTags);
+        } else {
+          const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
+          mergedTags = normalizeFootageTags([...existingReal, ...incomingTags]);
+        }
+
+        const updatedFt: Footage = {
+          ...ft,
+          tags: mergedTags,
+        };
+        updatedFootages.push(updatedFt);
+        return updatedFt;
+      })
+    );
+
+    if (updatedFootages.length > 0) {
+      firestoreService
+        .batchSaveFootages(updatedFootages)
+        .catch((err) => console.warn('Firestore batchSyncFootageTagsByMap error:', err));
+    }
+  };
+
   return {
     addDirectFootage,
     createSourceWithSplitFootage,
@@ -547,6 +585,7 @@ export function useCMSFootageActions({
     deleteFootage,
     batchAddDirectFootage,
     batchUpdateFootageTags,
+    batchSyncFootageTagsByMap,
     batchDeleteFootage,
     lastQuickSortUndoRecord,
     quickAssignCategoryToFootage,

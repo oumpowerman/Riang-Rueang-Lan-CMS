@@ -321,6 +321,21 @@ export const firestoreService = {
     );
   },
 
+  async batchSaveEpisodes(episodes: Episode[]) {
+    if (!episodes.length) return;
+    const now = new Date().toISOString();
+    const ops: BatchWriteOp[] = episodes.map((ep) => ({
+      type: 'set',
+      ref: doc(db, 'episodes', ep.id),
+      data: sanitizeForFirestore({
+        ...ep,
+        updatedAt: now,
+        serverUpdatedAt: serverTimestamp(),
+      }) as unknown as Record<string, unknown>,
+    }));
+    await commitOperationsInChunks(ops);
+  },
+
   async deleteEpisode(episodeId: string) {
     const docRef = doc(db, 'episodes', episodeId);
     await deleteDoc(docRef);

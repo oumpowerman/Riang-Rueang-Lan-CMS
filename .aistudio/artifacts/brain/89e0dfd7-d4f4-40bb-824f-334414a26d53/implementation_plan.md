@@ -1,130 +1,100 @@
-# UX & Taxonomy Scaling Plan: 30–100 Series Categories Management
+# แผนงานอัปเกรดระบบส่งออก Supabase ระดับ Enterprise (รองรับ 10,000+ รายการ)
+
+ยกระดับระบบส่งออกคอนเทนต์สู่ตาราง `public.contents` ใน Supabase ให้ก้าวข้ามข้อจำกัดเดิมที่ตรวจเช็คได้เพียง 1,000 รายการล่าสุด โดยเปลี่ยนมาใช้กลไกตรวจสอบความซ้ำแบบแบ่งกลุ่มเฉพาะรายการ (Chunked Batch Lookup), ระบบแบ่งหน้าตารางแสดงผล (Pagination) ที่ลื่นไหล และระบบส่งข้อมูลความเร็วสูงแบบกลุ่ม (High-Speed Batch Insert) เพื่อรองรับคลังคอนเทนต์สะสมระดับหลักหมื่นถึงหลักแสนรายการโดยไม่หน่วงเครื่อง
+
+---
+
+## การตัดสินใจที่ได้รับการยืนยัน (User Review & Confirmed Decisions)
 
 > [!IMPORTANT]
-> **Summary of User Confirmed Decisions (Phase 1):**
-> 1. **2-Tier Navigation Structure**: Scale from a flat 100-tab row to a 2-level hierarchy: Tier 0 Category Group filter (e.g., บุคคล, พฤติกรรม, ธีม) followed by Tier 1 Series chips.
-> 2. **Flexible Episode Numbering Scope**: Allow user to choose EP numbering at either Tier 1 (Main Category Series) or Tier 2 (Subcategory Special Series) when building episodes.
-> 3. **Dual View Modes in Master Archive**: Provide a prominent view toggle between **รายตอน (Episode View)** and **รายซีรีส์ (Series Shelf Hub)** so editors can manage by individual video or entire show franchises.
+> แนวทางหลักที่ได้รับการยืนยันจากผู้ใช้เพื่อรองรับสเกลระดับ Enterprise:
+
+- **การตรวจสอบความซ้ำระดับหมื่นรายการ (Confirmed Decision 1)**: ใช้การตรวจสอบด้วย **Batch Title คู่กับรหัสอ้างอิง EP (EP Reference ID)** แทนการดึงตารางทั้งหมดแบบจำกัด 1,000 แถว ช่วยให้ตรวจจับรายการซ้ำได้แม่นยำ 100% แม้ตารางปลายทางใน Supabase จะมีข้อมูลสะสมหลายหมื่นหรือหลายแสนรายการ
+- **การแสดงผลตารางและการส่งข้อมูล (Confirmed Decision 2)**: เพิ่มระบบ **แบ่งหน้าแสดงผล (Pagination)** ในหน้าต่างตรวจทานเพื่อป้องกัน DOM ค้างเมื่อมีรายการหลักพันขึ้นไป พร้อมเปลี่ยนระบบส่งข้อมูลเป็น **High-Speed Batch Insert** ที่ส่งทีละกลุ่ม (เช่น กลุ่มละ 50 รายการใน 1 คำสั่ง) แทนการยิงทีละแถว
 
 ---
 
-## 1. Overview & Core Concept
+## 1. ภาพรวมและแนวคิดหลัก (Overview & Core Concept)
 
-### What It Does
-Upgrades Riang-Rueang-Lan CMS's categorization and archive architecture to comfortably manage **30 to 100+ series categories** without UI clutter, endless horizontal scrolling, or lost context. It introduces:
-1. **2-Tier Series Filtering Bar** across the archive and builder.
-2. **Series Shelf Hub (คลังชั้นวางซีรีส์)**: A catalog dashboard where each card represents an entire series franchise showing total episodes, latest EP, available footage reserve, and a 1-click button to produce the next episode (`+ สร้าง EP ถัดไป`).
-3. **Dual-Tier Episode Numbering Engine**: Allows episodes to be automatically sequenced either by Tier 1 Main Category (e.g. *5 อันดับ พระฮาๆ EP.12*) or by Tier 2 Subcategory (e.g. *5 อันดับ หลวงพี่สายฮา EP.3*).
-
-### Target Audience & Persona
-- **Channel Creator & Production Lead**: Needs a high-level view of all 30–100 series to identify which shows are running low on content and which series are due for their next weekly episode.
-- **Video Editor & Scriptwriter**: Needs quick 2-click filtering to pull up all past episodes of a specific franchise to verify past jokes and scripts.
+- **สิ่งที่ระบบทำ (What It Does)**:
+  1. **Chunked Batch Deduplication**: แทนที่จะดึงข้อมูล 1,000 แถวล่าสุดจาก Supabase มาเสี่ยงดวง ระบบจะนำรายชื่อ `title` ของคลิปที่มีในระบบไปแบ่งกลุ่มละ 200 รายการ ยิงคำสั่ง `.in('title', chunk)` ควบคู่กับการตรวจเช็ครหัสอ้างอิง EP (`[EP_REF:id]`) ในฟิลด์ `remark` และลิงก์วิดีโอ เพื่อให้ค้นหาเจอบน Supabase เสมอไม่ว่าคลิปนั้นจะถูกสร้างไว้เมื่อไหร่หรืออยู่อันดับที่เท่าไหร่ในฐานข้อมูล
+  2. **Enterprise Table Pagination**: ตารางตรวจทานรองรับการแบ่งหน้า (เลือกแสดง 50 / 100 / 250 รายการต่อหน้า) ทำให้การสลับแท็บ ค้นหา หรือติ๊กเลือกคลิปจำนวนมากทำงานได้ทันทีโดยเบราว์เซอร์ไม่กระตุก
+  3. **High-Speed Chunked Batch Insert**: รวมรายการใหม่ (`NEW`) ที่เลือกไว้ส่งเข้า Supabase พร้อมกันเป็นชุด (Batch Insert ทีละ 50 แถวต่อ 1 Request) ลดเวลาส่งข้อมูล 1,000 รายการจากเดิมที่ใช้เวลานานนับนาที เหลือเพียงไม่กี่วินาที
+- **กลุ่มเป้าหมายและการใช้งาน (Target Audience)**: ทีมโปรดักชันและผู้ดูแลระบบจัดการหลายช่องที่มีคลังคลิปสะสมต่อเนื่องทุกวัน และต้องการทั้งความเร็วในการนำเข้าก้อนใหญ่ (Initial Bulk Load) และความแม่นยำในการซิงก์รายวัน (Daily Incremental Sync 2–3 คลิป)
+- **คุณค่าหลัก (Key Value)**: ปลดล็อกขีดจำกัด 1,000 แถวของ Supabase PostgREST API อย่างสมบูรณ์ ป้องกันข้อมูลซ้ำซ้อน 100% และเพิ่มความเร็วในการซิงก์ขึ้นกว่า 20 เท่า
 
 ---
 
-## 2. User Experience & Visual Design
+## 2. ประสบการณ์ผู้ใช้และการออกแบบหน้าจอ (User Experience & Visual Design)
 
-### A. 2-Tier Navigation Bar (Hierarchical Series Filtering)
-Instead of 100 flat tabs crammed into one row:
-- **Level 1 (Tier 0 Category Groups)**: Clean, soft segmented pill buttons (`ทั้งหมด`, `บุคคล/ดารา`, `พฤติกรรม/กิริยา`, `ธีม/สถานการณ์`, `ทั่วไป`) with total episode counters.
-- **Level 2 (Tier 1 Series in Selected Group)**: Shows only the 8–15 series belonging to that group, plus a search-as-you-type filter input with instant category suggestions.
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│  กลุ่มใหญ่: [ ทั้งหมด (24) ]  [ บุคคล/ดารา (10) ]  [ พฤติกรรม (8) ]  [ ธีม/สถานการณ์ (6) ]    │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  ซีรีส์:   [ ทั้งหมด ]  [ #พระฮาๆ (4) ]  [ #พูดผิดฮาๆ (3) ]  [ #ดาราฮาๆ (3) ]  [ 🔍 ค้นหาหมวด... ]  │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### B. Dual Archive View Modes: `Episodes View` vs. `Series Shelf Hub`
-A clear toggle at the top of `MasterEpisodeArchiveView.tsx`:
-1. **มุมมองรายตอน (Episodes View)**:
-   - Displays individual produced episodes (Cards or Table) with the series badge (`พระฮาๆ · EP.4`) and Global ID (`EP-0012`).
-   - Filterable by 4-Stage Workflow (Mixing, Scripting, Editing, Published).
-2. **มุมมองรายซีรีส์ (Series Shelf Hub)**:
-   - Grid of Series Franchise Cards (e.g., 30–100 series shelves).
-   - Each card displays:
-     - **Series Title & Group Badge**: e.g. *ซีรีส์ 5 อันดับ พระฮาๆ* (`ธีม/สถานการณ์`)
-     - **Total Episode Count & Latest EP**: e.g. `สร้างแล้ว 4 ตอน` · `ล่าสุด EP.4 (28 ต.ค. 69)`
-     - **Stock Health**: Ready footages remaining in this series (`ว่าง 14 ฟุต` · `ฟุตใหม่ 5 ตัว`)
-     - **Action Buttons**:
-       - `ดูตอนทั้งหมด (View Episodes)`: Filters the Episodes View to this series.
-       - `+ สร้าง EP ถัดไป (Build Next EP.5)`: Jumps directly into Episode Builder with this category and recipe pre-loaded!
-
-### C. Visual Identity & Palette
-- **Palette**: Strictly light pastel earth-tone palette (`#FAF7F2` Warm Cream canvas, Soft Sage `bg-emerald-50 text-emerald-800 border-emerald-200`, Warm Amber `bg-amber-100 text-amber-950 border-amber-300`).
-- **Typography**: Clean sans (`Plus Jakarta Sans` / `Outfit` display) with monospace tabular numerals for episode codes (`EP-0012`) and Thai dates.
-- **Anti-AI Slop**: No generic neon purple, no pill badge sandwiches, no fake scoreboard metrics, and responsive desktop layout (max-w-1440px).
+- **ลำดับการใช้งานหลัก (Key User Flows)**:
+  1. **เปิดหน้าต่างส่งออก Supabase**: ระบบแสดงสถานะความคืบหน้าขณะตรวจสอบความซ้ำแบบแบ่งกลุ่ม (เช่น *"กำลังตรวจสอบความซ้ำกับฐานข้อมูล Supabase (กลุ่มที่ 1/5)..."*)
+  2. **ตรวจสอบผลลัพธ์บนตารางแบ่งหน้า**:
+     - แถบสถิติด้านบนแสดงจำนวน `ทั้งหมด`, `คลิปใหม่ (พร้อมส่ง)`, และ `ซ้ำในระบบ` ด้วยตัวเลขแบบ `tabular-nums`
+     - ตารางแสดงรายการเฉพาะหน้าปัจจุบัน (เช่น 50 รายการต่อหน้า) พร้อมแถบควบคุมการเปลี่ยนหน้า (หน้าแรก / ก่อนหน้า / ถัดไป / หน้าสุดท้าย และตัวเลือกจำนวนแถวต่อหน้า)
+     - ปุ่ม **"เลือกเฉพาะคลิปใหม่ทั้งหมด"** หรือ **"ปรับค่าที่เลือก"** จะทำงานครอบคลุมทุกรายการที่ผ่านเกณฑ์กรองในทุกหน้า ไม่จำกัดแค่หน้าที่เปิดดูอยู่
+  3. **กดยืนยันส่งออกข้อมูล (Batch Execution)**:
+     - รายการใหม่ (`NEW`) ถูกจัดกลุ่มส่งแบบ Batch Insert ความเร็วสูง
+     - รายการซ้ำที่ตั้งค่าให้อัปเดต (`DUPLICATE` + `UPDATE`) ถูกประมวลผลแยกอย่างปลอดภัย พร้อมระบบ Fallback หากกลุ่มใดมีปัญหาจะสลับไปตรวจสอบรายแถวอัตโนมัติเพื่อไม่ให้ข้อมูลทั้งกลุ่มล้มเหลว
+- **อัตลักษณ์และการออกแบบ (Visual Identity & Theme)**:
+  - *โทนสี (Light Pastel Enterprise Theme)*: พื้นหลังโทนสว่างอบอุ่น (`#FAF8F5`, `#FAF7F2`) ตัดกับสีเขียวพาสเทลเข้ม (`#3B6845`, `#EEF5EE`) สำหรับสถานะปกติ และสีเหลืองอำพันนุ่มนวล (`#FEF3C7`, `#92400E`) สำหรับรายการที่ตรวจพบว่าซ้ำ
+  - *การจัดวางและตัวอักษร (Typography & Tabular Discipline)*: ตัวเลขลำดับ สถิติจำนวนคลิป และตัวนับหน้าทั้งหมดใช้ฟอนต์ Monospace (`font-mono tabular-nums`) เพื่อความนิ่งของคอลัมน์เมื่อเปลี่ยนหน้าหรือกรองข้อมูล
 
 ---
 
-## 3. Key Architectural Decisions & Data Strategy
+## 3. การตัดสินใจเชิงสถาปัตยกรรมและเหตุผล (Key Product Decisions & Trade-Offs)
 
-### System Architecture Flow
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             CMS State & Category Matrix                          │
-│        (CategoryGroups: Tier 0 ──▶ MainTags: Tier 1 ──▶ SubTags: Tier 2)        │
-└───────────────────────────┬──────────────────────────────────┬───────────────────┘
-                            │                                  │
-                            ▼                                  ▼
-┌───────────────────────────────────────────────┐  ┌────────────────────────────────┐
-│           EpisodeBuilderView.tsx              │  │  MasterEpisodeArchiveView.tsx  │
-│                                               │  │                                │
-│ 1. 3-Tier Category Picker                     │  │ 1. 2-Tier Navigation Bar       │
-│ 2. EP Scope Toggle:                           │  │    (Group Filter ──▶ Series)   │
-│    - Tier 1 Main (e.g. พระฮาๆ EP.4)           │  │ 2. Dual View Mode:             │
-│    - Tier 2 Sub (e.g. หลวงพี่ฮาๆ EP.2)         │  │    ├─ [Episodes View] (Cards)  │
-│ 3. Post-Save Success Modal:                   │  │    └─ [Series Shelf Hub] (Grid)│
-│    - 1-Click Drive Filename Copy              │  │ 3. 4-Stage Workflow Filters    │
-│    - Fast Track "+ ทำตอนต่อไปในหมวดนี้"       │  │ 4. Direct "+ สร้าง EP ถัดไป"   │
-└───────────────────────────────────────────────┘  └────────────────────────────────┘
-```
-
-### Technical Changes Breakdown
-
-1. **`src/types/episode.types.ts`**:
-   - Add `categoryEpisodeScope?: 'MAIN_CATEGORY' | 'SUBCATEGORY';` to `Episode` to record whether the episode was numbered at Tier 1 or Tier 2.
-   - Add `seriesId?: string;` (which references either the Tier 1 tag ID or Tier 2 tag ID).
-
-2. **`src/context/cms/useCMSEpisodeActions.ts`**:
-   - Update `saveEpisode`: Automatically calculate `categoryEpisodeNo` according to `categoryEpisodeScope`:
-     - If `MAIN_CATEGORY`: count existing episodes with matching `mainCategoryTagId`.
-     - If `SUBCATEGORY`: count existing episodes with matching `targetSubcategoryId`.
-
-3. **`src/components/episodes/builder/useEpisodeBuilder.ts` & `BuilderStep4MetadataForm.tsx`**:
-   - In Step 4, add a clean toggle:
-     - `นับเลข EP ตามหมวดหลัก (#ชื่อหมวดหลัก EP.X)` (Default)
-     - `นับเลข EP ตามหมวดย่อยเดี่ยว (#ชื่อหมวดย่อย EP.Y)` (Active when in Single Subcategory Special mode)
-   - Real-time headline preview updates immediately upon toggling.
-
-4. **`src/components/episodes/MasterEpisodeArchiveView.tsx`**:
-   - Implement **Dual View Mode**:
-     - `viewType: 'EPISODES' | 'SERIES_SHELF'` (Default: 'EPISODES')
-   - Implement **2-Tier Category Filtering**:
-     - Level 1: `selectedGroupId` (`ALL` | `GRP-...`)
-     - Level 2: `categoryFilter` (`ALL` | `TAG-...`)
-   - Build **Series Shelf Hub Component**:
-     - Aggregates episode count, latest release date, usable footage stock, and producible episode count per category.
-     - 1-click button to jump directly into the builder for that series.
-   - Connect **4-Stage Workflow Filter** & Smart Search across both views.
+- **การตัดสินใจที่ 1: ใช้ Chunked `.in('title', batch)` ร่วมกับรหัสอ้างอิง `[EP_REF:id]` แทน `.limit(1000)`**
+  - *แนวทางที่เลือก*: แบ่งรายชื่อคลิปฝั่งแอปออกเป็นชุดละ 150–200 รายการ เพื่อยิง Query ถาม Supabase เฉพาะรายการที่เกี่ยวข้อง พร้อมแนบแท็กอ้างอิงรหัส EP ลงในฟิลด์ `remark` เมื่อส่งออก
+  - *เหตุผล*: Supabase มีเพดานจำกัดผลลัพธ์ต่อ 1 Query ที่ 1,000 แถว หากช่องมีคลิปสะสม 5,000 คลิป การดึง `.limit(1000)` แบบเดิมจะมองไม่เห็นคลิปที่ 1,001–5,000 เลย การถามเฉพาะชื่อและรหัสของคลิปที่มีอยู่ในมือช่วยให้ตรวจสอบทะลุหลักแสนคลิปได้โดยใช้ปริมาณข้อมูล (Payload) น้อยที่สุด
+- **การตัดสินใจที่ 2: ส่งข้อมูลใหม่แบบ Chunked Batch Insert พร้อม Auto-Fallback**
+  - *แนวทางที่เลือก*: ส่งคำสั่ง `.insert(payloadChunk)` ทีละ 50 รายการในครั้งเดียว และหากชุดใดเกิด Error จากฐานข้อมูล ระบบจะสลับโหมดส่งทีละรายการเฉพาะในชุดนั้นอัตโนมัติเพื่อแยกแยะแถวที่มีปัญหา
+  - *เหตุผล*: ให้ทั้งความเร็วระดับสูงสุดในกรณีปกติ และความแม่นยำในการรายงานผลรายคลิปหากเกิดข้อผิดพลาดบางแถว
+- **การตัดสินใจที่ 3: ระบบแบ่งหน้าตารางฝั่ง Client (Client-Side Table Pagination)**
+  - *แนวทางที่เลือก*: คำนวณการกรองและการเลือก (Selection State) บนข้อมูลทั้งหมดในหน่วยความจำ แต่เรนเดอร์แถว HTML (`<tr>`) ลงในหน้าจอเฉพาะหน้าละ 50 / 100 / 250 แถว
+  - *เหตุผล*: การเรนเดอร์ Dropdown และปุ่มควบคุมหลายพันแถวพร้อมกันทำให้ DOM หนักเกินความจำเป็น การแบ่งหน้าช่วยให้ตารางตอบสนองเร็วระดับ < 16ms เสมอ
 
 ---
 
-## 4. Verification & Testing Plan
+## 4. สถาปัตยกรรมทางเทคนิคและการไหลของข้อมูล (Technical Architecture & Data Strategy)
 
-1. **Category Scaling Test**:
-   - Test filtering with all category groups (Tier 0) to ensure smooth transitions between groups with 0, 5, or 20+ series categories.
-2. **Dual Numbering Test**:
-   - Create an episode under Tier 1 Main Category Variety: verify it saves as `พระฮาๆ EP.X`.
-   - Create an episode under Tier 2 Single Subcategory Special: verify it can save as `หลวงพี่ฮาๆ EP.Y`.
-   - Confirm both numbers persist in `localStorage` and Firestore without collision.
-3. **Series Shelf Hub Test**:
-   - Switch between **รายตอน (Episodes View)** and **รายซีรีส์ (Series Shelf Hub)**.
-   - Verify that clicking `ดูตอนทั้งหมด` on a series card filters the episodes list accurately.
-   - Verify that clicking `+ สร้าง EP ถัดไป` opens EpisodeBuilder with the target series pre-selected.
-4. **Compile & Lint Verification**:
-   - Run `lint_applet` (`tsc --noEmit`) to verify zero type mismatches.
-   - Run `compile_applet` (`npm run build`) to ensure successful Vite bundling.
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                   Supabase Enterprise Sync Modal (UI)                      │
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  │
+│  │ Filter & Bulk Action │  │ Paginated Row Table  │  │ Pagination Bar   │  │
+│  │ (All / New / Dup)    │  │ (50 / 100 / 250/pg)  │  │ (Page Navigation)│  │
+│  └──────────┬───────────┘  └──────────┬───────────┘  └────────┬─────────┘  │
+└─────────────┼─────────────────────────┼───────────────────────┼────────────┘
+              │                         │                       │
+              ▼                         ▼                       ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     Enterprise Sync Service Engine                         │
+│                                                                            │
+│  1. Chunked Deduplication Engine                                           │
+│     ├─ Splits local Episode Titles & IDs into chunks of 150 items          │
+│     ├─ Queries Supabase `public.contents` via `.in('title', chunk)`        │
+│     └─ Matches by Title OR `[EP_REF:<id>]` in `remark` OR `published_links`│
+│                                                                            │
+│  2. High-Speed Batch Execution Engine                                      │
+│     ├─ Groups selected `NEW` rows into chunks of 50 items                  │
+│     ├─ Executes `.insert(batchPayloads).select('id, title')`               │
+│     ├─ Fallback: Retries row-by-row if a chunk encounters DB error         │
+│     └─ Processes selected `DUPLICATE (UPDATE)` rows via targeted `.update` │
+└───────────────────────────────────────┬────────────────────────────────────┘
+                                        │
+                                        ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                Supabase PostgreSQL (`public.contents`)                     │
+│        Indexed Lookup & High-Throughput Multi-Channel Storage              │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **โครงสร้างการจับคู่ข้อมูล (Data Model & Matching Keys)**:
+  - **Primary Match**: เปรียบเทียบ `title` (Trim & Case-insensitive) จากผลลัพธ์ที่ได้จาก Chunked Query
+  - **Immutable ID Match**: บันทึกรหัส `[EP_REF:<episode.id>]` ไว้ท้ายฟิลด์ `remark` (เช่น `สร้างจากระบบเรียงเรื่องลั่น (Smart Mix 5→1) [EP_REF:ep_123]`) และดึงรายการที่มี `remark` ตรงรูปแบบมาสร้างดัชนีคู่ขนาน ทำให้แม้เปลี่ยนชื่อคลิปก็ยังรู้ว่าเป็น EP เดิม
+  - **Link Match**: ตรวจสอบ `published_links.youtube` และ `published_links.drive` คู่ขนาน
+- **การทำงานของสถานะและการโต้ตอบ (Interactive Component & State Mapping)**:
+  - เมื่อผู้ใช้เปลี่ยนแท็บ (`ทั้งหมด`, `คลิปใหม่`, `ซ้ำในระบบ`) หรือพิมพ์ค้นหา ระบบจะรีเซ็ตกลับไปที่หน้า 1 อัตโนมัติ
+  - Checkbox ที่หัวตารางจะมีตัวเลือกให้ติ๊กเลือกทั้งหน้าปัจจุบัน หรือใช้ปุ่มลัดด้านบนเพื่อเลือกทุกรายการในทุกหน้าพร้อมกัน
+  - หน้าจอแสดงความคืบหน้า (`SupabaseSyncProgressView`) จะแสดงทั้งสถานะตอนกำลังเช็คความซ้ำเป็นกลุ่ม และตอนกำลัง Batch Insert ข้อมูลเข้าสู่ Supabase

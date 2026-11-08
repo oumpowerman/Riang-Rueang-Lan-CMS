@@ -9,6 +9,7 @@ import {
   Clock,
   Maximize2,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { CooldownStatus } from '../../../types/footage.types';
 import { SystemSettings } from '../../../types/tag.types';
@@ -34,6 +35,7 @@ export interface VaultHeaderKpiSectionProps {
   onOpenDirectFootageModal?: () => void;
   onOpenGoogleDriveBatchModal?: () => void;
   onOpenFullscreenStudio?: () => void;
+  onOpenSheetTagImportModal?: () => void;
 }
 
 export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
@@ -50,6 +52,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
   onClearHierarchySelection,
   onOpenGoogleDriveBatchModal,
   onOpenFullscreenStudio,
+  onOpenSheetTagImportModal,
 }) => {
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl p-4 space-y-3.5 shadow-2xs">
@@ -130,6 +133,16 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               <X className="w-3.5 h-3.5 text-indigo-600" />
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={onOpenSheetTagImportModal}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#3d332a] bg-[#faf7f2] hover:bg-[#f2ebe0] border border-[#e2d5c4] rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+            title="จับคู่แท็กและจัดอันดับ EP ย้อนหลังจาก Google Sheets (ก๊อปปี้วาง)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-[#3b6845] shrink-0" />
+            <span>จับคู่แท็กจาก Sheet ให้คลิปในคลัง</span>
+          </button>
 
           <button
             type="button"
