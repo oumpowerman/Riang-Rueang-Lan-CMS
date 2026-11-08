@@ -16,6 +16,7 @@ import {
   SupabaseConnectionConfig,
   SupabaseChannelPreset,
   SUPABASE_CONTENT_STATUSES,
+  SUPABASE_TARGET_PLATFORMS,
 } from '../../types/supabaseSync.types';
 import {
   loadSupabaseConfig,
@@ -423,6 +424,49 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
             </div>
           </div>
 
+          {/* Default Target Platforms Multi-Select */}
+          <div className="space-y-1.5 pt-2 border-t border-[#E8DFD3]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#3D332A]">
+                แพลตฟอร์มปลายทางเริ่มต้น (target_platform)
+              </span>
+              <span className="text-[11px] text-[#6E5F52]">
+                เลือกได้หลายรายการ (บันทึกเป็น Array)
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SUPABASE_TARGET_PLATFORMS.map((plat) => {
+                const isSelected = (config.defaultTargetPlatforms || []).includes(plat.id);
+                return (
+                  <button
+                    key={plat.id}
+                    type="button"
+                    onClick={() => {
+                      setConfig((prev) => {
+                        const currentList = prev.defaultTargetPlatforms || [];
+                        const newList = isSelected
+                          ? currentList.filter((p) => p !== plat.id)
+                          : [...currentList, plat.id];
+                        return {
+                          ...prev,
+                          defaultTargetPlatforms: newList.length > 0 ? newList : [plat.id],
+                        };
+                      });
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-[#EEF5EE] text-[#1C4824] border-[#BAD8BF] ring-1 ring-[#BAD8BF] shadow-2xs'
+                        : 'bg-white text-[#6E5F52] border-[#E3D8CB] hover:bg-[#FAF7F2]'
+                    }`}
+                  >
+                    {isSelected ? '✓ ' : '+ '}
+                    {plat.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Include Assets Toggle */}
           <div className="pt-2 border-t border-[#E8DFD3] flex items-center justify-between">
             <div>
@@ -448,6 +492,66 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
               <div
                 className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
                   config.defaultIncludeAssets ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Include Pillar Toggle */}
+          <div className="pt-2 border-t border-[#E8DFD3] flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-[#3D332A]">
+                ส่งค่า Pillar เริ่มต้น (pillar)
+              </div>
+              <div className="text-[11px] text-[#6E5F52]">
+                หากปิดไว้จะส่งค่าเป็น <code className="font-mono text-emerald-800 font-semibold">null</code> (ค่าเริ่มต้น) หากเปิดจะใส่ชื่อหมวดหมู่/ซีรีส์
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setConfig((prev) => ({
+                  ...prev,
+                  defaultIncludePillar: !prev.defaultIncludePillar,
+                }))
+              }
+              className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors ${
+                config.defaultIncludePillar ? 'bg-[#3B6845]' : 'bg-slate-300'
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  config.defaultIncludePillar ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Include Category Toggle */}
+          <div className="pt-2 border-t border-[#E8DFD3] flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-[#3D332A]">
+                ส่งค่า Category เริ่มต้น (category)
+              </div>
+              <div className="text-[11px] text-[#6E5F52]">
+                หากปิดไว้จะส่งค่าเป็น <code className="font-mono text-emerald-800 font-semibold">null</code> (ค่าเริ่มต้น) หากเปิดจะใส่ชื่อหมวดหมู่/ซีรีส์
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setConfig((prev) => ({
+                  ...prev,
+                  defaultIncludeCategory: !prev.defaultIncludeCategory,
+                }))
+              }
+              className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors ${
+                config.defaultIncludeCategory ? 'bg-[#3B6845]' : 'bg-slate-300'
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  config.defaultIncludeCategory ? 'translate-x-6' : 'translate-x-0'
                 }`}
               />
             </button>

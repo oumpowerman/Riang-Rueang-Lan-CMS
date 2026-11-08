@@ -17,6 +17,7 @@ import {
   SupabaseSyncReport,
   SupabaseSyncRowState,
   SUPABASE_CONTENT_STATUSES,
+  SUPABASE_TARGET_PLATFORMS,
 } from '../../types/supabaseSync.types';
 import {
   batchSyncToSupabase,
@@ -124,11 +125,21 @@ export const SupabaseContentSyncModal: React.FC<
           if (rec.title) {
             titleMap.set(rec.title.trim().toLowerCase(), rec);
           }
-          if (rec.published_links?.youtube) {
-            linkMap.set(rec.published_links.youtube.trim(), rec);
+          // Published links (case-insensitive keys)
+          if (rec.published_links) {
+            Object.values(rec.published_links).forEach((url) => {
+              if (typeof url === 'string' && url.trim()) {
+                linkMap.set(url.trim(), rec);
+              }
+            });
           }
-          if (rec.published_links?.drive) {
-            linkMap.set(rec.published_links.drive.trim(), rec);
+          // Assets links (e.g. Google Drive master or footage in assets)
+          if (Array.isArray(rec.assets)) {
+            rec.assets.forEach((ast: any) => {
+              if (ast && typeof ast.url === 'string' && ast.url.trim()) {
+                linkMap.set(ast.url.trim(), rec);
+              }
+            });
           }
         });
 
@@ -136,13 +147,19 @@ export const SupabaseContentSyncModal: React.FC<
         const initialRows: SupabaseSyncRowState[] = episodes.map((ep) => {
           const cleanTitle = ep.title.trim().toLowerCase();
           const cleanYoutubeUrl = ep.masterVideoInfo?.youtubeUrl?.trim();
+          const cleanTiktokUrl = ep.masterVideoInfo?.tiktokUrl?.trim();
+          const cleanFacebookUrl = ep.masterVideoInfo?.facebookUrl?.trim();
+          const cleanInstagramUrl = ep.masterVideoInfo?.instagramUrl?.trim();
           const cleanDriveUrl = ep.masterVideoInfo?.masterDriveUrl?.trim();
 
           const matched =
             (ep.id ? epRefMap.get(ep.id.trim()) : null) ||
             titleMap.get(cleanTitle) ||
+            (cleanDriveUrl ? linkMap.get(cleanDriveUrl) : null) ||
             (cleanYoutubeUrl ? linkMap.get(cleanYoutubeUrl) : null) ||
-            (cleanDriveUrl ? linkMap.get(cleanDriveUrl) : null);
+            (cleanTiktokUrl ? linkMap.get(cleanTiktokUrl) : null) ||
+            (cleanFacebookUrl ? linkMap.get(cleanFacebookUrl) : null) ||
+            (cleanInstagramUrl ? linkMap.get(cleanInstagramUrl) : null);
 
           const isDuplicate = Boolean(matched);
 
@@ -155,7 +172,14 @@ export const SupabaseContentSyncModal: React.FC<
             existingStatus: matched?.status,
             channelId: currentConfig.targetChannelId || '',
             status: currentConfig.defaultStatus || '01_IDEA/DRAFT_💡',
+            targetPlatforms:
+              currentConfig.defaultTargetPlatforms &&
+              currentConfig.defaultTargetPlatforms.length > 0
+                ? currentConfig.defaultTargetPlatforms
+                : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'],
             includeAssets: currentConfig.defaultIncludeAssets,
+            includePillar: Boolean(currentConfig.defaultIncludePillar),
+            includeCategory: Boolean(currentConfig.defaultIncludeCategory),
             description: '',
             upsertMode: 'SKIP',
           };
@@ -225,6 +249,35 @@ export const SupabaseContentSyncModal: React.FC<
   const handleBatchToggleAssets = (include: boolean) => {
     setRows((prev) =>
       prev.map((r) => (r.isSelected ? { ...r, includeAssets: include } : r))
+    );
+  };
+
+  const handleBatchSetPillar = (include: boolean) => {
+    setRows((prev) =>
+      prev.map((r) => (r.isSelected ? { ...r, includePillar: include } : r))
+    );
+  };
+
+  const handleBatchSetCategory = (include: boolean) => {
+    setRows((prev) =>
+      prev.map((r) => (r.isSelected ? { ...r, includeCategory: include } : r))
+    );
+  };
+
+  const handleBatchTogglePlatform = (platformId: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (!r.isSelected) return r;
+        const currentList = r.targetPlatforms || [];
+        const isSelected = currentList.includes(platformId);
+        const updated = isSelected
+          ? currentList.filter((p) => p !== platformId)
+          : [...currentList, platformId];
+        return {
+          ...r,
+          targetPlatforms: updated.length > 0 ? updated : [platformId],
+        };
+      })
     );
   };
 
@@ -620,6 +673,27 @@ export const SupabaseContentSyncModal: React.FC<
                       </select>
                     )}
 
+                    {/* Toggle Target Platform */}
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleBatchTogglePlatform(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      defaultValue=""
+                      className="px-2 py-1 rounded border border-[#E3D8CB] bg-white text-xs font-semibold text-[#1C4824]"
+                    >
+                      <option value="" disabled>
+                        เปิด/ปิด แพลตฟอร์มที่เลือก...
+                      </option>
+                      {SUPABASE_TARGET_PLATFORMS.map((plat) => (
+                        <option key={plat.id} value={plat.id}>
+                          สลับ: {plat.label}
+                        </option>
+                      ))}
+                    </select>
+
                     {/* Toggle Assets */}
                     <button
                       type="button"
@@ -637,6 +711,48 @@ export const SupabaseContentSyncModal: React.FC<
                     >
                       เว้นว่าง Assets
                     </button>
+
+                    {/* Batch Pillar Toggle */}
+                    <div className="flex items-center gap-0.5 border border-[#E3D8CB] rounded bg-white p-0.5 text-[10px]">
+                      <span className="px-1 text-[#6E5F52] font-semibold">Pillar:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchSetPillar(true)}
+                        className="px-1.5 py-0.5 rounded text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-bold cursor-pointer"
+                        title="เปิดใส่ค่าชื่อหมวดหมู่ใน Pillar สำหรับแถวที่เลือก"
+                      >
+                        เปิด
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchSetPillar(false)}
+                        className="px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 cursor-pointer"
+                        title="ปิด (เว้นว่าง null) Pillar สำหรับแถวที่เลือก"
+                      >
+                        ปิด (null)
+                      </button>
+                    </div>
+
+                    {/* Batch Category Toggle */}
+                    <div className="flex items-center gap-0.5 border border-[#E3D8CB] rounded bg-white p-0.5 text-[10px]">
+                      <span className="px-1 text-[#6E5F52] font-semibold">Category:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchSetCategory(true)}
+                        className="px-1.5 py-0.5 rounded text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-bold cursor-pointer"
+                        title="เปิดใส่ค่าชื่อหมวดหมู่ใน Category สำหรับแถวที่เลือก"
+                      >
+                        เปิด
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchSetCategory(false)}
+                        className="px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 cursor-pointer"
+                        title="ปิด (เว้นว่าง null) Category สำหรับแถวที่เลือก"
+                      >
+                        ปิด (null)
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -685,8 +801,9 @@ export const SupabaseContentSyncModal: React.FC<
                       </th>
                       <th className="p-3 w-36">สถานะในระบบ</th>
                       <th className="p-3">ชื่อคลิปหลัก (EP) & หมวดหมู่</th>
-                      <th className="p-3 w-44">ช่อง (channel_id)</th>
+                      <th className="p-3 w-40">ช่อง (channel_id)</th>
                       <th className="p-3 w-32">สถานะ (status)</th>
+                      <th className="p-3 w-44">แพลตฟอร์ม (target_platform)</th>
                       <th className="p-3 w-28 text-center">assets (ฟุตเทจ)</th>
                       <th className="p-3 w-28 text-right">คำบรรยาย / JSON</th>
                     </tr>

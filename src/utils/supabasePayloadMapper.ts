@@ -1,5 +1,6 @@
-import { Episode } from '../types/episode.types';
+import { Episode, MasterVideoInfo } from '../types/episode.types';
 import {
+  SupabaseAssetItem,
   SupabaseConnectionConfig,
   SupabaseContentPayload,
   SupabaseSyncRowState,
@@ -13,6 +14,20 @@ export function isValidUUID(uuidStr: string): boolean {
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(uuidStr.trim());
+}
+
+/**
+ * Enterprise UUID generator for assets compatible with modern crypto.randomUUID()
+ */
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 /**
@@ -116,30 +131,58 @@ export function mapEpisodeToSupabasePayload(
 ): SupabaseContentPayload {
   const ep = row.episode;
 
-  // Published Links JSONB
+  // Published Links JSONB - default empty object {}, uppercase platform keys, Google Drive excluded
   const publishedLinks: Record<string, string> = {};
+  if (ep.masterVideoInfo?.tiktokUrl && ep.masterVideoInfo.tiktokUrl.trim()) {
+    publishedLinks['TIKTOK'] = ep.masterVideoInfo.tiktokUrl.trim();
+  }
   if (ep.masterVideoInfo?.youtubeUrl && ep.masterVideoInfo.youtubeUrl.trim()) {
-    publishedLinks['youtube'] = ep.masterVideoInfo.youtubeUrl.trim();
+    publishedLinks['YOUTUBE'] = ep.masterVideoInfo.youtubeUrl.trim();
   }
   if (ep.masterVideoInfo?.facebookUrl && ep.masterVideoInfo.facebookUrl.trim()) {
-    publishedLinks['facebook'] = ep.masterVideoInfo.facebookUrl.trim();
+    publishedLinks['FACEBOOK'] = ep.masterVideoInfo.facebookUrl.trim();
   }
-  if (
-    ep.masterVideoInfo?.masterDriveUrl &&
-    ep.masterVideoInfo.masterDriveUrl.trim()
-  ) {
-    publishedLinks['drive'] = ep.masterVideoInfo.masterDriveUrl.trim();
+  if (ep.masterVideoInfo?.instagramUrl && ep.masterVideoInfo.instagramUrl.trim()) {
+    publishedLinks['INSTAGRAM'] = ep.masterVideoInfo.instagramUrl.trim();
   }
 
-  // Assets JSONB (5 footage clips from rankings)
-  const assets: SupabaseContentPayload['assets'] = [];
+  // Assets JSONB: Google Drive attached as the primary 1st item, followed by ranking footage clips
+  const assets: SupabaseAssetItem[] = [];
+  const nowIso = new Date().toISOString();
+
+  // 1. Primary Item: Master Video in Google Drive
+  const masterDriveUrl = ep.masterVideoInfo?.masterDriveUrl?.trim();
+  if (masterDriveUrl) {
+    const masterFileName =
+      ep.masterVideoInfo?.masterFileName?.trim() ||
+      `Master_${ep.title.replace(/\s+/g, '_')}.mp4`;
+    assets.push({
+      id: generateUUID(),
+      url: masterDriveUrl,
+      name: masterFileName,
+      type: 'LINK',
+      category: 'Draft Video',
+      createdAt: nowIso,
+    });
+  }
+
+  // 2. Ranking footage clips (if includeAssets is true)
   if (row.includeAssets && Array.isArray(ep.rankings)) {
     ep.rankings.forEach((slot, index) => {
+      const clipRank = slot.rank || index + 1;
+      const clipTitle =
+        slot.snapshotNote?.trim() ||
+        (slot.footageId
+          ? `ฟุตเทจ ${slot.footageId} (อันดับ ${clipRank})`
+          : `ฟุตเทจอันดับ ${clipRank}`);
+
       assets.push({
-        order: slot.rank || index + 1,
-        clip_id: slot.footageId || '',
-        title: slot.snapshotNote || `ฟุตเทจอันดับ ${slot.rank || index + 1}`,
-        tags: slot.mascotScript ? [slot.mascotScript] : [],
+        id: generateUUID(),
+        url: '',
+        name: clipTitle,
+        type: 'LINK',
+        category: 'Draft Video',
+        createdAt: nowIso,
       });
     });
   }
@@ -150,21 +193,27 @@ export function mapEpisodeToSupabasePayload(
     ? effectiveChannelId.trim()
     : null;
 
-  const categoryName = ep.seriesTitle || ep.mainCategoryTagId || null;
+  const resolvedCategory = ep.seriesTitle || ep.mainCategoryTagId || null;
+  const pillarVal = row.includePillar ? resolvedCategory : null;
+  const categoryVal = row.includeCategory ? resolvedCategory : null;
+
+  const effectiveTargetPlatforms =
+    row.targetPlatforms && row.targetPlatforms.length > 0
+      ? row.targetPlatforms
+      : config.defaultTargetPlatforms && config.defaultTargetPlatforms.length > 0
+      ? config.defaultTargetPlatforms
+      : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
 
   return {
     title: ep.title.trim(),
     description: generateRowDescription(row, config),
     status: row.status || config.defaultStatus || '01_IDEA/DRAFT_💡',
     tags: extractCleanTags(ep),
-    pillar: categoryName,
-    category: categoryName,
+    pillar: pillarVal,
+    category: categoryVal,
     remark: formatEpRemark(ep.id),
     channel_id: channelId,
-    target_platform:
-      config.defaultTargetPlatforms && config.defaultTargetPlatforms.length > 0
-        ? config.defaultTargetPlatforms
-        : ['YOUTUBE_SHORTS', 'TIKTOK'],
+    target_platform: effectiveTargetPlatforms,
     is_unscheduled: true,
     published_links: publishedLinks,
     assets: assets,

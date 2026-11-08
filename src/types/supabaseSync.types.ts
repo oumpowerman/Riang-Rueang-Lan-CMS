@@ -15,6 +15,28 @@ export const SUPABASE_CONTENT_STATUSES = [
 
 export type SupabaseContentStatus = (typeof SUPABASE_CONTENT_STATUSES)[number];
 
+export interface SupabasePlatformOption {
+  id: string;
+  label: string;
+  shortLabel: string;
+}
+
+export const SUPABASE_TARGET_PLATFORMS: SupabasePlatformOption[] = [
+  { id: 'YOUTUBE', label: 'YouTube', shortLabel: 'YouTube' },
+  { id: 'FACEBOOK', label: 'Facebook', shortLabel: 'Facebook' },
+  { id: 'TIKTOK', label: 'TikTok', shortLabel: 'TikTok' },
+  { id: 'INSTAGRAM', label: 'Instagram', shortLabel: 'Instagram' },
+];
+
+export interface SupabaseAssetItem {
+  id: string; // UUID v4 generated via crypto.randomUUID()
+  url: string; // URL to Google Drive video, clip, or link
+  name: string; // Asset filename or display title
+  type: 'LINK' | string; // e.g. "LINK"
+  category: 'Draft Video' | 'OTHER' | string; // e.g. "Draft Video"
+  createdAt: string; // ISO 8601 string
+}
+
 export interface SupabaseChannelPreset {
   id: string; // UUID of the channel in Supabase `channels` table
   name: string; // e.g. "เรียงเรื่องลั่น (ช่องหลัก)", "ช่องไฮไลต์", "ช่องสั้นสำรอง"
@@ -27,8 +49,10 @@ export interface SupabaseConnectionConfig {
   targetChannelId: string; // selected channel UUID
   channels: SupabaseChannelPreset[]; // list of saved channels for quick switching
   defaultStatus: string; // e.g. "01_IDEA/DRAFT_💡", "04_EDIT_CLIP_✂️", "10_DONE_✅"
-  defaultTargetPlatforms: string[]; // e.g. ["YOUTUBE_SHORTS", "TIKTOK"]
-  defaultIncludeAssets: boolean; // whether to include the 5 footage clips in `assets`
+  defaultTargetPlatforms: string[]; // e.g. ["YOUTUBE", "FACEBOOK", "TIKTOK", "INSTAGRAM"]
+  defaultIncludeAssets: boolean; // whether to include the footage clips in `assets`
+  defaultIncludePillar?: boolean; // whether to include pillar (default false = null)
+  defaultIncludeCategory?: boolean; // whether to include category (default false = null)
   defaultDescriptionMode: 'AUTO' | 'EMPTY' | 'CUSTOM';
   customDescriptionTemplate?: string;
 }
@@ -44,7 +68,10 @@ export interface SupabaseSyncRowState {
   existingStatus?: string;
   channelId: string;
   status: string;
+  targetPlatforms: string[]; // Array of selected platform IDs
   includeAssets: boolean;
+  includePillar: boolean; // per-row toggle (default false = null)
+  includeCategory: boolean; // per-row toggle (default false = null)
   description: string;
   upsertMode: 'SKIP' | 'UPDATE'; // when duplicate: skip or update
 }
@@ -62,14 +89,7 @@ export interface SupabaseContentPayload {
   target_platform: string[];
   is_unscheduled: boolean;
   published_links: Record<string, string>;
-  assets: Array<{
-    order: number;
-    clip_id: string;
-    title: string;
-    drive_url?: string;
-    duration?: number;
-    tags?: string[];
-  }>;
+  assets: SupabaseAssetItem[];
   content_formats: string[];
 }
 

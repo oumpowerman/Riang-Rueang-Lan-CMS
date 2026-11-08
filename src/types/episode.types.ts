@@ -18,8 +18,11 @@ export interface MasterVideoInfo {
   masterDriveUrl: string; // ลิงก์ไฟล์วิดีโอตัวเต็มใน Google Drive (ที่รวม 5 ฟุต + มาสคอตเรียบร้อยแล้ว)
   youtubeUrl: string;
   facebookUrl: string;
+  tiktokUrl?: string;
+  instagramUrl?: string;
   viewsCount: number;
   performanceNote: string;
+  [key: string]: any;
 }
 
 export type EpisodeProductionTarget = 'MAIN_CATEGORY_VARIETY' | 'SINGLE_SUBCATEGORY_SPECIAL';

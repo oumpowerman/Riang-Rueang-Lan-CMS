@@ -30,8 +30,10 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConnectionConfig = {
     },
   ],
   defaultStatus: '01_IDEA/DRAFT_💡',
-  defaultTargetPlatforms: ['YOUTUBE_SHORTS', 'TIKTOK'],
+  defaultTargetPlatforms: ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'],
   defaultIncludeAssets: true,
+  defaultIncludePillar: false,
+  defaultIncludeCategory: false,
   defaultDescriptionMode: 'AUTO',
 };
 
@@ -58,10 +60,25 @@ export function loadSupabaseConfig(): SupabaseConnectionConfig {
         parsed.defaultStatus === 'TODO' || !parsed.defaultStatus
           ? '01_IDEA/DRAFT_💡'
           : parsed.defaultStatus;
+
+      // Ensure platform names follow standard YOUTUBE, FACEBOOK, TIKTOK, INSTAGRAM
+      let platforms = parsed.defaultTargetPlatforms;
+      if (
+        !Array.isArray(platforms) ||
+        platforms.length === 0 ||
+        platforms.includes('YOUTUBE_SHORTS') ||
+        platforms.includes('FACEBOOK_REELS')
+      ) {
+        platforms = ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
+      }
+
       return {
         ...DEFAULT_SUPABASE_CONFIG,
         ...parsed,
         defaultStatus: status,
+        defaultTargetPlatforms: platforms,
+        defaultIncludePillar: Boolean(parsed.defaultIncludePillar),
+        defaultIncludeCategory: Boolean(parsed.defaultIncludeCategory),
         channels:
           Array.isArray(parsed.channels) && parsed.channels.length > 0
             ? parsed.channels
