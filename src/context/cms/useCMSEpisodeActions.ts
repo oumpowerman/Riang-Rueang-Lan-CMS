@@ -138,7 +138,10 @@ export function useCMSEpisodeActions({
     firestoreService.deleteEpisode(episodeId).catch((err) => console.warn('Firestore deleteEpisode error:', err));
   };
 
-  const batchUpsertEpisodes = (episodesToUpsert: Episode[]) => {
+  const batchUpsertEpisodes = async (
+    episodesToUpsert: Episode[],
+    onChunkProgress?: (progress: import('../../firebase/firestoreService').BatchChunkProgress) => void
+  ): Promise<void> => {
     if (!episodesToUpsert || episodesToUpsert.length === 0) return;
 
     setEpisodes((prev) => {
@@ -154,9 +157,11 @@ export function useCMSEpisodeActions({
       return [...brandNew, ...updatedExisting];
     });
 
-    firestoreService
-      .batchSaveEpisodes(episodesToUpsert)
-      .catch((err) => console.warn('Firestore batchUpsertEpisodes error:', err));
+    try {
+      await firestoreService.batchSaveEpisodes(episodesToUpsert, onChunkProgress);
+    } catch (err) {
+      console.warn('Firestore batchUpsertEpisodes error:', err);
+    }
   };
 
   return {

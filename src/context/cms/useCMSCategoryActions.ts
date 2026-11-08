@@ -25,9 +25,12 @@ interface UseCMSCategoryActionsParams {
   tags: CategoryTag[];
   setTags: React.Dispatch<React.SetStateAction<CategoryTag[]>>;
   tagMap: Record<string, CategoryTag>;
+  footage: Footage[];
   setFootage: React.Dispatch<React.SetStateAction<Footage[]>>;
+  sources: RawSource[];
   setSources: React.Dispatch<React.SetStateAction<RawSource[]>>;
   setSelectedTagFilter: React.Dispatch<React.SetStateAction<string[]>>;
+  settings: SystemSettings;
   setSettings: React.Dispatch<React.SetStateAction<SystemSettings>>;
 }
 
@@ -37,9 +40,12 @@ export function useCMSCategoryActions({
   tags,
   setTags,
   tagMap,
+  footage,
   setFootage,
+  sources,
   setSources,
   setSelectedTagFilter,
+  settings,
   setSettings,
 }: UseCMSCategoryActionsParams) {
   // Category Group CRUD (Tier 0)
@@ -70,30 +76,23 @@ export function useCMSCategoryActions({
   };
 
   const updateCategoryGroup = (id: string, updates: Partial<Omit<CategoryGroup, 'id'>>) => {
-    setCategoryGroups((prev) => {
-      const next = prev.map((g) => {
-        if (g.id === id) {
-          const updated = { ...g, ...updates };
-          firestoreService
-            .saveCategoryGroup(updated)
-            .catch((err) => console.warn('Firestore updateCategoryGroup error:', err));
-          return updated;
-        }
-        return g;
-      });
-      cmsRepository.saveCategoryGroups(next);
-      return next;
-    });
+    const target = categoryGroups.find((g) => g.id === id);
+    if (!target) return;
+    const updated: CategoryGroup = { ...target, ...updates };
+    const next = categoryGroups.map((g) => (g.id === id ? updated : g));
+    setCategoryGroups(next);
+    cmsRepository.saveCategoryGroups(next);
+    firestoreService
+      .saveCategoryGroup(updated)
+      .catch((err) => console.warn('Firestore updateCategoryGroup error:', err));
   };
 
   const deleteCategoryGroup = (id: string) => {
     if (isStagingGroupId(id)) return;
     cmsRepository.markGroupIdsDeleted([id]);
-    setCategoryGroups((prev) => {
-      const next = prev.filter((g) => g.id !== id);
-      cmsRepository.saveCategoryGroups(next);
-      return next;
-    });
+    const next = categoryGroups.filter((g) => g.id !== id);
+    setCategoryGroups(next);
+    cmsRepository.saveCategoryGroups(next);
     firestoreService
       .deleteCategoryGroup(id)
       .catch((err) => console.warn('Firestore deleteCategoryGroup error:', err));
@@ -154,11 +153,9 @@ export function useCMSCategoryActions({
       parentId: resolvedTier === 2 ? parentId : null,
       ...(resolvedTier === 2 ? { entityType: entityType || 'PERSON' } : {}),
     };
-    setTags((prev) => {
-      const next = [...prev, newTag];
-      cmsRepository.saveTags(next);
-      return next;
-    });
+    const next = [...tags, newTag];
+    setTags(next);
+    cmsRepository.saveTags(next);
     firestoreService
       .saveCategory(newTag)
       .catch((err) => console.warn('Firestore saveCategory error:', err));
@@ -186,112 +183,118 @@ export function useCMSCategoryActions({
   };
 
   const updateTag = (id: string, updates: Partial<Omit<CategoryTag, 'id'>>) => {
-    setTags((prev) => {
-      const target = prev.find((t) => t.id === id);
-      if (!target) return prev;
+    const target = tags.find((t) => t.id === id);
+    if (!target) return;
 
-      const resolvedTier: CategoryTier =
-        updates.tier ?? target.tier ?? (updates.parentId || target.parentId ? 2 : 1);
-      const resolvedParentId =
-        resolvedTier === 2 ? (updates.parentId !== undefined ? updates.parentId : target.parentId || null) : null;
-      const parentCat = resolvedParentId ? prev.find((p) => p.id === resolvedParentId) : undefined;
-      const resolvedGroupId =
-        updates.groupId || target.groupId || parentCat?.groupId || `GRP-${target.groupType || 'GENERAL'}`;
+    const resolvedTier: CategoryTier =
+      updates.tier ?? target.tier ?? (updates.parentId || target.parentId ? 2 : 1);
+    const resolvedParentId =
+      resolvedTier === 2
+        ? updates.parentId !== undefined
+          ? updates.parentId
+          : target.parentId || null
+        : null;
+    const parentCat = resolvedParentId
+      ? tags.find((p) => p.id === resolvedParentId)
+      : undefined;
+    const resolvedGroupId =
+      updates.groupId ||
+      target.groupId ||
+      parentCat?.groupId ||
+      `GRP-${target.groupType || 'GENERAL'}`;
 
-      const updated: CategoryTag = {
-        ...target,
-        ...updates,
-        tier: resolvedTier,
-        parentId: resolvedParentId,
-        groupId: resolvedGroupId,
-      };
+    const updated: CategoryTag = {
+      ...target,
+      ...updates,
+      tier: resolvedTier,
+      parentId: resolvedParentId,
+      groupId: resolvedGroupId,
+    };
 
-      const next = prev.map((t) => (t.id === id ? updated : t));
-      cmsRepository.saveTags(next);
+    const next = tags.map((t) => (t.id === id ? updated : t));
+    setTags(next);
+    cmsRepository.saveTags(next);
 
-      // Save parent category as well if updating a subcategory so parent is guaranteed in Firestore
-      if (parentCat) {
-        firestoreService
-          .saveCategory(parentCat)
-          .catch((err) => console.warn('Firestore save parent category error:', err));
-      }
+    if (parentCat) {
       firestoreService
-        .saveCategory(updated)
-        .catch((err) => console.warn('Firestore updateTag error:', err));
-
-      return next;
-    });
+        .saveCategory(parentCat)
+        .catch((err) => console.warn('Firestore save parent category error:', err));
+    }
+    firestoreService
+      .saveCategory(updated)
+      .catch((err) => console.warn('Firestore updateTag error:', err));
   };
 
   const deleteTag = (id: string) => {
     if (isStagingTagId(id)) return;
     const removedIds: string[] = [id];
-    setTags((prev) => {
-      prev.forEach((t) => {
-        if (t.parentId === id && !removedIds.includes(t.id)) {
-          removedIds.push(t.id);
-        }
-      });
-      cmsRepository.markTagIdsDeleted(removedIds);
-      const next = prev.filter((t) => t.id !== id && t.parentId !== id);
-      cmsRepository.saveTags(next);
-      return next;
+    tags.forEach((t) => {
+      if (t.parentId === id && !removedIds.includes(t.id)) {
+        removedIds.push(t.id);
+      }
     });
+
+    cmsRepository.markTagIdsDeleted(removedIds);
+    const nextTags = tags.filter((t) => t.id !== id && t.parentId !== id);
+    setTags(nextTags);
+    cmsRepository.saveTags(nextTags);
+
     removedIds.forEach((rid) => {
       firestoreService
         .deleteCategory(rid)
         .catch((err) => console.warn('Firestore deleteTag error:', err));
     });
-    setFootage((prev) => {
-      const updatedFootages: Footage[] = [];
-      const next = prev.map((ft) => {
-        if (!ft.tags.some((tid) => removedIds.includes(tid))) return ft;
-        const updatedFt: Footage = {
-          ...ft,
-          tags: normalizeFootageTags(ft.tags.filter((tid) => !removedIds.includes(tid))),
-        };
-        updatedFootages.push(updatedFt);
-        return updatedFt;
-      });
-      if (updatedFootages.length > 0) {
-        firestoreService
-          .batchSaveFootages(updatedFootages)
-          .catch((err) => console.warn('Firestore update footages on deleteTag error:', err));
-      }
-      return next;
+
+    const updatedFootages: Footage[] = [];
+    const nextFootage = footage.map((ft) => {
+      if (!ft.tags.some((tid) => removedIds.includes(tid))) return ft;
+      const updatedFt: Footage = {
+        ...ft,
+        tags: normalizeFootageTags(ft.tags.filter((tid) => !removedIds.includes(tid))),
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
     });
-    setSources((prev) => {
-      const updatedSources: RawSource[] = [];
-      const next = prev.map((src) => {
-        if (!src.tags.some((tid) => removedIds.includes(tid))) return src;
-        const updatedSrc: RawSource = {
-          ...src,
-          tags: src.tags.filter((tid) => !removedIds.includes(tid)),
-        };
-        updatedSources.push(updatedSrc);
-        return updatedSrc;
-      });
-      if (updatedSources.length > 0) {
-        firestoreService
-          .batchSaveSources(updatedSources)
-          .catch((err) => console.warn('Firestore update sources on deleteTag error:', err));
-      }
-      return next;
+    setFootage(nextFootage);
+    if (updatedFootages.length > 0) {
+      firestoreService
+        .batchSaveFootages(updatedFootages)
+        .catch((err) => console.warn('Firestore update footages on deleteTag error:', err));
+    }
+
+    const updatedSources: RawSource[] = [];
+    const nextSources = sources.map((src) => {
+      if (!src.tags.some((tid) => removedIds.includes(tid))) return src;
+      const updatedSrc: RawSource = {
+        ...src,
+        tags: src.tags.filter((tid) => !removedIds.includes(tid)),
+      };
+      updatedSources.push(updatedSrc);
+      return updatedSrc;
     });
+    setSources(nextSources);
+    if (updatedSources.length > 0) {
+      firestoreService
+        .batchSaveSources(updatedSources)
+        .catch((err) => console.warn('Firestore update sources on deleteTag error:', err));
+    }
+
     setSelectedTagFilter((prev) => prev.filter((tid) => !removedIds.includes(tid)));
   };
 
   const updateSettings = (updates: Partial<SystemSettings>) => {
-    setSettings((prev) => {
-      const nextSettings = { ...prev, ...updates };
-      firestoreService
-        .saveSettings(nextSettings)
-        .catch((err) => console.warn('Firestore updateSettings error:', err));
-      return nextSettings;
-    });
+    const nextSettings = { ...settings, ...updates };
+    setSettings(nextSettings);
+    cmsRepository.saveSettings(nextSettings);
+    firestoreService
+      .saveSettings(nextSettings)
+      .catch((err) => console.warn('Firestore updateSettings error:', err));
   };
 
-  const batchAddTags = (newTags: CategoryTag[]) => {
+  const batchAddTags = async (
+    newTags: CategoryTag[],
+    onChunkProgress?: (progress: import('../../firebase/firestoreService').BatchChunkProgress) => void
+  ): Promise<void> => {
     if (!newTags || newTags.length === 0) return;
     cmsRepository.setCategoriesWiped(false);
     setTags((prev) => {
@@ -301,9 +304,11 @@ export function useCMSCategoryActions({
       cmsRepository.saveTags(next);
       return next;
     });
-    firestoreService
-      .batchSaveCategories(newTags)
-      .catch((err) => console.warn('Firestore batchAddTags error:', err));
+    try {
+      await firestoreService.batchSaveCategories(newTags, onChunkProgress);
+    } catch (err) {
+      console.warn('Firestore batchAddTags error:', err);
+    }
   };
 
   return {

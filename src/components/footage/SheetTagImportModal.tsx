@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
+import { firestoreService } from '../../firebase/firestoreService';
 import {
   isStagingTagId,
   normalizeFootageTags,
@@ -36,8 +37,6 @@ import {
   SyncProgressState,
   TableRowDensity,
 } from './sheetImport/sheetImport.types';
-
-const CHUNK_SIZE = 150;
 
 const yieldToBrowser = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 18));
@@ -247,419 +246,417 @@ export const SheetTagImportModal: React.FC = () => {
     [activeRows, autoCreateMissingFootage]
   );
 
-  // Execute Chunked Batch Sync
+  // Execute Chunked Batch Sync (Locks onSnapshot + Awaits All 400-Item Cloud Chunks)
   const handleExecuteImport = async () => {
     if (actionableClipsCount === 0) return;
 
     setIsProcessing(true);
 
     try {
-      const todayIso = getReferenceTodayDate();
+      await firestoreService.withBatchWriteLock(async () => {
+        const todayIso = getReferenceTodayDate();
 
-      const totalEstimatedWork = Math.max(
-        1,
-        activeRows.length +
-          (syncEpisodesFromColD ? activeEpisodeGroups.length : 0)
-      );
-      let completedWork = 0;
-
-      const updateProgress = (
-        phaseIndex: 1 | 2 | 3 | 4,
-        phaseLabel: string,
-        delta = 0
-      ) => {
-        completedWork = Math.min(totalEstimatedWork, completedWork + delta);
-        const percent = Math.min(
-          99,
-          Math.round((completedWork / totalEstimatedWork) * 100)
+        const totalEstimatedWork = Math.max(
+          1,
+          activeRows.length +
+            (syncEpisodesFromColD ? activeEpisodeGroups.length : 0)
         );
-        setSyncProgress({
-          phaseIndex,
-          phaseLabel,
-          completedItems: completedWork,
-          totalItems: totalEstimatedWork,
-          percent,
-        });
-      };
+        let completedWork = 0;
 
-      // PHASE 1: Ensure all required Tags exist
-      updateProgress(1, 'กำลังตรวจสอบและสร้างแท็กหมวดหมู่ใหม่...', 0);
-      await yieldToBrowser();
-
-      const tagIdByLowerName = new Map<string, string>();
-      tags.forEach((t) => {
-        if (!isStagingTagId(t.id)) {
-          tagIdByLowerName.set(t.name.toLowerCase(), t.id);
-        }
-      });
-
-      const newTagsToPersist: CategoryTag[] = [];
-      const accumulatedTagIds = tags.map((t) => t.id);
-
-      const ensureTagExists = (
-        rawTagName: string,
-        isSeriesTag = false
-      ): string => {
-        const cleaned = rawTagName.trim();
-        const lower = cleaned.toLowerCase();
-        if (tagIdByLowerName.has(lower)) {
-          return tagIdByLowerName.get(lower)!;
-        }
-
-        const nextId = generateNextId('TAG', accumulatedTagIds);
-        accumulatedTagIds.push(nextId);
-
-        const newTag: CategoryTag = {
-          id: nextId,
-          name: cleaned,
-          groupType: 'THEME',
-          groupId: 'GRP-THEME',
-          tier: 1,
-          parentId: null,
-          color: isSeriesTag ? 'emerald' : 'amber',
-          description: isSeriesTag
-            ? 'สร้างอัตโนมัติจากชื่อรายการจัดอันดับใน Google Sheets'
-            : 'นำเข้าอัตโนมัติจาก Google Sheets',
-          createdAt: todayIso,
+        const updateProgress = (
+          phaseIndex: 1 | 2 | 3 | 4,
+          phaseLabel: string,
+          absoluteCompleted?: number
+        ) => {
+          if (absoluteCompleted !== undefined) {
+            completedWork = Math.min(totalEstimatedWork, absoluteCompleted);
+          }
+          const percent = Math.min(
+            99,
+            Math.round((completedWork / totalEstimatedWork) * 100)
+          );
+          setSyncProgress({
+            phaseIndex,
+            phaseLabel,
+            completedItems: completedWork,
+            totalItems: totalEstimatedWork,
+            percent,
+          });
         };
 
-        newTagsToPersist.push(newTag);
-        tagIdByLowerName.set(lower, nextId);
-        return nextId;
-      };
-
-      activeRows.forEach((row) => {
-        if (!row.matchedFootage && !autoCreateMissingFootage) return;
-        row.tagNames.forEach((tName) => {
-          ensureTagExists(tName, false);
-        });
-      });
-
-      if (syncEpisodesFromColD && activeEpisodeGroups.length > 0) {
-        activeEpisodeGroups.forEach((group) => {
-          if (group.primaryTagName) {
-            ensureTagExists(group.primaryTagName, true);
-          }
-        });
-      }
-
-      if (newTagsToPersist.length > 0) {
-        for (let i = 0; i < newTagsToPersist.length; i += CHUNK_SIZE) {
-          const chunk = newTagsToPersist.slice(i, i + CHUNK_SIZE);
-          batchAddTags(chunk);
-          await yieldToBrowser();
-        }
-      }
-
-      // PHASE 2: Auto-create missing Footages in chunks if enabled
-      updateProgress(2, 'กำลังสร้างรายการฟุตเทจใหม่เข้าคลัง...', 0);
-      await yieldToBrowser();
-
-      const footageIdByNormTitle = new Map<string, string>();
-      const existingTagsByFootageId = new Map<string, string[]>();
-
-      activeRows.forEach((row) => {
-        if (row.matchedFootage) {
-          const normKey = normalizeCompareKey(row.title);
-          footageIdByNormTitle.set(normKey, row.matchedFootage.id);
-          existingTagsByFootageId.set(
-            row.matchedFootage.id,
-            row.matchedFootage.tags
-          );
-        }
-      });
-
-      let createdClipsCount = 0;
-
-      if (autoCreateMissingFootage) {
-        const missingByNormTitle = new Map<
-          string,
-          {
-            title: string;
-            tagIds: Set<string>;
-            episodeNote: string;
-          }
-        >();
-
-        activeRows.forEach((row) => {
-          if (row.matchedFootage) return;
-          const normKey = normalizeCompareKey(row.title);
-          const resolvedTagIds = row.tagNames
-            .map((tName) => tagIdByLowerName.get(tName.toLowerCase()))
-            .filter((id): id is string => Boolean(id));
-
-          const existingEntry = missingByNormTitle.get(normKey);
-          if (existingEntry) {
-            resolvedTagIds.forEach((id) => existingEntry.tagIds.add(id));
-          } else {
-            missingByNormTitle.set(normKey, {
-              title: row.title,
-              tagIds: new Set(resolvedTagIds),
-              episodeNote: row.episodeTitle
-                ? `ซิงค์จากชีท (${row.episodeTitle})`
-                : 'ซิงค์จากชีท',
-            });
-          }
-        });
-
-        if (missingByNormTitle.size > 0) {
-          const missingEntries = Array.from(missingByNormTitle.entries());
-          for (let i = 0; i < missingEntries.length; i += CHUNK_SIZE) {
-            const chunkEntries = missingEntries.slice(i, i + CHUNK_SIZE);
-            const createdChunk = batchAddDirectFootage(
-              chunkEntries.map(([, val]) => ({
-                title: val.title,
-                tags: Array.from(val.tagIds),
-                duration: 15,
-                driveUrl: '',
-                jokeSummary: val.episodeNote,
-              })),
-              'FT'
-            );
-
-            createdChunk.forEach((ft, idx) => {
-              const [normKey] = chunkEntries[idx];
-              footageIdByNormTitle.set(normKey, ft.id);
-              existingTagsByFootageId.set(ft.id, ft.tags);
-            });
-
-            createdClipsCount += createdChunk.length;
-            updateProgress(
-              2,
-              `สร้างฟุตเทจใหม่แล้ว ${createdClipsCount.toLocaleString()} / ${missingEntries.length.toLocaleString()} คลิป...`,
-              chunkEntries.length
-            );
-            await yieldToBrowser();
-          }
-        }
-      }
-
-      // PHASE 3: Merge tags for all matched footages in chunks
-      updateProgress(3, 'กำลังผสานแท็กและย้ายฟุตเทจออกจากพื้นที่พัก...', 0);
-      await yieldToBrowser();
-
-      const mergedTagSetByFootageId = new Map<string, Set<string>>();
-      const movedFromStagingFootageIds = new Set<string>();
-
-      activeRows.forEach((row) => {
-        if (!row.matchedFootage) return;
-        const ftId = row.matchedFootage.id;
-
-        if (!mergedTagSetByFootageId.has(ftId)) {
-          const baseSet = new Set<string>();
-          (existingTagsByFootageId.get(ftId) || []).forEach((tid) => {
-            if (!isStagingTagId(tid)) {
-              baseSet.add(tid);
-            }
-          });
-          mergedTagSetByFootageId.set(ftId, baseSet);
-        }
-
-        const targetSet = mergedTagSetByFootageId.get(ftId)!;
-        row.tagNames.forEach((tName) => {
-          const tagId = tagIdByLowerName.get(tName.toLowerCase());
-          if (tagId) {
-            targetSet.add(tagId);
-          }
-        });
-
-        if (row.isInStaging && targetSet.size > 0) {
-          movedFromStagingFootageIds.add(ftId);
-        }
-      });
-
-      const footageIdEntries = Array.from(mergedTagSetByFootageId.entries());
-      const updatedClipsCount = footageIdEntries.length;
-
-      for (let i = 0; i < footageIdEntries.length; i += CHUNK_SIZE) {
-        const chunk = footageIdEntries.slice(i, i + CHUNK_SIZE);
-        const chunkPayload: Record<string, string[]> = {};
-        chunk.forEach(([ftId, tagSet]) => {
-          chunkPayload[ftId] = normalizeFootageTags(Array.from(tagSet));
-        });
-        batchSyncFootageTagsByMap(chunkPayload, 'REPLACE');
-        updateProgress(
-          3,
-          `อัปเดตแท็กฟุตเทจแล้ว ${Math.min(
-            footageIdEntries.length,
-            i + chunk.length
-          ).toLocaleString()} / ${footageIdEntries.length.toLocaleString()} คลิป...`,
-          chunk.length
-        );
-        await yieldToBrowser();
-      }
-
-      // PHASE 4: Build and Upsert 5-Rank Episodes in chunks
-      let createdEpisodesCount = 0;
-      let updatedEpisodesCount = 0;
-      const syncedEpisodeTitles: string[] = [];
-
-      if (syncEpisodesFromColD && activeEpisodeGroups.length > 0) {
-        updateProgress(4, 'กำลังจัดอันดับและบันทึกคลังคลิปหลัก (EP)...', 0);
+        // PHASE 1: Ensure all required Tags exist
+        updateProgress(1, 'กำลังตรวจสอบและบันทึกแท็กหมวดหมู่ใหม่ขึ้น Cloud...', 0);
         await yieldToBrowser();
 
-        const accumulatedEpIds = episodes.map((e) => e.id);
-        const episodesToUpsert: Episode[] = [];
+        const tagIdByLowerName = new Map<string, string>();
+        tags.forEach((t) => {
+          if (!isStagingTagId(t.id)) {
+            tagIdByLowerName.set(t.name.toLowerCase(), t.id);
+          }
+        });
 
-        const rankSequence: Array<5 | 4 | 3 | 2 | 1> =
-          rankingOrder === 'RANK_5_TO_1' ? [5, 4, 3, 2, 1] : [1, 2, 3, 4, 5];
+        const newTagsToPersist: CategoryTag[] = [];
+        const accumulatedTagIds = tags.map((t) => t.id);
 
-        activeEpisodeGroups.forEach((group) => {
-          const groupActiveRows = group.rows.filter(
-            (r) => !excludedRowIndices.has(r.rowIndex)
-          );
-          if (groupActiveRows.length === 0) return;
-
-          const existingEp = group.existingEpisode;
-          const epId = existingEp
-            ? existingEp.id
-            : generateNextId('EP', accumulatedEpIds);
-
-          if (!existingEp) {
-            accumulatedEpIds.push(epId);
-            createdEpisodesCount += 1;
-          } else {
-            updatedEpisodesCount += 1;
+        const ensureTagExists = (
+          rawTagName: string,
+          isSeriesTag = false
+        ): string => {
+          const cleaned = rawTagName.trim();
+          const lower = cleaned.toLowerCase();
+          if (tagIdByLowerName.has(lower)) {
+            return tagIdByLowerName.get(lower)!;
           }
 
-          const primaryTagId =
-            tagIdByLowerName.get(group.primaryTagName.toLowerCase()) ||
-            tags.find((t) => !isStagingTagId(t.id))?.id ||
-            'TAG-0001';
+          const nextId = generateNextId('TAG', accumulatedTagIds);
+          accumulatedTagIds.push(nextId);
 
-          const rankings: EpisodeRankingSlot[] = (
-            [5, 4, 3, 2, 1] as const
-          ).map((rankSlot) => {
-            const seqIndex = rankSequence.indexOf(rankSlot);
-            const rowForSlot =
-              seqIndex >= 0 ? groupActiveRows[seqIndex] || null : null;
-
-            let resolvedFootageId: string | null = null;
-            if (rowForSlot) {
-              if (rowForSlot.matchedFootage) {
-                resolvedFootageId = rowForSlot.matchedFootage.id;
-              } else {
-                const normKey = normalizeCompareKey(rowForSlot.title);
-                resolvedFootageId = footageIdByNormTitle.get(normKey) || null;
-              }
-            }
-
-            if (!resolvedFootageId && existingEp) {
-              const prevSlot = existingEp.rankings.find(
-                (r) => r.rank === rankSlot
-              );
-              if (prevSlot?.footageId) {
-                resolvedFootageId = prevSlot.footageId;
-              }
-            }
-
-            const existingMascotScript =
-              existingEp?.rankings.find((r) => r.rank === rankSlot)
-                ?.mascotScript || '';
-
-            return {
-              rank: rankSlot,
-              footageId: resolvedFootageId,
-              mascotScript:
-                existingMascotScript ||
-                (rowForSlot
-                  ? `อันดับที่ ${rankSlot} — ${rowForSlot.title}`
-                  : `อันดับที่ ${rankSlot}`),
-              snapshotNote: rowForSlot?.isInStaging
-                ? 'ซิงค์จากฟุตเทจไร้หมวดหมู่ผ่าน Google Sheets'
-                : 'ซิงค์จัดอันดับจาก Google Sheets',
-            };
-          });
-
-          const publishDate = existingEp?.publishDate || todayIso;
-          const publishSlot = existingEp?.publishSlot || 'EVENING_1800';
-          const youtubeUrl =
-            group.youtubeUrl || existingEp?.masterVideoInfo?.youtubeUrl || '';
-
-          const autoMasterFileName = generateMasterEpisodeFileName(
-            epId,
-            publishDate,
-            publishSlot,
-            group.episodeTitle
-          );
-
-          const epPayload: Episode = {
-            id: epId,
-            title: group.episodeTitle,
-            categoryEpisodeNo: group.episodeNo,
-            categoryEpisodeScope: 'MAIN_CATEGORY',
-            seriesId: primaryTagId,
-            seriesTitle: group.seriesBaseName || group.episodeTitle,
-            categoryGroupId: existingEp?.categoryGroupId || 'GRP-THEME',
-            mainCategoryTagId: primaryTagId,
-            productionTarget:
-              existingEp?.productionTarget || 'MAIN_CATEGORY_VARIETY',
-            targetSubcategoryId: existingEp?.targetSubcategoryId || null,
-            publishDate,
-            publishSlot,
-            workflowStage: '4_PUBLISHED',
-            introMascotScript:
-              existingEp?.introMascotScript ||
-              `สวัสดีครับ วันนี้พบกับ ${group.episodeTitle} ไปดูกันเลย!`,
-            outroMascotScript:
-              existingEp?.outroMascotScript ||
-              `ชอบอันดับไหนใน ${group.episodeTitle} คอมเมนต์บอกกันได้เลย!`,
-            rankings,
-            masterVideoInfo: {
-              masterFileName:
-                existingEp?.masterVideoInfo?.masterFileName ||
-                autoMasterFileName,
-              masterDriveUrl:
-                existingEp?.masterVideoInfo?.masterDriveUrl ||
-                `https://drive.google.com/file/d/MASTER-${epId}/view`,
-              youtubeUrl,
-              facebookUrl: existingEp?.masterVideoInfo?.facebookUrl || '',
-              viewsCount: existingEp?.masterVideoInfo?.viewsCount || 0,
-              performanceNote:
-                existingEp?.masterVideoInfo?.performanceNote ||
-                `ซิงค์จาก Google Sheets (${groupActiveRows.length} ฟุตเทจ)`,
-            },
-            createdAt: existingEp?.createdAt || todayIso,
+          const newTag: CategoryTag = {
+            id: nextId,
+            name: cleaned,
+            groupType: 'THEME',
+            groupId: 'GRP-THEME',
+            tier: 1,
+            parentId: null,
+            color: isSeriesTag ? 'emerald' : 'amber',
+            description: isSeriesTag
+              ? 'สร้างอัตโนมัติจากชื่อรายการจัดอันดับใน Google Sheets'
+              : 'นำเข้าอัตโนมัติจาก Google Sheets',
+            createdAt: todayIso,
           };
 
-          episodesToUpsert.push(epPayload);
-          syncedEpisodeTitles.push(group.episodeTitle);
+          newTagsToPersist.push(newTag);
+          tagIdByLowerName.set(lower, nextId);
+          return nextId;
+        };
+
+        activeRows.forEach((row) => {
+          if (!row.matchedFootage && !autoCreateMissingFootage) return;
+          row.tagNames.forEach((tName) => {
+            ensureTagExists(tName, false);
+          });
         });
 
-        for (let i = 0; i < episodesToUpsert.length; i += CHUNK_SIZE) {
-          const epChunk = episodesToUpsert.slice(i, i + CHUNK_SIZE);
-          batchUpsertEpisodes(epChunk);
-          updateProgress(
-            4,
-            `บันทึกคลังคลิปหลักแล้ว ${Math.min(
-              episodesToUpsert.length,
-              i + epChunk.length
-            ).toLocaleString()} / ${episodesToUpsert.length.toLocaleString()} ตอน...`,
-            epChunk.length
-          );
-          await yieldToBrowser();
+        if (syncEpisodesFromColD && activeEpisodeGroups.length > 0) {
+          activeEpisodeGroups.forEach((group) => {
+            if (group.primaryTagName) {
+              ensureTagExists(group.primaryTagName, true);
+            }
+          });
         }
-      }
 
-      setSyncProgress({
-        phaseIndex: 4,
-        phaseLabel: 'ซิงค์ฐานข้อมูลเสร็จสมบูรณ์!',
-        completedItems: totalEstimatedWork,
-        totalItems: totalEstimatedWork,
-        percent: 100,
-      });
+        if (newTagsToPersist.length > 0) {
+          await batchAddTags(newTagsToPersist, (chunkProg) => {
+            updateProgress(
+              1,
+              `กำลังบันทึกหมวดหมู่ใหม่ขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} แท็ก)...`
+            );
+          });
+        }
 
-      setSuccessReport({
-        updatedClipsCount,
-        createdClipsCount,
-        movedFromStagingCount: movedFromStagingFootageIds.size,
-        skippedRowsCount: excludedRowIndices.size,
-        createdTagsCount: newTagsToPersist.length,
-        createdTagNames: newTagsToPersist.map((t) => t.name),
-        createdEpisodesCount,
-        updatedEpisodesCount,
-        skippedEpisodesCount: excludedEpisodeKeys.size,
-        syncedEpisodeTitles,
+        // PHASE 2: Auto-create missing Footages and await all Cloud chunks
+        updateProgress(2, 'กำลังสร้างรายการฟุตเทจใหม่เข้าคลังและบันทึกขึ้น Cloud...');
+        await yieldToBrowser();
+
+        const footageIdByNormTitle = new Map<string, string>();
+        const existingTagsByFootageId = new Map<string, string[]>();
+
+        activeRows.forEach((row) => {
+          if (row.matchedFootage) {
+            const normKey = normalizeCompareKey(row.title);
+            footageIdByNormTitle.set(normKey, row.matchedFootage.id);
+            existingTagsByFootageId.set(
+              row.matchedFootage.id,
+              row.matchedFootage.tags
+            );
+          }
+        });
+
+        let createdClipsCount = 0;
+
+        if (autoCreateMissingFootage) {
+          const missingByNormTitle = new Map<
+            string,
+            {
+              title: string;
+              tagIds: Set<string>;
+              episodeNote: string;
+            }
+          >();
+
+          activeRows.forEach((row) => {
+            if (row.matchedFootage) return;
+            const normKey = normalizeCompareKey(row.title);
+            const resolvedTagIds = row.tagNames
+              .map((tName) => tagIdByLowerName.get(tName.toLowerCase()))
+              .filter((id): id is string => Boolean(id));
+
+            const existingEntry = missingByNormTitle.get(normKey);
+            if (existingEntry) {
+              resolvedTagIds.forEach((id) => existingEntry.tagIds.add(id));
+            } else {
+              missingByNormTitle.set(normKey, {
+                title: row.title,
+                tagIds: new Set(resolvedTagIds),
+                episodeNote: row.episodeTitle
+                  ? `ซิงค์จากชีท (${row.episodeTitle})`
+                  : 'ซิงค์จากชีท',
+              });
+            }
+          });
+
+          if (missingByNormTitle.size > 0) {
+            const missingEntries = Array.from(missingByNormTitle.entries());
+            const createdAll = await batchAddDirectFootage(
+              missingEntries.map(([, val]) => ({
+                title: val.title,
+                tags: Array.from(val.tagIds),
+                durationSec: 15,
+                driveFileUrl: '',
+                mascotNotes: val.episodeNote,
+              })),
+              'FT',
+              (chunkProg) => {
+                updateProgress(
+                  2,
+                  `กำลังบันทึกฟุตเทจใหม่ขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} คลิป)...`,
+                  chunkProg.completedOps
+                );
+              }
+            );
+
+            createdAll.forEach((ft, idx) => {
+              const entry = missingEntries[idx];
+              if (entry) {
+                footageIdByNormTitle.set(entry[0], ft.id);
+                existingTagsByFootageId.set(ft.id, ft.tags);
+              }
+            });
+
+            createdClipsCount = createdAll.length;
+          }
+        }
+
+        // PHASE 3: Merge tags for all matched footages and await all Cloud chunks
+        updateProgress(3, 'กำลังผสานแท็กและย้ายฟุตเทจออกจากพื้นที่พักขึ้น Cloud...');
+        await yieldToBrowser();
+
+        const mergedTagSetByFootageId = new Map<string, Set<string>>();
+        const movedFromStagingFootageIds = new Set<string>();
+
+        activeRows.forEach((row) => {
+          if (!row.matchedFootage) return;
+          const ftId = row.matchedFootage.id;
+
+          if (!mergedTagSetByFootageId.has(ftId)) {
+            const baseSet = new Set<string>();
+            (existingTagsByFootageId.get(ftId) || []).forEach((tid) => {
+              if (!isStagingTagId(tid)) {
+                baseSet.add(tid);
+              }
+            });
+            mergedTagSetByFootageId.set(ftId, baseSet);
+          }
+
+          const targetSet = mergedTagSetByFootageId.get(ftId)!;
+          row.tagNames.forEach((tName) => {
+            const tagId = tagIdByLowerName.get(tName.toLowerCase());
+            if (tagId) {
+              targetSet.add(tagId);
+            }
+          });
+
+          if (row.isInStaging && targetSet.size > 0) {
+            movedFromStagingFootageIds.add(ftId);
+          }
+        });
+
+        const footageIdEntries = Array.from(mergedTagSetByFootageId.entries());
+        const updatedClipsCount = footageIdEntries.length;
+
+        if (footageIdEntries.length > 0) {
+          const fullPayload: Record<string, string[]> = {};
+          footageIdEntries.forEach(([ftId, tagSet]) => {
+            fullPayload[ftId] = normalizeFootageTags(Array.from(tagSet));
+          });
+
+          await batchSyncFootageTagsByMap(fullPayload, 'REPLACE', (chunkProg) => {
+            updateProgress(
+              3,
+              `กำลังอัปเดตแท็กฟุตเทจขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} คลิป)...`,
+              createdClipsCount + chunkProg.completedOps
+            );
+          });
+        }
+
+        // PHASE 4: Build and Upsert 5-Rank Episodes and await all Cloud chunks
+        let createdEpisodesCount = 0;
+        let updatedEpisodesCount = 0;
+        const syncedEpisodeTitles: string[] = [];
+
+        if (syncEpisodesFromColD && activeEpisodeGroups.length > 0) {
+          updateProgress(4, 'กำลังจัดอันดับและบันทึกคลังคลิปหลัก (EP) ขึ้น Cloud...');
+          await yieldToBrowser();
+
+          const accumulatedEpIds = episodes.map((e) => e.id);
+          const episodesToUpsert: Episode[] = [];
+
+          const rankSequence: Array<5 | 4 | 3 | 2 | 1> =
+            rankingOrder === 'RANK_5_TO_1' ? [5, 4, 3, 2, 1] : [1, 2, 3, 4, 5];
+
+          activeEpisodeGroups.forEach((group) => {
+            const groupActiveRows = group.rows.filter(
+              (r) => !excludedRowIndices.has(r.rowIndex)
+            );
+            if (groupActiveRows.length === 0) return;
+
+            const existingEp = group.existingEpisode;
+            const epId = existingEp
+              ? existingEp.id
+              : generateNextId('EP', accumulatedEpIds);
+
+            if (!existingEp) {
+              accumulatedEpIds.push(epId);
+              createdEpisodesCount += 1;
+            } else {
+              updatedEpisodesCount += 1;
+            }
+
+            const primaryTagId =
+              tagIdByLowerName.get(group.primaryTagName.toLowerCase()) ||
+              tags.find((t) => !isStagingTagId(t.id))?.id ||
+              'TAG-0001';
+
+            const rankings: EpisodeRankingSlot[] = (
+              [5, 4, 3, 2, 1] as const
+            ).map((rankSlot) => {
+              const seqIndex = rankSequence.indexOf(rankSlot);
+              const rowForSlot =
+                seqIndex >= 0 ? groupActiveRows[seqIndex] || null : null;
+
+              let resolvedFootageId: string | null = null;
+              if (rowForSlot) {
+                if (rowForSlot.matchedFootage) {
+                  resolvedFootageId = rowForSlot.matchedFootage.id;
+                } else {
+                  const normKey = normalizeCompareKey(rowForSlot.title);
+                  resolvedFootageId = footageIdByNormTitle.get(normKey) || null;
+                }
+              }
+
+              if (!resolvedFootageId && existingEp) {
+                const prevSlot = existingEp.rankings.find(
+                  (r) => r.rank === rankSlot
+                );
+                if (prevSlot?.footageId) {
+                  resolvedFootageId = prevSlot.footageId;
+                }
+              }
+
+              const existingMascotScript =
+                existingEp?.rankings.find((r) => r.rank === rankSlot)
+                  ?.mascotScript || '';
+
+              return {
+                rank: rankSlot,
+                footageId: resolvedFootageId,
+                mascotScript:
+                  existingMascotScript ||
+                  (rowForSlot
+                    ? `อันดับที่ ${rankSlot} — ${rowForSlot.title}`
+                    : `อันดับที่ ${rankSlot}`),
+                snapshotNote: rowForSlot?.isInStaging
+                  ? 'ซิงค์จากฟุตเทจไร้หมวดหมู่ผ่าน Google Sheets'
+                  : 'ซิงค์จัดอันดับจาก Google Sheets',
+              };
+            });
+
+            const publishDate = existingEp?.publishDate || todayIso;
+            const publishSlot = existingEp?.publishSlot || 'EVENING_1800';
+            const youtubeUrl =
+              group.youtubeUrl || existingEp?.masterVideoInfo?.youtubeUrl || '';
+
+            const autoMasterFileName = generateMasterEpisodeFileName(
+              epId,
+              publishDate,
+              publishSlot,
+              group.episodeTitle
+            );
+
+            const epPayload: Episode = {
+              id: epId,
+              title: group.episodeTitle,
+              categoryEpisodeNo: group.episodeNo,
+              categoryEpisodeScope: 'MAIN_CATEGORY',
+              seriesId: primaryTagId,
+              seriesTitle: group.seriesBaseName || group.episodeTitle,
+              categoryGroupId: existingEp?.categoryGroupId || 'GRP-THEME',
+              mainCategoryTagId: primaryTagId,
+              productionTarget:
+                existingEp?.productionTarget || 'MAIN_CATEGORY_VARIETY',
+              targetSubcategoryId: existingEp?.targetSubcategoryId || null,
+              publishDate,
+              publishSlot,
+              workflowStage: '4_PUBLISHED',
+              introMascotScript:
+                existingEp?.introMascotScript ||
+                `สวัสดีครับ วันนี้พบกับ ${group.episodeTitle} ไปดูกันเลย!`,
+              outroMascotScript:
+                existingEp?.outroMascotScript ||
+                `ชอบอันดับไหนใน ${group.episodeTitle} คอมเมนต์บอกกันได้เลย!`,
+              rankings,
+              masterVideoInfo: {
+                masterFileName:
+                  existingEp?.masterVideoInfo?.masterFileName ||
+                  autoMasterFileName,
+                masterDriveUrl:
+                  existingEp?.masterVideoInfo?.masterDriveUrl ||
+                  `https://drive.google.com/file/d/MASTER-${epId}/view`,
+                youtubeUrl,
+                facebookUrl: existingEp?.masterVideoInfo?.facebookUrl || '',
+                viewsCount: existingEp?.masterVideoInfo?.viewsCount || 0,
+                performanceNote:
+                  existingEp?.masterVideoInfo?.performanceNote ||
+                  `ซิงค์จาก Google Sheets (${groupActiveRows.length} ฟุตเทจ)`,
+              },
+              createdAt: existingEp?.createdAt || todayIso,
+            };
+
+            episodesToUpsert.push(epPayload);
+            syncedEpisodeTitles.push(group.episodeTitle);
+          });
+
+          if (episodesToUpsert.length > 0) {
+            await batchUpsertEpisodes(episodesToUpsert, (chunkProg) => {
+              updateProgress(
+                4,
+                `กำลังบันทึกคลังคลิปหลักขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} ตอน)...`,
+                activeRows.length + chunkProg.completedOps
+              );
+            });
+          }
+        }
+
+        setSyncProgress({
+          phaseIndex: 4,
+          phaseLabel: 'ซิงค์ฐานข้อมูลขึ้น Cloud เสร็จสมบูรณ์ 100%!',
+          completedItems: totalEstimatedWork,
+          totalItems: totalEstimatedWork,
+          percent: 100,
+        });
+
+        setSuccessReport({
+          updatedClipsCount,
+          createdClipsCount,
+          movedFromStagingCount: movedFromStagingFootageIds.size,
+          skippedRowsCount: excludedRowIndices.size,
+          createdTagsCount: newTagsToPersist.length,
+          createdTagNames: newTagsToPersist.map((t) => t.name),
+          createdEpisodesCount,
+          updatedEpisodesCount,
+          skippedEpisodesCount: excludedEpisodeKeys.size,
+          syncedEpisodeTitles,
+        });
       });
     } catch (err) {
       console.error('Sheet tag & episode sync error:', err);
@@ -794,6 +791,8 @@ export const SheetTagImportModal: React.FC = () => {
     <BaseModal
       isOpen={isSheetTagImportModalOpen}
       onClose={handleClose}
+      closeOnBackdropClick={!isProcessing}
+      closeOnEsc={!isProcessing}
       fullScreen={isFullScreen}
       maxWidthClass="max-w-[96vw] xl:max-w-[1680px]"
       heightClass="h-[94dvh] sm:h-[92vh]"

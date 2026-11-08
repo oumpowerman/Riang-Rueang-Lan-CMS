@@ -20,6 +20,8 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
     <BaseModal
       isOpen={driveImport.isGoogleDriveBatchModalOpen}
       onClose={driveImport.handleClose}
+      closeOnBackdropClick={!driveImport.isImporting}
+      closeOnEsc={!driveImport.isImporting}
       maxWidthClass="max-w-[96vw] xl:max-w-[1580px]"
       heightClass="h-[94dvh] sm:h-[92vh]"
       icon={<FolderDown className="w-5 h-5 text-[#2E7D32]" />}
@@ -43,6 +45,7 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
             parsedPastedCount={driveImport.parsedPastedItems.length}
             isImporting={driveImport.isImporting}
             importProgress={driveImport.importProgress}
+            importStatusLabel={driveImport.importStatusLabel}
             onClose={driveImport.handleClose}
             onExecuteImport={driveImport.handleExecuteImport}
           />

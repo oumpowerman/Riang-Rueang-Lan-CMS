@@ -25,25 +25,88 @@ import { INITIAL_CATEGORY_GROUPS } from '../services/seedData';
  */
 const MAX_BATCH_OPERATIONS = 400;
 
+export interface BatchChunkProgress {
+  completedChunks: number;
+  totalChunks: number;
+  completedOps: number;
+  totalOps: number;
+}
+
 interface BatchWriteOp {
   type: 'set' | 'delete';
   ref: DocumentReference;
   data?: Record<string, unknown>;
 }
 
-async function commitOperationsInChunks(operations: BatchWriteOp[]): Promise<void> {
-  if (operations.length === 0) return;
-  for (let i = 0; i < operations.length; i += MAX_BATCH_OPERATIONS) {
-    const chunk = operations.slice(i, i + MAX_BATCH_OPERATIONS);
-    const batch = writeBatch(db);
-    for (const op of chunk) {
-      if (op.type === 'set' && op.data) {
-        batch.set(op.ref, op.data, { merge: true });
-      } else if (op.type === 'delete') {
-        batch.delete(op.ref);
-      }
+let activeBatchWritesCount = 0;
+const batchWriteCompleteListeners = new Set<() => void>();
+
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (activeBatchWritesCount > 0) {
+    e.preventDefault();
+    e.returnValue =
+      'กำลังบันทึกข้อมูลก้อนใหญ่ขึ้น Cloud (Firestore) กรุณารอให้ครบ 100% ก่อนรีเฟรชหรือปิดหน้านี้';
+    return e.returnValue;
+  }
+  return undefined;
+};
+
+function beginBatchWriteLock() {
+  if (activeBatchWritesCount === 0 && typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+  }
+  activeBatchWritesCount += 1;
+}
+
+function endBatchWriteLock() {
+  activeBatchWritesCount = Math.max(0, activeBatchWritesCount - 1);
+  if (activeBatchWritesCount === 0) {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     }
-    await batch.commit();
+    batchWriteCompleteListeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (err) {
+        console.warn('batchWriteCompleteListener error:', err);
+      }
+    });
+  }
+}
+
+async function commitOperationsInChunks(
+  operations: BatchWriteOp[],
+  onProgress?: (progress: BatchChunkProgress) => void
+): Promise<void> {
+  if (operations.length === 0) return;
+  const totalOps = operations.length;
+  const totalChunks = Math.ceil(totalOps / MAX_BATCH_OPERATIONS);
+  let completedChunks = 0;
+
+  beginBatchWriteLock();
+  try {
+    for (let i = 0; i < totalOps; i += MAX_BATCH_OPERATIONS) {
+      const chunk = operations.slice(i, i + MAX_BATCH_OPERATIONS);
+      const batch = writeBatch(db);
+      for (const op of chunk) {
+        if (op.type === 'set' && op.data) {
+          batch.set(op.ref, op.data, { merge: true });
+        } else if (op.type === 'delete') {
+          batch.delete(op.ref);
+        }
+      }
+      await batch.commit();
+      completedChunks += 1;
+      const completedOps = Math.min(totalOps, i + chunk.length);
+      onProgress?.({
+        completedChunks,
+        totalChunks,
+        completedOps,
+        totalOps,
+      });
+    }
+  } finally {
+    endBatchWriteLock();
   }
 }
 
@@ -76,6 +139,29 @@ function normalizeCategoryTag(raw: CategoryTag): CategoryTag {
 }
 
 export const firestoreService = {
+  // ==========================================
+  // BATCH WRITE LOCK & PROGRESS COORDINATION
+  // ==========================================
+  isBatchWriteInProgress(): boolean {
+    return activeBatchWritesCount > 0;
+  },
+
+  onBatchWriteComplete(listener: () => void): () => void {
+    batchWriteCompleteListeners.add(listener);
+    return () => {
+      batchWriteCompleteListeners.delete(listener);
+    };
+  },
+
+  async withBatchWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    beginBatchWriteLock();
+    try {
+      return await fn();
+    } finally {
+      endBatchWriteLock();
+    }
+  },
+
   // ==========================================
   // REALTIME SUBSCRIPTIONS
   // ==========================================
@@ -208,7 +294,10 @@ export const firestoreService = {
     );
   },
 
-  async batchSaveCategories(categories: CategoryTag[]) {
+  async batchSaveCategories(
+    categories: CategoryTag[],
+    onProgress?: (progress: BatchChunkProgress) => void
+  ) {
     if (!categories.length) return;
     const now = new Date().toISOString();
     const ops: BatchWriteOp[] = categories.map((cat) => {
@@ -222,7 +311,7 @@ export const firestoreService = {
         >,
       };
     });
-    await commitOperationsInChunks(ops);
+    await commitOperationsInChunks(ops, onProgress);
   },
 
   async deleteCategory(categoryId: string) {
@@ -244,7 +333,10 @@ export const firestoreService = {
     );
   },
 
-  async batchSaveSources(sources: RawSource[]) {
+  async batchSaveSources(
+    sources: RawSource[],
+    onProgress?: (progress: BatchChunkProgress) => void
+  ) {
     if (!sources.length) return;
     const now = new Date().toISOString();
     const ops: BatchWriteOp[] = sources.map((src) => ({
@@ -256,7 +348,7 @@ export const firestoreService = {
         serverUpdatedAt: serverTimestamp(),
       }) as unknown as Record<string, unknown>,
     }));
-    await commitOperationsInChunks(ops);
+    await commitOperationsInChunks(ops, onProgress);
   },
 
   async deleteSource(sourceId: string) {
@@ -278,7 +370,10 @@ export const firestoreService = {
     );
   },
 
-  async batchSaveFootages(footages: Footage[]) {
+  async batchSaveFootages(
+    footages: Footage[],
+    onProgress?: (progress: BatchChunkProgress) => void
+  ) {
     if (!footages.length) return;
     const now = new Date().toISOString();
     const ops: BatchWriteOp[] = footages.map((ft) => ({
@@ -290,7 +385,7 @@ export const firestoreService = {
         serverUpdatedAt: serverTimestamp(),
       }) as unknown as Record<string, unknown>,
     }));
-    await commitOperationsInChunks(ops);
+    await commitOperationsInChunks(ops, onProgress);
   },
 
   async deleteFootage(footageId: string) {
@@ -298,13 +393,16 @@ export const firestoreService = {
     await deleteDoc(docRef);
   },
 
-  async batchDeleteFootages(footageIds: string[]) {
+  async batchDeleteFootages(
+    footageIds: string[],
+    onProgress?: (progress: BatchChunkProgress) => void
+  ) {
     if (!footageIds.length) return;
     const ops: BatchWriteOp[] = footageIds.map((id) => ({
       type: 'delete',
       ref: doc(db, 'footages', id),
     }));
-    await commitOperationsInChunks(ops);
+    await commitOperationsInChunks(ops, onProgress);
   },
 
   // Episode CRUD
@@ -321,7 +419,10 @@ export const firestoreService = {
     );
   },
 
-  async batchSaveEpisodes(episodes: Episode[]) {
+  async batchSaveEpisodes(
+    episodes: Episode[],
+    onProgress?: (progress: BatchChunkProgress) => void
+  ) {
     if (!episodes.length) return;
     const now = new Date().toISOString();
     const ops: BatchWriteOp[] = episodes.map((ep) => ({
@@ -333,7 +434,7 @@ export const firestoreService = {
         serverUpdatedAt: serverTimestamp(),
       }) as unknown as Record<string, unknown>,
     }));
-    await commitOperationsInChunks(ops);
+    await commitOperationsInChunks(ops, onProgress);
   },
 
   async deleteEpisode(episodeId: string) {

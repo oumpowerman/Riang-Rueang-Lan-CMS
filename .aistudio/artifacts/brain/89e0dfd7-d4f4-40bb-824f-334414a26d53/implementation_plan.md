@@ -1,62 +1,49 @@
-# แผนงาน: ปรับโครงสร้างหน้าต่างนำเข้า Google Drive ให้ใช้ BaseModal โทนพาสเทลสว่าง และล็อกขนาดคงที่ล้อตามหน้าจอ
+# แผนการพัฒนาระบบบันทึกข้อมูลก้อนใหญ่ขึ้น Cloud (Firestore) ครบ 100% (Batch Write Lock & Await All Chunks)
 
-ปรับปรุงหน้าต่างนำเข้าฟุตเทจจำนวนมากจาก Google Drive ให้เปลี่ยนมาใช้คอมโพเนนต์มาตรฐาน `BaseModal` (เรนเดอร์ผ่าน React Portal) พร้อมล็อกความกว้างและความสูงคงที่ (`h-[94dvh] sm:h-[92vh]` และ `max-w-[96vw] xl:max-w-[1580px]`) เพื่อไม่ให้กรอบหน้าต่างยืดหรือหดตัวเมื่อสลับโหมด เปิดแผงตั้งค่า หรือแสดงผลลัพธ์การสแกน และปรับโทนสีเป็นพาสเทลสว่าง (Light Pastel) ให้เป็นมาตรฐานเดียวกับทั้งระบบ
+## 1. ภาพรวมของปัญหาและแนวทางแก้ไข (Overview)
+เมื่อนำเข้าคลิปหรือจัดการข้อมูลจำนวนมาก (เช่น 900+ คลิป หรือหลายพันคลิป) Firestore จำกัดการเขียนต่อ 1 Batch ไม่เกิน **400 รายการ** (`MAX_BATCH_OPERATIONS = 400`) จึงต้องแบ่งส่งเป็นก้อนๆ (เช่น 950 คลิป = 3 ก้อน: 400 + 400 + 150)
 
----
-
-## การตัดสินใจที่ได้รับการยืนยัน (User Review & Confirmed Decisions)
-
-> [!IMPORTANT]
-> แนวทางที่ได้รับการยืนยันจากผู้ใช้สำหรับการปรับขนาดและธีมของหน้าต่างนำเข้า Google Drive:
-
-- **ขนาดและสัดส่วนคงที่ (Confirmed Decision 1)**: ล็อกขนาดแบบ **กว้างพิเศษ (`max-w-[96vw] xl:max-w-[1580px]`) และสูงคงที่ 92% ของหน้าจอ (`h-[94dvh] sm:h-[92vh]`)** เหมือนหน้าซิงก์ Supabase และ Google Sheet เพื่อให้ขนาดหน้าต่างนิ่งสนิทตลอดการใช้งาน
-- **โครงสร้างและโทนสี (Confirmed Decision 2)**: **เปลี่ยนมาใช้ `BaseModal` โทนพาสเทลสว่าง (Light Pastel)** แทนกรอบสีเข้มเดิม เพื่อให้สอดคล้องกับกฎสถาปัตยกรรม Portal Rendering และระบบดีไซน์ของแอป 100%
+**สาเหตุที่ข้อมูลเหลือ 400 รายการก่อนหน้านี้:**
+1. **`onSnapshot` แทรกกลางระหว่างส่งก้อนข้อมูล:** ทันทีที่ก้อนที่ 1 (400 คลิปแรก) บันทึกเสร็จ Listener `onSnapshot` ของ Firestore จะยิงข้อมูล 400 คลิปกลับมาทับ State บนหน้าจอและ `localStorage` ทันทีในขณะที่ก้อนที่ 2 และ 3 ยังส่งไม่เสร็จ
+2. **UI แจ้ง 100% ก่อนส่งขึ้น Cloud ครบทุกก้อน:** ฟังก์ชัน `batchAddDirectFootage`, `batchSyncFootageTagsByMap`, และคำสั่งกลุ่มอื่นๆ ไม่ได้ `await` รอให้ทุกก้อนบันทึกลง Firestore เสร็จสมบูรณ์ ทำให้หน้าจอขึ้น "สำเร็จ 100%" ทันที และหากผู้ใช้กดรีเฟรชเบราว์เซอร์ ก้อนที่เหลือจะถูกตัดจบกลางคัน
 
 ---
 
-## 1. ภาพรวมและแนวคิดหลัก (Overview & Core Concept)
+## 2. รายละเอียดการปรับปรุงระบบ (Key Changes)
 
-- **สาเหตุที่หน้าต่างเดิมยืดหดตามเนื้อหา**:
-  - โค้ดเดิมกำหนดเพียงเพดานความสูงสูงสุด (`max-h-[92vh]`) แต่ไม่ได้กำหนดความสูงตายตัว (`h-[92vh]`) ทำให้ตอนยังไม่ได้สแกนหน้าต่างจะหดสั้น และพอสแกนเสร็จหรือกางแผง API Key หน้าต่างจะกระตุกยืดออก
-- **สิ่งที่ระบบใหม่จะทำ (What It Does)**:
-  1. **Fixed Viewport-Locked Dimensions**: ใช้ `heightClass="h-[94dvh] sm:h-[92vh]"` และ `maxWidthClass="max-w-[96vw] xl:max-w-[1580px]"` บน `BaseModal` ทำให้กรอบนอกของ Modal มีขนาดคงที่ล้อตามขนาดหน้าจอเบราว์เซอร์เสมอ ไม่ว่าเนื้อหาข้างในจะน้อยหรือมาก
-  2. **Internal Scroll Isolation**: ส่วน Header และ Footer จะถูกตรึงอยู่กับที่ (`shrink-0`) ในขณะที่พื้นที่เนื้อหาตรงกลาง (`flex-1 min-h-0 overflow-y-auto scrollbar-thin`) จะรับหน้าที่เลื่อนขึ้นลงอย่างนุ่มนวลด้วย Slim Scrollbar
-  3. **Light Pastel Theme Alignment**: ปรับส่วนหัวและแถบคำสั่งด้านล่างให้ใช้โทนพาสเทลสว่าง (`#FDFBF7`, `#FAF8F5`, ปุ่มหลักโทนเขียวพาสเทลเข้ม `#3B6845`) เข้าชุดกับหน้าต่างอื่นๆ ของระบบ
+### 2.1 ระบบล็อก `onSnapshot` ชั่วคราวระหว่างส่งข้อมูลก้อนใหญ่ (`activeBatchWritesCount`)
+- **ไฟล์ที่เกี่ยวข้อง:** `src/firebase/firestoreService.ts`, `src/context/cms/useCMSCloudAndStorageSync.ts`
+- **การทำงาน:**
+  - เพิ่มตัวนับสถานะการเขียนข้อมูลก้อนใหญ่ (`activeBatchWritesCount`) และฟังก์ชัน `firestoreService.isBatchWriteInProgress()`
+  - ในขณะที่ `activeBatchWritesCount > 0` ระบบจะระงับการนำข้อมูลครึ่งๆ กลางๆ จาก `onSnapshot` (`subscribeFootages`, `subscribeSources`, `subscribeEpisodes`, `subscribeCategories`, `subscribeCategoryGroups`) มาทับ State บนหน้าจอชั่วคราว
+  - เมื่อส่งครบทุกก้อนแล้ว (`activeBatchWritesCount === 0`) ระบบจะปลดล็อกและซิงก์ข้อมูลล่าสุดจาก Firestore ลงหน้าจอและ `localStorage` ให้ตรงกัน 100%
 
----
+### 2.2 ระบบรอ (`await`) ให้ครบทุกก้อนและรายงานความคืบหน้ารายก้อน (`BatchChunkProgress`)
+- **ไฟล์ที่เกี่ยวข้อง:**
+  - `src/firebase/firestoreService.ts`
+  - `src/context/cms/cms.types.ts`
+  - `src/context/cms/useCMSFootageActions.ts`
+  - `src/context/cms/useCMSCategoryActions.ts`
+  - `src/context/cms/useCMSEpisodeActions.ts`
+- **การทำงาน:**
+  - เพิ่ม Callback `onProgress?: (progress: BatchChunkProgress) => void` ใน `commitOperationsInChunks` เพื่อส่งค่า `{ completedChunks, totalChunks, completedOps, totalOps }` หลังแต่ละก้อนบันทึกขึ้น Cloud สำเร็จ
+  - ปรับฟังก์ชันจัดการข้อมูลกลุ่มทั้งหมด (`batchAddDirectFootage`, `batchAddTags`, `batchSyncFootageTagsByMap`, `batchUpdateFootageTags`, `batchDeleteFootage`, `batchUpsertEpisodes`) ให้คืนค่าเป็น `Promise` ที่รอจนกว่าทุกก้อนจะบันทึกขึ้น Firestore เสร็จสมบูรณ์
 
-## 2. ประสบการณ์ผู้ใช้และการออกแบบหน้าจอ (User Experience & Visual Design)
+### 2.3 แสดงสถานะก้อนข้อมูลจริง (ก้อนที่ 1/3 ➔ 2/3 ➔ 3/3) ในทุกหน้าต่างนำเข้าและซิงก์
+- **ไฟล์ที่เกี่ยวข้อง:**
+  - `src/components/footage/driveImport/useGoogleDriveBatchImport.ts`
+  - `src/components/footage/GoogleDriveBatchImportModal.tsx`
+  - `src/components/footage/driveImport/DriveImportModalFooter.tsx`
+  - `src/components/footage/SheetTagImportModal.tsx`
+- **การทำงาน:**
+  - **หน้าต่างนำเข้า Google Drive (`GoogleDriveBatchImportModal`):** รอ (`await`) การบันทึกหมวดหมู่และคลิปทุกก้อนขึ้น Cloud จริงๆ พร้อมแสดงข้อความสถานะ เช่น `"กำลังบันทึกขึ้น Cloud ก้อนที่ 2/3 (800/950 รายการ)..."` และแสดงเปอร์เซ็นต์ตามก้อนที่ส่งจริง ก่อนเปลี่ยนเป็นหน้าจอสำเร็จ 100%
+  - **หน้าต่างซิงก์ Google Sheet (`SheetTagImportModal`):** รอ (`await`) การบันทึกคลิปใหม่, อัปเดตหมวดหมู่, และสร้าง/อัปเดต EP จนครบทุกก้อนบน Cloud พร้อมแสดงความคืบหน้ารายก้อนแบบเรียลไทม์
 
-- **ลำดับการใช้งานและพฤติกรรมหน้าจอ (Key User Flows)**:
-  1. **เปิดหน้าต่างนำเข้า Google Drive**: หน้าต่างเปิดขึ้นมาด้วยแอนิเมชันของ `BaseModal` ที่ขนาดเต็มสัดส่วน 92% ของความสูงหน้าจอทันที
-  2. **สลับโหมด (`สแกนอัตโนมัติ` ↔ `วางข้อความ`) หรือเปิด/ปิดแผงตั้งค่า**: กรอบนอกของ Modal รวมถึงตำแหน่งของ Header และปุ่มกดใน Footer จะอยู่ที่เดิมเป๊ะ 100% ไม่มีการขยับยืดหดให้เสียสายตา
-  3. **แสดงตารางผลลัพธ์การสแกน**: ตารางรายการวิดีโอและโฟลเดอร์ย่อยจะแสดงผลภายในพื้นที่ตรงกลางที่กว้างขวางขึ้น มองเห็นชื่อคลิปและหมวดหมู่ได้ชัดเจนโดยไม่ต้องเบียดกัน
-- **อัตลักษณ์และการออกแบบ (Visual Identity & Theme)**:
-  - *โทนสี (Light Pastel)*: พื้นหลังส่วนหัวและส่วนท้ายสีครีมอ่อน (`#FDFBF7`), พื้นหลังเนื้อหาสี `#FAF8F5`, เส้นแบ่ง `#E8DFD3`, และปุ่มยืนยันนำเข้าสีเขียวพาสเทลเข้ม (`#3B6845`)
-
----
-
-## 3. สถาปัตยกรรมทางเทคนิคและการจัดวางเลย์เอาต์ (Technical Architecture & Layout Strategy)
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│            BaseModal (React Portal -> document.body)                       │
-│     Fixed Size: max-w-[96vw] xl:max-w-[1580px] | h-[94dvh] sm:h-[92vh]     │
-├────────────────────────────────────────────────────────────────────────────┤
-│  Header (shrink-0, Fixed Top, Light Pastel #FDFBF7)                        │
-│  ├─ Icon + Title ("นำเข้าฟุตเทจจำนวนมากจาก Google Drive")                  │
-│  └─ Badge ("Enterprise Recursive Scanner") + Close Button (Esc)            │
-├────────────────────────────────────────────────────────────────────────────┤
-│  Scrollable Body (flex-1 min-h-0 overflow-y-auto scrollbar-thin)           │
-│  ├─ Workspace Auth Banner + Mode Switcher Bar                              │
-│  ├─ Folder URL + Saved Folders Quick-Switch + Strategy Config              │
-│  └─ Subfolder Mapping & Discovered Videos Table (Expands cleanly inside)   │
-├────────────────────────────────────────────────────────────────────────────┤
-│  Footer (shrink-0, Fixed Bottom, Light Pastel #FDFBF7)                     │
-│  └─ Routing Summary Counter + Cancel / Execute Import CTA                  │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-- **การแยกส่วน Motion และ Layout (Motion vs CSS Harmony)**:
-  - มอบหมายให้ `BaseModal` จัดการ React Portal, Backdrop, การล็อก Scroll หน้าหลัก และ Framer Motion เพียงจุดเดียว
-  - ปรับคอมโพเนนต์ส่วนท้าย (`DriveImportModalFooter`) ให้สวมเข้ากับช่อง `footer` ของ `BaseModal` โดยตรง เพื่อไม่ให้เกิดเส้นขอบหรือ Padding ซ้อนทับกัน
+### 2.4 ระบบป้องกันการเผลอปิดหน้าต่างหรือรีเฟรชเบราว์เซอร์ก่อนครบ 100%
+- **ไฟล์ที่เกี่ยวข้อง:**
+  - `src/firebase/firestoreService.ts`
+  - `src/components/footage/GoogleDriveBatchImportModal.tsx`
+  - `src/components/footage/SheetTagImportModal.tsx`
+- **การทำงาน:**
+  - **เตือนเมื่อกด Refresh / ปิดแท็บ (`beforeunload`):** ผูก Event `window.addEventListener('beforeunload', ...)` อัตโนมัติตราบใดที่ยังมีก้อนข้อมูลกำลังส่งขึ้น Cloud (`activeBatchWritesCount > 0`) เพื่อแจ้งเตือนผู้ใช้ไม่ให้เผลอรีเฟรชหน้าเว็บก่อนส่งครบทุกก้อน
+  - **ล็อกปุ่มปิด Modal ชั่วคราว:** ปิดการทำงานของปุ่มปิด (`X`), ปุ่มยกเลิก, การคลิกพื้นหลัง (`closeOnBackdropClick={false}`), และปุ่ม `ESC` (`closeOnEsc={false}`) ในระหว่างที่กำลังส่งก้อนข้อมูลขึ้น Cloud

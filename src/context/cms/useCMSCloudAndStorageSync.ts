@@ -10,7 +10,7 @@ import { CategoryGroup, CategoryTag, SystemSettings } from '../../types/tag.type
 export function useCMSCloudAndStorageSync(
   setSelectedTagFilter: React.Dispatch<React.SetStateAction<string[]>>
 ) {
-  // Ensure one-time local production wipe runs before state initialization
+  // Ensure one-time local production check runs before state initialization
   cmsRepository.ensureProductionCleanSlate();
 
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>(() =>
@@ -30,140 +30,137 @@ export function useCMSCloudAndStorageSync(
 
   const isWipingCloudRef = useRef<boolean>(false);
 
-  // Firestore Realtime Subscriptions
+  // Buffer latest Firestore snapshots received while a multi-chunk batch write is in progress
+  // so partial 400-item chunks never overwrite the UI mid-upload, and flush the final authoritative
+  // snapshot once all chunks have committed.
+  const pendingCategoryGroupsRef = useRef<CategoryGroup[] | null>(null);
+  const pendingTagsRef = useRef<CategoryTag[] | null>(null);
+  const pendingSourcesRef = useRef<RawSource[] | null>(null);
+  const pendingFootageRef = useRef<Footage[] | null>(null);
+  const pendingEpisodesRef = useRef<Episode[] | null>(null);
+
+  // Authoritative Firestore Realtime Subscriptions
+  // Firestore is the Single Source of Truth across all devices/tabs.
+  // When any item is added, updated, or deleted on Device A, Device B immediately
+  // receives the exact Firestore collection state and overwrites its localStorage cache.
   useEffect(() => {
-    let hasSeededCategories = false;
-    let hasMigratedLocalSources = false;
-    let hasMigratedLocalFootages = false;
-    let isRepairingCloudCategories = false;
+    const flushPendingSnapshots = () => {
+      if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+        return;
+      }
+      if (pendingCategoryGroupsRef.current !== null) {
+        const groups = pendingCategoryGroupsRef.current;
+        pendingCategoryGroupsRef.current = null;
+        setCategoryGroups(groups);
+        cmsRepository.saveCategoryGroups(groups);
+      }
+      if (pendingTagsRef.current !== null) {
+        const normalized = pendingTagsRef.current;
+        pendingTagsRef.current = null;
+        setTags(normalized);
+        cmsRepository.saveTags(normalized);
+      }
+      if (pendingSourcesRef.current !== null) {
+        const cloudSources = pendingSourcesRef.current;
+        pendingSourcesRef.current = null;
+        setSources(cloudSources);
+        cmsRepository.saveSources(cloudSources);
+      }
+      if (pendingFootageRef.current !== null) {
+        const cloudFootages = pendingFootageRef.current;
+        pendingFootageRef.current = null;
+        setFootage(cloudFootages);
+        cmsRepository.saveFootage(cloudFootages);
+      }
+      if (pendingEpisodesRef.current !== null) {
+        const cloudEpisodes = pendingEpisodesRef.current;
+        pendingEpisodesRef.current = null;
+        setEpisodes(cloudEpisodes);
+        cmsRepository.saveEpisodes(cloudEpisodes);
+      }
+    };
+
+    const unsubBatchComplete = firestoreService.onBatchWriteComplete(() => {
+      flushPendingSnapshots();
+    });
 
     const unsubCategoryGroups = firestoreService.subscribeCategoryGroups(
       (cloudGroups) => {
-        if (cmsRepository.isCategoriesWiped() && cloudGroups.length === 0) {
-          setCategoryGroups([]);
-          setIsCloudConnected(true);
-          setIsCloudSynced(true);
-          return;
-        }
-
-        if (cloudGroups.length > 0) {
-          setCategoryGroups((prevGroups) => {
-            const { groups: reconciledGroups } = cmsRepository.reconcileCategoryGroups(
-              cloudGroups,
-              prevGroups
-            );
-            return reconciledGroups;
-          });
-        }
         setIsCloudConnected(true);
         setIsCloudSynced(true);
+        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+          pendingCategoryGroupsRef.current = cloudGroups;
+          return;
+        }
+        pendingCategoryGroupsRef.current = null;
+        setCategoryGroups(cloudGroups);
+        cmsRepository.saveCategoryGroups(cloudGroups);
       },
       (err) => console.warn('Firestore category_groups subscription warning:', err)
     );
 
     const unsubCategories = firestoreService.subscribeCategories(
       (cloudCats) => {
-        if (cmsRepository.isCategoriesWiped() && cloudCats.length === 0) {
-          setTags([]);
-          setIsCloudConnected(true);
-          setIsCloudSynced(true);
-          return;
-        }
-
-        if (cloudCats.length > 0) {
-          hasSeededCategories = true;
-          setTags((prevTags) => {
-            const { tags: reconciledTags, needsCloudRepair } =
-              cmsRepository.reconcileTagsWithHierarchy(cloudCats, prevTags);
-
-            if (needsCloudRepair && !isRepairingCloudCategories) {
-              isRepairingCloudCategories = true;
-              const currentGroups = cmsRepository.getCategoryGroups();
-              firestoreService
-                .restoreCategoriesToCloud(currentGroups, reconciledTags)
-                .catch((err) => console.warn('Cloud category hierarchy auto-repair warning:', err))
-                .finally(() => {
-                  isRepairingCloudCategories = false;
-                });
-            }
-
-            return reconciledTags;
-          });
-        } else if (!hasSeededCategories && !cmsRepository.isCategoriesWiped()) {
-          hasSeededCategories = true;
-          // Seed ONLY 3-tier categories and settings if Firestore has no categories yet (never seed demo clips)
-          const initialGroups = cmsRepository.getCategoryGroups();
-          const initialTags = cmsRepository.getTags();
-          const initialSettings = cmsRepository.getSettings();
-          firestoreService
-            .seedInitialDatabase(initialTags, [], [], initialSettings, initialGroups, [])
-            .then(() => setIsCloudSynced(true))
-            .catch((err) => console.warn('Category structure sync to Firestore warning:', err));
-        }
+        const normalized = cloudCats.map((t) => ({
+          ...t,
+          tier: (t.tier === 2 || !!t.parentId ? 2 : 1) as 1 | 2,
+          parentId: t.tier === 2 || !!t.parentId ? t.parentId || null : null,
+          groupId: t.groupId || `GRP-${t.groupType || 'GENERAL'}`,
+        }));
         setIsCloudConnected(true);
         setIsCloudSynced(true);
+        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+          pendingTagsRef.current = normalized;
+          return;
+        }
+        pendingTagsRef.current = null;
+        setTags(normalized);
+        cmsRepository.saveTags(normalized);
       },
       (err) => console.warn('Firestore categories subscription warning:', err)
     );
 
     const unsubSources = firestoreService.subscribeSources(
       (cloudSources) => {
-        if (isWipingCloudRef.current) {
-          return;
-        }
-
-        if (cloudSources.length === 0 && !hasMigratedLocalSources) {
-          hasMigratedLocalSources = true;
-          const localSources = cmsRepository.getSources();
-          if (localSources.length > 0) {
-            firestoreService
-              .batchSaveSources(localSources)
-              .catch((err) => console.warn('Auto-migrate local sources to Firestore warning:', err));
-            return;
-          }
-        }
-
-        setSources(cloudSources);
         setIsCloudConnected(true);
         setIsCloudSynced(true);
+        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+          pendingSourcesRef.current = cloudSources;
+          return;
+        }
+        pendingSourcesRef.current = null;
+        setSources(cloudSources);
+        cmsRepository.saveSources(cloudSources);
       },
       (err) => console.warn('Firestore sources subscription warning:', err)
     );
 
     const unsubFootages = firestoreService.subscribeFootages(
       (cloudFootages) => {
-        if (isWipingCloudRef.current) {
-          return;
-        }
-
-        if (cloudFootages.length === 0 && !hasMigratedLocalFootages) {
-          hasMigratedLocalFootages = true;
-          const localFootages = cmsRepository.getFootage();
-          if (localFootages.length > 0) {
-            firestoreService
-              .batchSaveFootages(localFootages)
-              .catch((err) =>
-                console.warn('Auto-migrate local footages to Firestore warning:', err)
-              );
-            return;
-          }
-        }
-
-        setFootage(cloudFootages);
         setIsCloudConnected(true);
         setIsCloudSynced(true);
+        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+          pendingFootageRef.current = cloudFootages;
+          return;
+        }
+        pendingFootageRef.current = null;
+        setFootage(cloudFootages);
+        cmsRepository.saveFootage(cloudFootages);
       },
       (err) => console.warn('Firestore footages subscription warning:', err)
     );
 
     const unsubEpisodes = firestoreService.subscribeEpisodes(
       (cloudEpisodes) => {
-        if (isWipingCloudRef.current) {
-          return;
-        }
-        setEpisodes(cloudEpisodes);
         setIsCloudConnected(true);
         setIsCloudSynced(true);
+        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+          pendingEpisodesRef.current = cloudEpisodes;
+          return;
+        }
+        pendingEpisodesRef.current = null;
+        setEpisodes(cloudEpisodes);
+        cmsRepository.saveEpisodes(cloudEpisodes);
       },
       (err) => console.warn('Firestore episodes subscription warning:', err)
     );
@@ -171,7 +168,9 @@ export function useCMSCloudAndStorageSync(
     const unsubSettings = firestoreService.subscribeSettings(
       (cloudSettings) => {
         if (cloudSettings) {
-          setSettings({ ...INITIAL_SETTINGS, ...cloudSettings });
+          const mergedSettings = { ...INITIAL_SETTINGS, ...cloudSettings };
+          setSettings(mergedSettings);
+          cmsRepository.saveSettings(mergedSettings);
         }
         setIsCloudConnected(true);
         setIsCloudSynced(true);
@@ -180,6 +179,7 @@ export function useCMSCloudAndStorageSync(
     );
 
     return () => {
+      unsubBatchComplete();
       unsubCategoryGroups();
       unsubCategories();
       unsubSources();

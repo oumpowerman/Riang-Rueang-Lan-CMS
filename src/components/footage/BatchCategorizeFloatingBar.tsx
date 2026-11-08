@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckSquare,
+  RefreshCw,
   Sparkles,
   Tag,
   Trash2,
@@ -22,6 +23,9 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
     quickAssignCategoryToFootage,
   } = useCMS();
 
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [deleteProgressLabel, setDeleteProgressLabel] = useState<string>('');
+
   const quickCategories = useMemo(() => {
     const realTags = tags.filter((t) => !isStagingTagId(t.id));
     const subTags = realTags.filter((t) => Boolean(t.parentId));
@@ -29,26 +33,45 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
     return [...mainTags, ...subTags].slice(0, 12);
   }, [tags]);
 
-  if (selectedFootageIdsForBatch.length === 0) return null;
+  if (selectedFootageIdsForBatch.length === 0 && !isDeletingBatch) return null;
 
   const count = selectedFootageIdsForBatch.length;
 
   const handleOpenBatchAssignModal = () => {
+    if (isDeletingBatch) return;
     setIsBatchAssignCategoryModalOpen(true);
   };
 
-  const handleBatchDelete = () => {
+  const handleBatchDelete = async () => {
+    if (isDeletingBatch) return;
     if (
       window.confirm(
-        `ต้องการลบคลิปที่เลือกทั้ง ${count} รายการออกจากระบบใช่หรือไม่?`
+        `ต้องการลบคลิปที่เลือกทั้ง ${count.toLocaleString()} รายการออกจากระบบและ Cloud ใช่หรือไม่?`
       )
     ) {
-      batchDeleteFootage(selectedFootageIdsForBatch);
-      setSelectedFootageIdsForBatch([]);
+      const idsToDelete = [...selectedFootageIdsForBatch];
+      setIsDeletingBatch(true);
+      const totalChunks = Math.max(1, Math.ceil(idsToDelete.length / 400));
+      setDeleteProgressLabel(
+        `กำลังลบออกจาก Cloud ก้อนที่ 1/${totalChunks} (0/${idsToDelete.length.toLocaleString()})...`
+      );
+      try {
+        await batchDeleteFootage(idsToDelete, (chunkProg) => {
+          const nextChunk = Math.min(chunkProg.totalChunks, chunkProg.completedChunks + 1);
+          setDeleteProgressLabel(
+            `กำลังลบออกจาก Cloud ก้อนที่ ${nextChunk}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()})...`
+          );
+        });
+        setSelectedFootageIdsForBatch([]);
+      } finally {
+        setIsDeletingBatch(false);
+        setDeleteProgressLabel('');
+      }
     }
   };
 
   const handleClearSelection = () => {
+    if (isDeletingBatch) return;
     setSelectedFootageIdsForBatch([]);
   };
 
@@ -64,10 +87,16 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
-              <CheckSquare className="w-3.5 h-3.5" />
+              {isDeletingBatch ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+              ) : (
+                <CheckSquare className="w-3.5 h-3.5" />
+              )}
             </div>
             <span className="text-xs sm:text-sm font-extrabold text-slate-900 tabular-nums">
-              เลือก {count} คลิป
+              {isDeletingBatch
+                ? deleteProgressLabel || 'กำลังลบข้อมูลออกจาก Cloud...'
+                : `เลือก ${count.toLocaleString()} คลิป`}
             </span>
           </div>
 
@@ -75,7 +104,8 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
             <button
               type="button"
               onClick={handleOpenBatchAssignModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+              disabled={isDeletingBatch}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
             >
               <Tag className="w-3.5 h-3.5" />
               <span>เลือกหมวด...</span>
@@ -84,7 +114,8 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
             <button
               type="button"
               onClick={handleBatchDelete}
-              className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
+              disabled={isDeletingBatch}
+              className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 disabled:opacity-50 text-slate-500 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
               title="ลบคลิปที่เลือก"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -93,7 +124,8 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
             <button
               type="button"
               onClick={handleClearSelection}
-              className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 border border-slate-200 transition-colors cursor-pointer"
+              disabled={isDeletingBatch}
+              className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-500 hover:text-slate-800 border border-slate-200 transition-colors cursor-pointer"
               title="ยกเลิกการเลือก"
             >
               <X className="w-3.5 h-3.5" />

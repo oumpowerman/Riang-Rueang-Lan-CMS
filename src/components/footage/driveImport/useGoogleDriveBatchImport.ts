@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { useCMS } from '../../../context/CMSContext';
 import { defaultGoogleDriveApiKey } from '../../../firebase/config';
@@ -11,11 +11,7 @@ import {
   scanGoogleDriveFolderRecursive,
   ScanProgressUpdate,
 } from '../../../services/driveScannerService';
-import {
-  DriveSyncMode,
-  DriveSyncRecord,
-  SavedDriveFolderPreset,
-} from '../../../types/driveSync.types';
+import { DriveSyncRecord } from '../../../types/driveSync.types';
 import {
   isStagingGroupId,
   isStagingTagId,
@@ -35,28 +31,7 @@ import {
   ParsedPastedItem,
   SelectedRoutingSummary,
 } from './driveImport.types';
-
-const LAST_FOLDER_URL_STORAGE_KEY = 'rrl_drive_last_folder_url_v1';
-const SAVED_FOLDERS_STORAGE_KEY = 'rrl_drive_saved_folders_v1';
-
-function loadLocalSavedFolders(): SavedDriveFolderPreset[] {
-  try {
-    const raw = localStorage.getItem(SAVED_FOLDERS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalSavedFolders(folders: SavedDriveFolderPreset[]): void {
-  try {
-    localStorage.setItem(SAVED_FOLDERS_STORAGE_KEY, JSON.stringify(folders));
-  } catch {
-    // ignore storage errors
-  }
-}
+import { useSavedDriveFolders } from './useSavedDriveFolders';
 
 export const useGoogleDriveBatchImport = () => {
   const {
@@ -82,24 +57,6 @@ export const useGoogleDriveBatchImport = () => {
 
   // Mode: RECURSIVE (Enterprise Scan) vs PASTE (Manual Text)
   const [activeImportMode, setActiveImportMode] = useState<DriveImportMode>('RECURSIVE');
-  const [folderUrl, setFolderUrlState] = useState<string>(() => {
-    const localUrl = localStorage.getItem(LAST_FOLDER_URL_STORAGE_KEY) || '';
-    return settings.driveRootFolderUrl || localUrl || '';
-  });
-  const [savedFolders, setSavedFolders] = useState<SavedDriveFolderPreset[]>(() => {
-    const localList = loadLocalSavedFolders();
-    const cloudList = settings.savedDriveFolders || [];
-    const map = new Map<string, SavedDriveFolderPreset>();
-    [...localList, ...cloudList].forEach((item) => {
-      if (item && item.folderId) {
-        map.set(item.folderId, item);
-      }
-    });
-    return Array.from(map.values()).sort((a, b) =>
-      (b.lastUsedAt || '').localeCompare(a.lastUsedAt || '')
-    );
-  });
-
   const [apiKey, setApiKey] = useState(
     () => localStorage.getItem('DRIVE_API_KEY') || defaultGoogleDriveApiKey || ''
   );
@@ -107,272 +64,25 @@ export const useGoogleDriveBatchImport = () => {
   const [maxDepth, setMaxDepth] = useState<number>(10);
   const [idPrefix, setIdPrefix] = useState<DriveClipIdPrefix>('CLP');
 
-  // Google Drive Delta Sync State (Server-Side ModifiedTime + Firestore Sync History)
-  const [syncMode, setSyncMode] = useState<DriveSyncMode>('DELTA');
-  const [folderSyncRecord, setFolderSyncRecord] = useState<DriveSyncRecord | null>(null);
-  const [isLoadingSyncRecord, setIsLoadingSyncRecord] = useState<boolean>(false);
-
-  // Sync folderUrl and savedDriveFolders when settings arrive from Firestore or modal opens
-  useEffect(() => {
-    const cloudUrl = settings.driveRootFolderUrl?.trim() || '';
-    const localUrl = localStorage.getItem(LAST_FOLDER_URL_STORAGE_KEY)?.trim() || '';
-
-    setFolderUrlState((prev) => {
-      if (prev.trim()) return prev;
-      return cloudUrl || localUrl || '';
-    });
-
-    if (Array.isArray(settings.savedDriveFolders) && settings.savedDriveFolders.length > 0) {
-      setSavedFolders((prev) => {
-        const map = new Map<string, SavedDriveFolderPreset>();
-        prev.forEach((p) => map.set(p.folderId, p));
-        settings.savedDriveFolders?.forEach((c) => {
-          if (c && c.folderId) {
-            const existing = map.get(c.folderId);
-            map.set(c.folderId, existing ? { ...existing, ...c } : c);
-          }
-        });
-        const merged = Array.from(map.values()).sort((a, b) =>
-          (b.lastUsedAt || '').localeCompare(a.lastUsedAt || '')
-        );
-        saveLocalSavedFolders(merged);
-        return merged;
-      });
-    }
-  }, [settings.driveRootFolderUrl, settings.savedDriveFolders, isGoogleDriveBatchModalOpen]);
-
-  // Also merge any folders previously recorded in Firestore `drive_sync_records` when modal opens
-  useEffect(() => {
-    if (!isGoogleDriveBatchModalOpen) return;
-
-    let isMounted = true;
-    firestoreService
-      .getAllDriveSyncRecords()
-      .then((records) => {
-        if (!isMounted || records.length === 0) return;
-
-        const map = new Map<string, SavedDriveFolderPreset>();
-        savedFoldersRef.current.forEach((p) => map.set(p.folderId, p));
-
-        records.forEach((rec) => {
-          if (!rec.folderId) return;
-          const existing = map.get(rec.folderId);
-          const builtUrl =
-            existing?.folderUrl ||
-            `https://drive.google.com/drive/folders/${rec.folderId}`;
-          map.set(rec.folderId, {
-            folderId: rec.folderId,
-            folderUrl: builtUrl,
-            folderName:
-              existing?.folderName ||
-              rec.folderName ||
-              `โฟลเดอร์ (${rec.folderId.slice(0, 8)})`,
-            lastUsedAt:
-              existing?.lastUsedAt ||
-              rec.updatedAt ||
-              rec.lastSyncTimestamp ||
-              new Date().toISOString(),
-            lastSyncTimestamp: rec.lastSyncTimestamp,
-            totalClipsInFolder: rec.totalClipsInFolder,
-          });
-        });
-
-        const merged = Array.from(map.values()).sort((a, b) =>
-          (b.lastUsedAt || '').localeCompare(a.lastUsedAt || '')
-        );
-
-        savedFoldersRef.current = merged;
-        saveLocalSavedFolders(merged);
-        setSavedFolders(merged);
-
-        // If folderUrl was still empty, auto-fill with the most recently synced folder
-        if (merged.length > 0) {
-          setFolderUrlState((currentUrl) => {
-            if (currentUrl.trim()) return currentUrl;
-            const bestUrl = merged[0].folderUrl;
-            try {
-              localStorage.setItem(LAST_FOLDER_URL_STORAGE_KEY, bestUrl);
-            } catch {
-              // ignore
-            }
-            return bestUrl;
-          });
-        }
-      })
-      .catch((err) => {
-        console.warn('Could not fetch all DriveSyncRecords:', err);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isGoogleDriveBatchModalOpen]);
-
-  // Helper to update folderUrl and persist immediately to LocalStorage (and Cloud when valid folderId)
-  const setFolderUrl = useCallback(
-    (newUrl: string) => {
-      setFolderUrlState(newUrl);
-      const trimmed = newUrl.trim();
-      try {
-        localStorage.setItem(LAST_FOLDER_URL_STORAGE_KEY, trimmed);
-      } catch {
-        // ignore storage errors
-      }
-
-      const extractedId = extractGoogleDriveFolderId(trimmed);
-      if (extractedId && trimmed !== settings.driveRootFolderUrl) {
-        updateSettings({ driveRootFolderUrl: trimmed });
-      }
-    },
-    [settings.driveRootFolderUrl, updateSettings]
-  );
-
-  // Keep a ref to latest savedFolders so handlers can compute nextList without calling updateSettings inside a state updater
-  const savedFoldersRef = useRef<SavedDriveFolderPreset[]>(savedFolders);
-  useEffect(() => {
-    savedFoldersRef.current = savedFolders;
-  }, [savedFolders]);
-
-  // Upsert a folder into savedFolders (LocalStorage + Firestore Settings)
-  const upsertSavedFolderPreset = useCallback(
-    (params: {
-      folderId: string;
-      folderUrl: string;
-      folderName?: string;
-      lastSyncTimestamp?: string;
-      totalClipsInFolder?: number;
-    }) => {
-      const cleanId = params.folderId.trim();
-      if (!cleanId) return;
-
-      const cleanUrl =
-        params.folderUrl.trim() ||
-        `https://drive.google.com/drive/folders/${cleanId}`;
-      const nowIso = new Date().toISOString();
-
-      try {
-        localStorage.setItem(LAST_FOLDER_URL_STORAGE_KEY, cleanUrl);
-      } catch {
-        // ignore
-      }
-
-      const prev = savedFoldersRef.current;
-      const existing = prev.find((f) => f.folderId === cleanId);
-      const resolvedName =
-        params.folderName?.trim() ||
-        existing?.folderName ||
-        `โฟลเดอร์ Google Drive (${cleanId.slice(0, 8)}...)`;
-
-      const updatedPreset: SavedDriveFolderPreset = {
-        folderId: cleanId,
-        folderUrl: cleanUrl,
-        folderName: resolvedName,
-        lastUsedAt: nowIso,
-        lastSyncTimestamp:
-          params.lastSyncTimestamp ?? existing?.lastSyncTimestamp,
-        totalClipsInFolder:
-          params.totalClipsInFolder ?? existing?.totalClipsInFolder,
-      };
-
-      const filtered = prev.filter((f) => f.folderId !== cleanId);
-      const nextList = [updatedPreset, ...filtered].slice(0, 20);
-
-      savedFoldersRef.current = nextList;
-      saveLocalSavedFolders(nextList);
-      setSavedFolders(nextList);
-
-      updateSettings({
-        driveRootFolderUrl: cleanUrl,
-        savedDriveFolders: nextList,
-      });
-    },
-    [updateSettings]
-  );
-
-  // Remove a folder from saved presets
-  const handleRemoveSavedFolder = useCallback(
-    (targetFolderId: string) => {
-      const prev = savedFoldersRef.current;
-      const nextList = prev.filter((f) => f.folderId !== targetFolderId);
-
-      savedFoldersRef.current = nextList;
-      saveLocalSavedFolders(nextList);
-      setSavedFolders(nextList);
-
-      updateSettings({
-        savedDriveFolders: nextList,
-      });
-    },
-    [updateSettings]
-  );
-
-  // Select a saved folder from the quick-switch bar
-  const handleSelectSavedFolder = useCallback(
-    (preset: SavedDriveFolderPreset) => {
-      setFolderUrlState(preset.folderUrl);
-      upsertSavedFolderPreset({
-        folderId: preset.folderId,
-        folderUrl: preset.folderUrl,
-        folderName: preset.folderName,
-        lastSyncTimestamp: preset.lastSyncTimestamp,
-        totalClipsInFolder: preset.totalClipsInFolder,
-      });
-    },
-    [upsertSavedFolderPreset]
-  );
-
-  // Manual save / rename current folder URL
-  const handleSaveCurrentFolderPreset = useCallback(
-    (customName?: string) => {
-      const extractedId = extractGoogleDriveFolderId(folderUrl);
-      if (!extractedId) return;
-      upsertSavedFolderPreset({
-        folderId: extractedId,
-        folderUrl,
-        folderName:
-          customName?.trim() ||
-          folderSyncRecord?.folderName ||
-          undefined,
-        lastSyncTimestamp: folderSyncRecord?.lastSyncTimestamp,
-        totalClipsInFolder: folderSyncRecord?.totalClipsInFolder,
-      });
-    },
-    [folderUrl, folderSyncRecord, upsertSavedFolderPreset]
-  );
-
-  // Auto-fetch Firestore Sync Record whenever folderUrl or modal state changes
-  useEffect(() => {
-    if (!isGoogleDriveBatchModalOpen) return;
-    const extractedId = extractGoogleDriveFolderId(folderUrl);
-    if (!extractedId) {
-      setFolderSyncRecord(null);
-      return;
-    }
-
-    let isMounted = true;
-    setIsLoadingSyncRecord(true);
-    firestoreService
-      .getDriveSyncRecord(extractedId)
-      .then((record) => {
-        if (!isMounted) return;
-        setFolderSyncRecord(record);
-        if (record?.lastSyncTimestamp) {
-          setSyncMode('DELTA');
-        } else {
-          setSyncMode('FULL');
-        }
-      })
-      .catch((err) => {
-        console.warn('Could not load folder sync record:', err);
-      })
-      .finally(() => {
-        if (isMounted) setIsLoadingSyncRecord(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [folderUrl, isGoogleDriveBatchModalOpen]);
+  const {
+    folderUrl,
+    setFolderUrl,
+    activeFolderId,
+    savedFolders,
+    syncMode,
+    setSyncMode,
+    folderSyncRecord,
+    setFolderSyncRecord,
+    isLoadingSyncRecord,
+    upsertSavedFolderPreset,
+    handleRemoveSavedFolder,
+    handleSelectSavedFolder,
+    handleSaveCurrentFolderPreset,
+  } = useSavedDriveFolders({
+    isModalOpen: isGoogleDriveBatchModalOpen,
+    settings,
+    updateSettings,
+  });
 
   // Category Assignment Strategy State
   const [categoryStrategy, setCategoryStrategy] = useState<DriveCategoryStrategy>(
@@ -423,7 +133,6 @@ export const useGoogleDriveBatchImport = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Selection & Filtering State
-  // Incremental scan: hide duplicate clips by default to save DOM/memory and highlight only new items
   const [hideDuplicates, setHideDuplicates] = useState(true);
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>('ALL');
@@ -432,9 +141,10 @@ export const useGoogleDriveBatchImport = () => {
   // Pasted mode fallback state
   const [pastedText, setPastedText] = useState('');
 
-  // Execution & Progress State
+  // Execution & Chunked Cloud Upload Progress State
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [importStatusLabel, setImportStatusLabel] = useState<string>('');
   const [importSuccessData, setImportSuccessData] =
     useState<DriveImportSuccessSummary | null>(null);
 
@@ -448,27 +158,22 @@ export const useGoogleDriveBatchImport = () => {
     }
   };
 
-  // Switch strategy to SUBFOLDER_TO_CATEGORY and reset staged subfolder overrides
   const handleSelectSubfolderStrategy = () => {
     setCategoryStrategy('SUBFOLDER_TO_CATEGORY');
     setStagedSubfolders(new Set());
   };
 
-  // Switch strategy to ALL_TO_STAGING
   const handleSelectAllToStagingStrategy = () => {
     setCategoryStrategy('ALL_TO_STAGING');
   };
 
-  // Helper: Check if a specific subfolder is routed to Staging Area
   const isFolderRoutedToStaging = (folderName: string): boolean => {
     if (categoryStrategy === 'ALL_TO_STAGING') return true;
     return stagedSubfolders.has(folderName);
   };
 
-  // Toggle a single subfolder between Category Mapping and Staging Area
   const handleToggleSubfolderStaging = (folderName: string) => {
     if (categoryStrategy === 'ALL_TO_STAGING') {
-      // Switch to custom subfolder mode with all OTHER folders staged except this one
       if (scanResult) {
         const allFolders = Array.from(
           new Set(scanResult.videos.map((v) => v.parentFolderName || scanResult.rootFolderName))
@@ -503,7 +208,6 @@ export const useGoogleDriveBatchImport = () => {
     const map = new Map<string, ReconciledCategoryResult>();
     const inMemoryNewTags: CategoryTag[] = [];
 
-    // Group distinct immediate parent folders
     const distinctFolderNames = Array.from(
       new Set(scanResult.videos.map((v) => v.parentFolderName || scanResult.rootFolderName))
     );
@@ -522,8 +226,6 @@ export const useGoogleDriveBatchImport = () => {
       }
     });
 
-    // Only create new tags for subfolders that are NOT routed to Staging Area
-    // and have at least one selected video
     const activeFoldersWithSelectedVideos = new Set(
       scanResult.videos
         .filter((v) => selectedVideoIds.has(v.id))
@@ -558,7 +260,6 @@ export const useGoogleDriveBatchImport = () => {
     selectedVideoIds,
   ]);
 
-  // Quick helper to route ONLY newly-discovered (unmatched) folders to Staging while keeping existing matched categories
   const handleStageOnlyUnmatchedFolders = () => {
     if (!scanResult) return;
     setCategoryStrategy('SUBFOLDER_TO_CATEGORY');
@@ -584,7 +285,6 @@ export const useGoogleDriveBatchImport = () => {
       return;
     }
 
-    // Immediately persist the active folder URL on scan start
     upsertSavedFolderPreset({
       folderId: extractedId,
       folderUrl,
@@ -608,7 +308,6 @@ export const useGoogleDriveBatchImport = () => {
     abortControllerRef.current = new AbortController();
 
     try {
-      // Determine whether to apply Delta Sync timestamp filter from Firestore sync record
       const effectiveSinceModifiedTime =
         syncMode === 'DELTA' && folderSyncRecord?.lastSyncTimestamp
           ? folderSyncRecord.lastSyncTimestamp
@@ -629,11 +328,9 @@ export const useGoogleDriveBatchImport = () => {
 
       setScanResult(result);
       setHideDuplicates(true);
-      // Auto-select ONLY newly discovered clips by default (skip duplicates)
       const newVideoIds = result.videos.filter((v) => !v.isDuplicate).map((v) => v.id);
       setSelectedVideoIds(new Set(newVideoIds));
 
-      // Update saved folder preset with the real folder name from Google Drive
       upsertSavedFolderPreset({
         folderId: result.rootFolderId || extractedId,
         folderUrl,
@@ -705,7 +402,6 @@ export const useGoogleDriveBatchImport = () => {
     setSelectedVideoIds(new Set());
   };
 
-  // Filtered Discovered Videos in Preview (omits duplicates when hideDuplicates is true to maximize DOM speed)
   const displayedVideos = useMemo(() => {
     if (!scanResult) return [];
     let list = scanResult.videos;
@@ -731,7 +427,6 @@ export const useGoogleDriveBatchImport = () => {
     return list;
   }, [scanResult, hideDuplicates, selectedFolderFilter, previewSearch]);
 
-  // Summary counts of selected videos going to Staging vs Categories
   const selectedRoutingSummary: SelectedRoutingSummary = useMemo(() => {
     if (!scanResult) return { toStaging: 0, toCategory: 0 };
     let toStaging = 0;
@@ -777,133 +472,182 @@ export const useGoogleDriveBatchImport = () => {
     });
   }, [activeImportMode, pastedText]);
 
-  // 5. Execute Batch Import
+  // 5. Execute Batch Import (Lock onSnapshot + Await All Chunks + Live Chunk Progress)
   const handleExecuteImport = async () => {
     setIsImporting(true);
-    setImportProgress(10);
+    setImportProgress(5);
+    setImportStatusLabel('กำลังเตรียมส่งข้อมูลขึ้น Cloud...');
 
     try {
-      if (activeImportMode === 'RECURSIVE') {
-        if (!scanResult) return;
-        const targetVideos = scanResult.videos.filter((v) => selectedVideoIds.has(v.id));
-        if (targetVideos.length === 0) return;
+      await firestoreService.withBatchWriteLock(async () => {
+        if (activeImportMode === 'RECURSIVE') {
+          if (!scanResult) return;
+          const targetVideos = scanResult.videos.filter((v) => selectedVideoIds.has(v.id));
+          if (targetVideos.length === 0) return;
 
-        // Step A: Create any new CategoryTags for non-staged subfolders
-        if (activeNewTagsToCreate.length > 0) {
-          batchAddTags(activeNewTagsToCreate);
-        }
-        setImportProgress(35);
-
-        let stagedCount = 0;
-        let categorizedCount = 0;
-
-        // Step B: Build Footage Payload based on selected Category Strategy & per-folder overrides
-        const payloadItems = targetVideos.map((item) => {
-          const folderName = item.parentFolderName || scanResult.rootFolderName;
-          const isStaged = isFolderRoutedToStaging(folderName);
-          const reconciled = folderCategoryMap.get(folderName);
-
-          const assignedTagId = isStaged
-            ? STAGING_TAG_ID
-            : reconciled
-            ? reconciled.tagId
-            : STAGING_TAG_ID;
-
-          if (assignedTagId === STAGING_TAG_ID) {
-            stagedCount += 1;
-          } else {
-            categorizedCount += 1;
+          // Step A: Create any new CategoryTags for non-staged subfolders and wait for Cloud commit
+          if (activeNewTagsToCreate.length > 0) {
+            setImportStatusLabel(
+              `กำลังบันทึกหมวดหมู่ใหม่ ${activeNewTagsToCreate.length.toLocaleString()} หมวดขึ้น Cloud...`
+            );
+            await batchAddTags(activeNewTagsToCreate);
           }
+          setImportProgress(15);
 
-          return {
-            title: item.cleanTitle,
-            driveFileUrl: item.webViewLink,
-            originalUrl: item.webViewLink,
-            thumbnailUrl: item.thumbnailUrl,
-            tags: [assignedTagId],
-            mascotNotes: isStaged
-              ? `พักรอจัดหมวดหมู่ (จากโฟลเดอร์ "${folderName}")`
-              : `นำเข้าจากโฟลเดอร์ "${folderName}"`,
-            durationSec: item.durationSec || 25,
-          };
-        });
+          let stagedCount = 0;
+          let categorizedCount = 0;
 
-        setImportProgress(65);
-        const added = batchAddDirectFootage(payloadItems, idPrefix);
-        setImportProgress(100);
+          // Step B: Build Footage Payload
+          const payloadItems = targetVideos.map((item) => {
+            const folderName = item.parentFolderName || scanResult.rootFolderName;
+            const isStaged = isFolderRoutedToStaging(folderName);
+            const reconciled = folderCategoryMap.get(folderName);
 
-        // Update Centralized Firestore Sync Record for this Google Drive folder
-        const nowIso = new Date().toISOString();
-        const newTotalClips = (folderSyncRecord?.totalClipsInFolder || 0) + added.length;
-        const updatedRecord: DriveSyncRecord = {
-          folderId: scanResult.rootFolderId,
-          folderName: scanResult.rootFolderName,
-          lastSyncTimestamp: nowIso,
-          lastSyncVideoCount: added.length,
-          totalClipsInFolder: newTotalClips,
-          updatedAt: nowIso,
-          updatedBy: currentUser?.email || 'authenticated-user',
-        };
+            const assignedTagId = isStaged
+              ? STAGING_TAG_ID
+              : reconciled
+              ? reconciled.tagId
+              : STAGING_TAG_ID;
 
-        // Also update the saved folder preset with the latest sync timestamp and clip count
-        upsertSavedFolderPreset({
-          folderId: scanResult.rootFolderId,
-          folderUrl,
-          folderName: scanResult.rootFolderName,
-          lastSyncTimestamp: nowIso,
-          totalClipsInFolder: newTotalClips,
-        });
+            if (assignedTagId === STAGING_TAG_ID) {
+              stagedCount += 1;
+            } else {
+              categorizedCount += 1;
+            }
 
-        firestoreService
-          .saveDriveSyncRecord(updatedRecord)
-          .then(() => {
-            setFolderSyncRecord(updatedRecord);
-          })
-          .catch((err) => {
-            console.warn('Failed to update DriveSyncRecord in Firestore:', err);
+            return {
+              title: item.cleanTitle,
+              driveFileUrl: item.webViewLink,
+              originalUrl: item.webViewLink,
+              thumbnailUrl: item.thumbnailUrl,
+              tags: [assignedTagId],
+              mascotNotes: isStaged
+                ? `พักรอจัดหมวดหมู่ (จากโฟลเดอร์ "${folderName}")`
+                : `นำเข้าจากโฟลเดอร์ "${folderName}"`,
+              durationSec: item.durationSec || 25,
+            };
           });
 
-        setImportSuccessData({
-          totalImported: added.length,
-          stagedCount,
-          categorizedCount,
-          newTagsCreated: activeNewTagsToCreate.length,
-          createdTagNames: activeNewTagsToCreate.map((t) => t.name),
-          skippedDuplicatesCount: scanResult.totalDuplicates,
-        });
-      } else {
-        // Mode PASTE
-        if (parsedPastedItems.length === 0) return;
-        const isStaged = isStagingTagId(pasteTargetTagId);
-        const payload = parsedPastedItems.map((item) => ({
-          title: item.title,
-          driveFileUrl: item.driveFileUrl,
-          originalUrl: item.driveFileUrl,
-          tags: [pasteTargetTagId],
-          mascotNotes: isStaged
-            ? 'นำเข้าแบบข้อความ (พักรอจัดหมวดหมู่)'
-            : 'นำเข้าแบบข้อความพร้อมระบุหมวดหมู่',
-          durationSec: 25,
-        }));
+          const estimatedTotalChunks = Math.max(1, Math.ceil(payloadItems.length / 400));
+          setImportStatusLabel(
+            `กำลังบันทึกขึ้น Cloud ก้อนที่ 1/${estimatedTotalChunks} (0/${payloadItems.length.toLocaleString()} คลิป)...`
+          );
 
-        const added = batchAddDirectFootage(payload, idPrefix);
-        setImportProgress(100);
-        setImportSuccessData({
-          totalImported: added.length,
-          stagedCount: isStaged ? added.length : 0,
-          categorizedCount: isStaged ? 0 : added.length,
-          newTagsCreated: 0,
-          createdTagNames: [],
-        });
-      }
+          const added = await batchAddDirectFootage(payloadItems, idPrefix, (chunkProg) => {
+            const nextChunk = Math.min(chunkProg.totalChunks, chunkProg.completedChunks + 1);
+            const pct = Math.min(
+              99,
+              Math.round(15 + (chunkProg.completedOps / Math.max(1, chunkProg.totalOps)) * 84)
+            );
+            setImportProgress(pct);
+            if (chunkProg.completedChunks < chunkProg.totalChunks) {
+              setImportStatusLabel(
+                `กำลังบันทึกขึ้น Cloud ก้อนที่ ${nextChunk}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} คลิป)...`
+              );
+            } else {
+              setImportStatusLabel(
+                `บันทึกขึ้น Cloud ครบ ${chunkProg.totalChunks}/${chunkProg.totalChunks} ก้อน (${chunkProg.totalOps.toLocaleString()} คลิป)!`
+              );
+            }
+          });
+
+          // Update Centralized Firestore Sync Record for this Google Drive folder
+          const nowIso = new Date().toISOString();
+          const newTotalClips = (folderSyncRecord?.totalClipsInFolder || 0) + added.length;
+          const updatedRecord: DriveSyncRecord = {
+            folderId: scanResult.rootFolderId,
+            folderName: scanResult.rootFolderName,
+            lastSyncTimestamp: nowIso,
+            lastSyncVideoCount: added.length,
+            totalClipsInFolder: newTotalClips,
+            updatedAt: nowIso,
+            updatedBy: currentUser?.email || 'authenticated-user',
+          };
+
+          upsertSavedFolderPreset({
+            folderId: scanResult.rootFolderId,
+            folderUrl,
+            folderName: scanResult.rootFolderName,
+            lastSyncTimestamp: nowIso,
+            totalClipsInFolder: newTotalClips,
+          });
+
+          await firestoreService
+            .saveDriveSyncRecord(updatedRecord)
+            .then(() => {
+              setFolderSyncRecord(updatedRecord);
+            })
+            .catch((err) => {
+              console.warn('Failed to update DriveSyncRecord in Firestore:', err);
+            });
+
+          setImportProgress(100);
+          setImportSuccessData({
+            totalImported: added.length,
+            stagedCount,
+            categorizedCount,
+            newTagsCreated: activeNewTagsToCreate.length,
+            createdTagNames: activeNewTagsToCreate.map((t) => t.name),
+            skippedDuplicatesCount: scanResult.totalDuplicates,
+          });
+        } else {
+          // Mode PASTE
+          if (parsedPastedItems.length === 0) return;
+          const isStaged = isStagingTagId(pasteTargetTagId);
+          const payload = parsedPastedItems.map((item) => ({
+            title: item.title,
+            driveFileUrl: item.driveFileUrl,
+            originalUrl: item.driveFileUrl,
+            tags: [pasteTargetTagId],
+            mascotNotes: isStaged
+              ? 'นำเข้าแบบข้อความ (พักรอจัดหมวดหมู่)'
+              : 'นำเข้าแบบข้อความพร้อมระบุหมวดหมู่',
+            durationSec: 25,
+          }));
+
+          const estimatedTotalChunks = Math.max(1, Math.ceil(payload.length / 400));
+          setImportStatusLabel(
+            `กำลังบันทึกขึ้น Cloud ก้อนที่ 1/${estimatedTotalChunks} (0/${payload.length.toLocaleString()} คลิป)...`
+          );
+
+          const added = await batchAddDirectFootage(payload, idPrefix, (chunkProg) => {
+            const nextChunk = Math.min(chunkProg.totalChunks, chunkProg.completedChunks + 1);
+            const pct = Math.min(
+              99,
+              Math.round(10 + (chunkProg.completedOps / Math.max(1, chunkProg.totalOps)) * 89)
+            );
+            setImportProgress(pct);
+            if (chunkProg.completedChunks < chunkProg.totalChunks) {
+              setImportStatusLabel(
+                `กำลังบันทึกขึ้น Cloud ก้อนที่ ${nextChunk}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} คลิป)...`
+              );
+            } else {
+              setImportStatusLabel(
+                `บันทึกขึ้น Cloud ครบ ${chunkProg.totalChunks}/${chunkProg.totalChunks} ก้อน (${chunkProg.totalOps.toLocaleString()} คลิป)!`
+              );
+            }
+          });
+
+          setImportProgress(100);
+          setImportSuccessData({
+            totalImported: added.length,
+            stagedCount: isStaged ? added.length : 0,
+            categorizedCount: isStaged ? 0 : added.length,
+            newTagsCreated: 0,
+            createdTagNames: [],
+          });
+        }
+      });
     } catch (err) {
       console.error('Execute import error:', err);
     } finally {
       setIsImporting(false);
+      setImportStatusLabel('');
     }
   };
 
   const handleClose = () => {
+    if (isImporting) return;
     if (isScanning && abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -922,11 +666,6 @@ export const useGoogleDriveBatchImport = () => {
   const selectableMainCategories = useMemo(
     () => tags.filter((t) => (t.tier === 1 || (!t.parentId && !t.tier)) && !isStagingTagId(t.id)),
     [tags]
-  );
-
-  const activeFolderId = useMemo(
-    () => extractGoogleDriveFolderId(folderUrl) || '',
-    [folderUrl]
   );
 
   return {
@@ -1014,6 +753,7 @@ export const useGoogleDriveBatchImport = () => {
     // Execution & Navigation
     isImporting,
     importProgress,
+    importStatusLabel,
     importSuccessData,
     handleExecuteImport,
     handleClose,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { BatchChunkProgress } from '../../firebase/firestoreService';
 import {
   Episode,
   EpisodeProductionTarget,
@@ -188,7 +189,10 @@ export interface CMSContextType {
     color?: string,
     description?: string
   ) => CategoryTag;
-  batchAddTags: (newTags: CategoryTag[]) => void;
+  batchAddTags: (
+    newTags: CategoryTag[],
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<void>;
   updateTag: (id: string, updates: Partial<Omit<CategoryTag, 'id'>>) => void;
   deleteTag: (id: string) => void;
   updateSettings: (updates: Partial<SystemSettings>) => void;
@@ -248,18 +252,24 @@ export interface CMSContextType {
       tags?: string[];
       durationSec?: number;
     }>,
-    idPrefix?: 'CLP' | 'FT'
-  ) => Footage[];
+    idPrefix?: 'CLP' | 'FT',
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<Footage[]>;
   batchUpdateFootageTags: (
     footageIds: string[],
     newTags: string[],
-    mode?: 'REPLACE' | 'APPEND'
-  ) => void;
+    mode?: 'REPLACE' | 'APPEND',
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<void>;
   batchSyncFootageTagsByMap: (
     tagsByFootageId: Record<string, string[]>,
-    mode?: 'REPLACE' | 'APPEND'
-  ) => void;
-  batchDeleteFootage: (footageIds: string[]) => void;
+    mode?: 'REPLACE' | 'APPEND',
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<void>;
+  batchDeleteFootage: (
+    footageIds: string[],
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<void>;
   lastQuickSortUndoRecord: QuickSortUndoRecord | null;
   quickAssignCategoryToFootage: (footageIds: string[], targetTagId: string) => void;
   undoLastQuickSort: () => void;
@@ -272,7 +282,10 @@ export interface CMSContextType {
       masterVideoInfo?: Partial<MasterVideoInfo>;
     }
   ) => Episode;
-  batchUpsertEpisodes: (episodesToUpsert: Episode[]) => void;
+  batchUpsertEpisodes: (
+    episodesToUpsert: Episode[],
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<void>;
   updateEpisodeWorkflowStage: (episodeId: string, stage: EpisodeWorkflowStage) => void;
   updateEpisodeMasterInfo: (episodeId: string, updates: Partial<MasterVideoInfo>) => void;
   deleteEpisode: (episodeId: string) => void;

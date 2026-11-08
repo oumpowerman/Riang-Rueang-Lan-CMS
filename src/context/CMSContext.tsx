@@ -71,9 +71,12 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     tags,
     setTags,
     tagMap: analytics.tagMap,
+    footage,
     setFootage,
+    sources,
     setSources,
     setSelectedTagFilter: navigationState.setSelectedTagFilter,
+    settings,
     setSettings,
   });
 

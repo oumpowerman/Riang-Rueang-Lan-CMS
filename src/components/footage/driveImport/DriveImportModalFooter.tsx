@@ -17,6 +17,7 @@ interface DriveImportModalFooterProps {
   parsedPastedCount: number;
   isImporting: boolean;
   importProgress: number;
+  importStatusLabel?: string;
   onClose: () => void;
   onExecuteImport: () => void;
 }
@@ -31,6 +32,7 @@ export const DriveImportModalFooter: React.FC<DriveImportModalFooterProps> = ({
   parsedPastedCount,
   isImporting,
   importProgress,
+  importStatusLabel,
   onClose,
   onExecuteImport,
 }) => {
@@ -42,7 +44,15 @@ export const DriveImportModalFooter: React.FC<DriveImportModalFooterProps> = ({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 w-full">
       <div className="flex items-center gap-2 text-xs text-[#6E5F52]">
-        {activeImportMode === 'RECURSIVE' && scanResult ? (
+        {isImporting && importStatusLabel ? (
+          <div className="flex items-center gap-2 text-[#1C4824] font-semibold">
+            <RefreshCw className="w-4 h-4 animate-spin text-[#2E7D32] shrink-0" />
+            <span>{importStatusLabel}</span>
+            <span className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md font-bold">
+              ห้ามรีเฟรชหน้าเว็บจนกว่าจะครบ 100%
+            </span>
+          </div>
+        ) : activeImportMode === 'RECURSIVE' && scanResult ? (
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-1.5">
               {selectedRoutingSummary.toStaging > 0 &&
@@ -122,7 +132,12 @@ export const DriveImportModalFooter: React.FC<DriveImportModalFooterProps> = ({
         <button
           type="button"
           onClick={onClose}
-          className="px-4 py-2 rounded-xl text-xs font-semibold text-[#6E5F52] hover:bg-[#FAF7F2] border border-[#E2D5C4] bg-white transition-colors cursor-pointer"
+          disabled={isImporting}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+            isImporting
+              ? 'bg-[#EFECE6] text-[#A39688] border-[#E2D5C4] cursor-not-allowed opacity-60'
+              : 'text-[#6E5F52] hover:bg-[#FAF7F2] border-[#E2D5C4] bg-white cursor-pointer'
+          }`}
         >
           ยกเลิก
         </button>
@@ -141,7 +156,7 @@ export const DriveImportModalFooter: React.FC<DriveImportModalFooterProps> = ({
             <>
               <RefreshCw className="w-4 h-4 animate-spin text-white" />
               <span className="font-mono tabular-nums">
-                กำลังนำเข้า {importProgress}%...
+                {importStatusLabel || `กำลังนำเข้า ${importProgress}%...`}
               </span>
             </>
           ) : (

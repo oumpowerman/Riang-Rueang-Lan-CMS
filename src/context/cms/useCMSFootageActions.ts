@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { firestoreService } from '../../firebase/firestoreService';
+import React, { useEffect, useRef, useState } from 'react';
+import { BatchChunkProgress, firestoreService } from '../../firebase/firestoreService';
 import { isStagingTagId, normalizeFootageTags, STAGING_TAG_ID } from '../../services/seedData';
 import { Footage } from '../../types/footage.types';
 import { RawSource, SourcePlatform } from '../../types/source.types';
@@ -33,6 +33,19 @@ export function useCMSFootageActions({
 }: UseCMSFootageActionsParams) {
   const [lastQuickSortUndoRecord, setLastQuickSortUndoRecord] =
     useState<QuickSortUndoRecord | null>(null);
+
+  // Keep synchronous refs so multi-step async workflows (e.g. Sheet Sync creating missing footages then updating tags)
+  // always read the latest list without waiting for a React re-render.
+  const footageRef = useRef<Footage[]>(footage);
+  useEffect(() => {
+    footageRef.current = footage;
+  }, [footage]);
+
+  const sourcesRef = useRef<RawSource[]>(sources);
+  useEffect(() => {
+    sourcesRef.current = sources;
+  }, [sources]);
+
   // Flow A: 1-to-1 Direct Footage
   const addDirectFootage = (payload: {
     title: string;
@@ -43,7 +56,7 @@ export function useCMSFootageActions({
     mascotNotes: string;
     durationSec?: number;
   }): Footage => {
-    const nextId = generateNextId('FT', footage.map((f) => f.id));
+    const nextId = generateNextId('FT', footageRef.current.map((f) => f.id));
     const standardFileName = generateStandardFileName(nextId, payload.title);
     const newFootage: Footage = {
       id: nextId,
@@ -60,7 +73,9 @@ export function useCMSFootageActions({
       mascotNotes: payload.mascotNotes.trim(),
       createdAt: getReferenceTodayDate(),
     };
-    setFootage((prev) => [newFootage, ...prev]);
+    const nextFootageList = [newFootage, ...footageRef.current];
+    footageRef.current = nextFootageList;
+    setFootage(nextFootageList);
     firestoreService
       .saveFootage(newFootage)
       .catch((err) => console.warn('Firestore addDirectFootage error:', err));
@@ -80,8 +95,8 @@ export function useCMSFootageActions({
     },
     clips: SplitClipDraft[]
   ) => {
-    const nextSourceId = generateNextId('SRC', sources.map((s) => s.id));
-    const currentFootageIds = footage.map((f) => f.id);
+    const nextSourceId = generateNextId('SRC', sourcesRef.current.map((s) => s.id));
+    const currentFootageIds = footageRef.current.map((f) => f.id);
     const createdFootage: Footage[] = [];
 
     for (const clip of clips) {
@@ -121,13 +136,17 @@ export function useCMSFootageActions({
       splitFootageIds: createdFootage.map((f) => f.id),
     };
 
-    setSources((prev) => [newSource, ...prev]);
+    const nextSources = [newSource, ...sourcesRef.current];
+    sourcesRef.current = nextSources;
+    setSources(nextSources);
     firestoreService
       .saveSource(newSource)
       .catch((err) => console.warn('Firestore saveSource error:', err));
 
     if (createdFootage.length > 0) {
-      setFootage((prev) => [...createdFootage, ...prev]);
+      const nextFootageList = [...createdFootage, ...footageRef.current];
+      footageRef.current = nextFootageList;
+      setFootage(nextFootageList);
       firestoreService
         .batchSaveFootages(createdFootage)
         .catch((err) => console.warn('Firestore split footage batch save error:', err));
@@ -138,10 +157,10 @@ export function useCMSFootageActions({
 
   // Flow B Continuation
   const appendSplitFootageToSource = (sourceId: string, clips: SplitClipDraft[]): Footage[] => {
-    const targetSource = sources.find((s) => s.id === sourceId);
+    const targetSource = sourcesRef.current.find((s) => s.id === sourceId);
     if (!targetSource) return [];
 
-    const currentFootageIds = footage.map((f) => f.id);
+    const currentFootageIds = footageRef.current.map((f) => f.id);
     const createdFootage: Footage[] = [];
 
     for (const clip of clips) {
@@ -169,7 +188,9 @@ export function useCMSFootageActions({
     }
 
     if (createdFootage.length > 0) {
-      setFootage((prev) => [...createdFootage, ...prev]);
+      const nextFootageList = [...createdFootage, ...footageRef.current];
+      footageRef.current = nextFootageList;
+      setFootage(nextFootageList);
       firestoreService
         .batchSaveFootages(createdFootage)
         .catch((err) => console.warn('Firestore append footage batch save error:', err));
@@ -179,7 +200,11 @@ export function useCMSFootageActions({
         splitFootageIds: [...targetSource.splitFootageIds, ...createdFootage.map((c) => c.id)],
       };
 
-      setSources((prev) => prev.map((src) => (src.id === sourceId ? updatedSource : src)));
+      const nextSources = sourcesRef.current.map((src) =>
+        src.id === sourceId ? updatedSource : src
+      );
+      sourcesRef.current = nextSources;
+      setSources(nextSources);
       firestoreService
         .saveSource(updatedSource)
         .catch((err) => console.warn('Firestore update source splitFootageIds error:', err));
@@ -189,49 +214,58 @@ export function useCMSFootageActions({
   };
 
   const updateFootage = (id: string, updates: Partial<Footage>) => {
-    setFootage((prev) =>
-      prev.map((ft) => {
-        if (ft.id !== id) return ft;
-        const nextTitle = updates.title !== undefined ? updates.title : ft.title;
-        const nextTags =
-          updates.tags !== undefined ? normalizeFootageTags(updates.tags) : ft.tags;
-        const updatedFt = {
-          ...ft,
-          ...updates,
-          tags: nextTags,
-          standardFileName: generateStandardFileName(ft.id, nextTitle),
-        };
-        firestoreService
-          .saveFootage(updatedFt)
-          .catch((err) => console.warn('Firestore updateFootage error:', err));
-        return updatedFt;
-      })
-    );
+    const target = footageRef.current.find((ft) => ft.id === id);
+    if (!target) return;
+
+    const nextTitle = updates.title !== undefined ? updates.title : target.title;
+    const nextTags =
+      updates.tags !== undefined ? normalizeFootageTags(updates.tags) : target.tags;
+    const updatedFt: Footage = {
+      ...target,
+      ...updates,
+      tags: nextTags,
+      standardFileName: generateStandardFileName(target.id, nextTitle),
+    };
+
+    const nextFootageList = footageRef.current.map((ft) => (ft.id === id ? updatedFt : ft));
+    footageRef.current = nextFootageList;
+    setFootage(nextFootageList);
+    firestoreService
+      .saveFootage(updatedFt)
+      .catch((err) => console.warn('Firestore updateFootage error:', err));
   };
 
   const deleteFootage = (id: string) => {
-    setFootage((prev) => prev.filter((ft) => ft.id !== id));
+    const nextFootageList = footageRef.current.filter((ft) => ft.id !== id);
+    footageRef.current = nextFootageList;
+    setFootage(nextFootageList);
     firestoreService
       .deleteFootage(id)
       .catch((err) => console.warn('Firestore deleteFootage error:', err));
 
-    setSources((prev) =>
-      prev.map((src) => {
-        if (!src.splitFootageIds.includes(id)) return src;
-        const updatedSrc: RawSource = {
-          ...src,
-          splitFootageIds: src.splitFootageIds.filter((fid) => fid !== id),
-        };
-        firestoreService
-          .saveSource(updatedSrc)
-          .catch((err) => console.warn('Firestore update source on deleteFootage error:', err));
-        return updatedSrc;
-      })
+    const affectedSources = sourcesRef.current.filter((src) =>
+      src.splitFootageIds.includes(id)
     );
+    if (affectedSources.length > 0) {
+      const updatedSources = affectedSources.map((src) => ({
+        ...src,
+        splitFootageIds: src.splitFootageIds.filter((fid) => fid !== id),
+      }));
+      const nextSources = sourcesRef.current.map((src) => {
+        const found = updatedSources.find((u) => u.id === src.id);
+        return found || src;
+      });
+      sourcesRef.current = nextSources;
+      setSources(nextSources);
+      firestoreService
+        .batchSaveSources(updatedSources)
+        .catch((err) => console.warn('Firestore update source on deleteFootage error:', err));
+    }
   };
 
-  // Flow C: Batch Direct Footage Ingestion (300–2,000+ items from Google Drive / Batch Paste)
-  const batchAddDirectFootage = (
+  // Flow C: Batch Direct Footage Ingestion (300–5,000+ items from Google Drive / Sheet / Batch Paste)
+  // Awaits all 400-item Firestore chunks before resolving so 100% of items commit to Cloud.
+  const batchAddDirectFootage = async (
     items: Array<{
       title: string;
       driveFileUrl?: string;
@@ -241,10 +275,11 @@ export function useCMSFootageActions({
       tags?: string[];
       durationSec?: number;
     }>,
-    idPrefix: 'CLP' | 'FT' = 'CLP'
-  ): Footage[] => {
+    idPrefix: 'CLP' | 'FT' = 'CLP',
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ): Promise<Footage[]> => {
     if (!items || items.length === 0) return [];
-    const currentFootageIds = footage.map((f) => f.id);
+    const currentFootageIds = footageRef.current.map((f) => f.id);
     const newItems: Footage[] = [];
     const accumulatedIds = [...currentFootageIds];
 
@@ -275,81 +310,95 @@ export function useCMSFootageActions({
     }
 
     if (newItems.length > 0) {
-      setFootage((prev) => [...newItems, ...prev]);
-      // Chunked WriteBatch (400 items per Firestore batch) prevents rate-limiting & 500-op crash
-      firestoreService
-        .batchSaveFootages(newItems)
-        .catch((err) => console.warn('Firestore batchSaveFootages error:', err));
+      const nextFootageList = [...newItems, ...footageRef.current];
+      footageRef.current = nextFootageList;
+      setFootage(nextFootageList);
+
+      try {
+        await firestoreService.batchSaveFootages(newItems, onChunkProgress);
+      } catch (err) {
+        console.warn('Firestore batchSaveFootages error:', err);
+      }
     }
 
     return newItems;
   };
 
   // Batch Categorization: Assign or append tags to multiple footages at once
-  const batchUpdateFootageTags = (
+  const batchUpdateFootageTags = async (
     footageIds: string[],
     newTags: string[],
-    mode: 'REPLACE' | 'APPEND' = 'REPLACE'
-  ) => {
+    mode: 'REPLACE' | 'APPEND' = 'REPLACE',
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ): Promise<void> => {
     if (!footageIds.length) return;
     const targetSet = new Set(footageIds);
     const updatedFootages: Footage[] = [];
 
-    setFootage((prev) =>
-      prev.map((ft) => {
-        if (!targetSet.has(ft.id)) return ft;
-        let mergedTags: string[];
-        if (mode === 'REPLACE') {
-          mergedTags = normalizeFootageTags(newTags);
-        } else {
-          // APPEND: merge new tags, remove STAGING_TAG_ID if real categories are present
-          const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
-          mergedTags = normalizeFootageTags([...existingReal, ...newTags]);
-        }
-        const updatedFt: Footage = {
-          ...ft,
-          tags: mergedTags,
-        };
-        updatedFootages.push(updatedFt);
-        return updatedFt;
-      })
-    );
+    const nextList = footageRef.current.map((ft) => {
+      if (!targetSet.has(ft.id)) return ft;
+      let mergedTags: string[];
+      if (mode === 'REPLACE') {
+        mergedTags = normalizeFootageTags(newTags);
+      } else {
+        const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
+        mergedTags = normalizeFootageTags([...existingReal, ...newTags]);
+      }
+      const updatedFt: Footage = {
+        ...ft,
+        tags: mergedTags,
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    footageRef.current = nextList;
+    setFootage(nextList);
 
     if (updatedFootages.length > 0) {
-      firestoreService
-        .batchSaveFootages(updatedFootages)
-        .catch((err) => console.warn('Firestore batch update tags error:', err));
+      try {
+        await firestoreService.batchSaveFootages(updatedFootages, onChunkProgress);
+      } catch (err) {
+        console.warn('Firestore batch update tags error:', err);
+      }
     }
   };
 
-  // Batch Delete: Remove multiple footages at once
-  const batchDeleteFootage = (footageIds: string[]) => {
+  // Batch Delete: Remove multiple footages at once and await all chunks
+  const batchDeleteFootage = async (
+    footageIds: string[],
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ): Promise<void> => {
     if (!footageIds.length) return;
     const targetSet = new Set(footageIds);
-    setFootage((prev) => prev.filter((ft) => !targetSet.has(ft.id)));
+    const nextFootageList = footageRef.current.filter((ft) => !targetSet.has(ft.id));
+    footageRef.current = nextFootageList;
+    setFootage(nextFootageList);
 
     const modifiedSources: RawSource[] = [];
-    setSources((prev) =>
-      prev.map((src) => {
-        const hasDeletedChild = src.splitFootageIds.some((fid) => targetSet.has(fid));
-        if (!hasDeletedChild) return src;
-        const updatedSrc: RawSource = {
-          ...src,
-          splitFootageIds: src.splitFootageIds.filter((fid) => !targetSet.has(fid)),
-        };
-        modifiedSources.push(updatedSrc);
-        return updatedSrc;
-      })
-    );
+    const nextSources = sourcesRef.current.map((src) => {
+      const hasDeletedChild = src.splitFootageIds.some((fid) => targetSet.has(fid));
+      if (!hasDeletedChild) return src;
+      const updatedSrc: RawSource = {
+        ...src,
+        splitFootageIds: src.splitFootageIds.filter((fid) => !targetSet.has(fid)),
+      };
+      modifiedSources.push(updatedSrc);
+      return updatedSrc;
+    });
 
-    firestoreService
-      .batchDeleteFootages(footageIds)
-      .catch((err) => console.warn('Firestore batch delete error:', err));
+    sourcesRef.current = nextSources;
+    setSources(nextSources);
 
-    if (modifiedSources.length > 0) {
-      firestoreService
-        .batchSaveSources(modifiedSources)
-        .catch((err) => console.warn('Firestore batch update sources on delete error:', err));
+    try {
+      await firestoreService.withBatchWriteLock(async () => {
+        await firestoreService.batchDeleteFootages(footageIds, onChunkProgress);
+        if (modifiedSources.length > 0) {
+          await firestoreService.batchSaveSources(modifiedSources);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore batch delete error:', err);
     }
   };
 
@@ -372,8 +421,8 @@ export function useCMSFootageActions({
       return { createdSources: [], createdFootage: [] };
     }
 
-    const accumulatedSourceIds = sources.map((s) => s.id);
-    const accumulatedFootageIds = footage.map((f) => f.id);
+    const accumulatedSourceIds = sourcesRef.current.map((s) => s.id);
+    const accumulatedFootageIds = footageRef.current.map((f) => f.id);
     const allNewSources: RawSource[] = [];
     const allNewFootage: Footage[] = [];
 
@@ -423,13 +472,17 @@ export function useCMSFootageActions({
     }
 
     if (allNewSources.length > 0) {
-      setSources((prev) => [...allNewSources, ...prev]);
+      const nextSources = [...allNewSources, ...sourcesRef.current];
+      sourcesRef.current = nextSources;
+      setSources(nextSources);
       firestoreService
         .batchSaveSources(allNewSources)
         .catch((err) => console.warn('Firestore batch 1:N sources save error:', err));
     }
     if (allNewFootage.length > 0) {
-      setFootage((prev) => [...allNewFootage, ...prev]);
+      const nextFootageList = [...allNewFootage, ...footageRef.current];
+      footageRef.current = nextFootageList;
+      setFootage(nextFootageList);
       firestoreService
         .batchSaveFootages(allNewFootage)
         .catch((err) => console.warn('Firestore batch 1:N footage save error:', err));
@@ -444,7 +497,6 @@ export function useCMSFootageActions({
     const targetTag = tagMap[targetTagId];
     if (!targetTag || isStagingTagId(targetTagId)) return;
 
-    // Resolve 3-Tier hierarchy: if targetTag is a Tier 2 subcategory, include its Tier 1 parentTag automatically
     const assignedTags = targetTag.parentId
       ? normalizeFootageTags([targetTag.parentId, targetTag.id])
       : normalizeFootageTags([targetTag.id]);
@@ -453,7 +505,7 @@ export function useCMSFootageActions({
     const previousTagsByFootageId: Record<string, string[]> = {};
     const updatedFootages: Footage[] = [];
 
-    footage.forEach((ft) => {
+    footageRef.current.forEach((ft) => {
       if (targetSet.has(ft.id)) {
         previousTagsByFootageId[ft.id] = [...ft.tags];
       }
@@ -462,17 +514,18 @@ export function useCMSFootageActions({
     const movedCount = Object.keys(previousTagsByFootageId).length;
     if (movedCount === 0) return;
 
-    setFootage((prev) =>
-      prev.map((ft) => {
-        if (!targetSet.has(ft.id)) return ft;
-        const updatedFt: Footage = {
-          ...ft,
-          tags: assignedTags,
-        };
-        updatedFootages.push(updatedFt);
-        return updatedFt;
-      })
-    );
+    const nextList = footageRef.current.map((ft) => {
+      if (!targetSet.has(ft.id)) return ft;
+      const updatedFt: Footage = {
+        ...ft,
+        tags: assignedTags,
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    footageRef.current = nextList;
+    setFootage(nextList);
 
     if (updatedFootages.length > 0) {
       firestoreService
@@ -480,7 +533,6 @@ export function useCMSFootageActions({
         .catch((err) => console.warn('Firestore quickAssignCategoryToFootage error:', err));
     }
 
-    // Automatically clear moved items from selection and drag state
     setSelectedFootageIdsForBatch((prev) => prev.filter((id) => !targetSet.has(id)));
     setActiveDragFootageIds([]);
 
@@ -510,18 +562,19 @@ export function useCMSFootageActions({
     }
 
     const restoredFootages: Footage[] = [];
-    setFootage((prev) =>
-      prev.map((ft) => {
-        const prevTags = previousTagsByFootageId[ft.id];
-        if (!prevTags) return ft;
-        const restoredFt: Footage = {
-          ...ft,
-          tags: normalizeFootageTags(prevTags),
-        };
-        restoredFootages.push(restoredFt);
-        return restoredFt;
-      })
-    );
+    const nextList = footageRef.current.map((ft) => {
+      const prevTags = previousTagsByFootageId[ft.id];
+      if (!prevTags) return ft;
+      const restoredFt: Footage = {
+        ...ft,
+        tags: normalizeFootageTags(prevTags),
+      };
+      restoredFootages.push(restoredFt);
+      return restoredFt;
+    });
+
+    footageRef.current = nextList;
+    setFootage(nextList);
 
     if (restoredFootages.length > 0) {
       firestoreService
@@ -529,7 +582,6 @@ export function useCMSFootageActions({
         .catch((err) => console.warn('Firestore undoLastQuickSort error:', err));
     }
 
-    // Re-select the restored clips so the user can immediately assign them elsewhere if desired
     setSelectedFootageIdsForBatch(targetIds);
     setLastQuickSortUndoRecord(null);
   };
@@ -539,40 +591,44 @@ export function useCMSFootageActions({
   };
 
   // Batch Sync Individual Footage Tags Map in a single atomic state + Firestore batch
-  const batchSyncFootageTagsByMap = (
+  const batchSyncFootageTagsByMap = async (
     tagsByFootageId: Record<string, string[]>,
-    mode: 'REPLACE' | 'APPEND' = 'APPEND'
-  ) => {
+    mode: 'REPLACE' | 'APPEND' = 'APPEND',
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ): Promise<void> => {
     const targetIds = Object.keys(tagsByFootageId);
     if (targetIds.length === 0) return;
 
     const updatedFootages: Footage[] = [];
-    setFootage((prev) =>
-      prev.map((ft) => {
-        const incomingTags = tagsByFootageId[ft.id];
-        if (!incomingTags) return ft;
+    const nextList = footageRef.current.map((ft) => {
+      const incomingTags = tagsByFootageId[ft.id];
+      if (!incomingTags) return ft;
 
-        let mergedTags: string[];
-        if (mode === 'REPLACE') {
-          mergedTags = normalizeFootageTags(incomingTags);
-        } else {
-          const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
-          mergedTags = normalizeFootageTags([...existingReal, ...incomingTags]);
-        }
+      let mergedTags: string[];
+      if (mode === 'REPLACE') {
+        mergedTags = normalizeFootageTags(incomingTags);
+      } else {
+        const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
+        mergedTags = normalizeFootageTags([...existingReal, ...incomingTags]);
+      }
 
-        const updatedFt: Footage = {
-          ...ft,
-          tags: mergedTags,
-        };
-        updatedFootages.push(updatedFt);
-        return updatedFt;
-      })
-    );
+      const updatedFt: Footage = {
+        ...ft,
+        tags: mergedTags,
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    footageRef.current = nextList;
+    setFootage(nextList);
 
     if (updatedFootages.length > 0) {
-      firestoreService
-        .batchSaveFootages(updatedFootages)
-        .catch((err) => console.warn('Firestore batchSyncFootageTagsByMap error:', err));
+      try {
+        await firestoreService.batchSaveFootages(updatedFootages, onChunkProgress);
+      } catch (err) {
+        console.warn('Firestore batchSyncFootageTagsByMap error:', err);
+      }
     }
   };
 

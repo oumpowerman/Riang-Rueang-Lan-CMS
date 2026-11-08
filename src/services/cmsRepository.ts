@@ -334,9 +334,7 @@ export const cmsRepository = {
         return initial;
       }
       const parsed: CategoryTag[] = JSON.parse(raw);
-      const repaired = this.normalizeAndRepairTags(parsed, true);
-      localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(repaired));
-      return repaired;
+      return parsed;
     } catch {
       return INITIAL_TAGS;
     }
@@ -473,13 +471,7 @@ export const cmsRepository = {
         return INITIAL_CATEGORY_GROUPS;
       }
       const parsed: CategoryGroup[] = JSON.parse(raw);
-      if (parsed.length === 0) {
-        localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(INITIAL_CATEGORY_GROUPS));
-        return INITIAL_CATEGORY_GROUPS;
-      }
-      const { groups: reconciled } = this.reconcileCategoryGroups(parsed, INITIAL_CATEGORY_GROUPS);
-      localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(reconciled));
-      return reconciled;
+      return parsed;
     } catch {
       return INITIAL_CATEGORY_GROUPS;
     }
