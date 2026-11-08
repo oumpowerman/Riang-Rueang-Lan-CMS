@@ -9,3 +9,12 @@ export interface DriveSyncRecord {
   updatedAt: string; // ISO 8601 string
   updatedBy?: string;
 }
+
+export interface SavedDriveFolderPreset {
+  folderId: string;
+  folderUrl: string;
+  folderName: string;
+  lastUsedAt: string; // ISO 8601 string
+  lastSyncTimestamp?: string;
+  totalClipsInFolder?: number;
+}

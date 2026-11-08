@@ -576,5 +576,23 @@ export const firestoreService = {
     );
     return unsub;
   },
+
+  async getAllDriveSyncRecords(): Promise<DriveSyncRecord[]> {
+    try {
+      const snap = await getDocs(collection(db, 'drive_sync_records'));
+      const list: DriveSyncRecord[] = [];
+      snap.forEach((d) => {
+        const data = d.data() as DriveSyncRecord;
+        if (data && data.folderId) {
+          list.push(data);
+        }
+      });
+      return list;
+    } catch (err) {
+      console.warn('Failed to fetch all DriveSyncRecords:', err);
+      return [];
+    }
+  },
 };
+
 

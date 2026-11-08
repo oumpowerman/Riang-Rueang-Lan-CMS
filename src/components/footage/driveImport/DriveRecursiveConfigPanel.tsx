@@ -1,23 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertCircle,
+  Bookmark,
+  Check,
   Clock,
+  Folder,
   FolderTree,
   History,
   Inbox,
   Layers,
   Link2,
+  Pencil,
   RefreshCw,
+  X,
   Zap,
 } from 'lucide-react';
 import { ScanProgressUpdate } from '../../../services/driveScannerService';
-import { DriveSyncMode, DriveSyncRecord } from '../../../types/driveSync.types';
+import {
+  DriveSyncMode,
+  DriveSyncRecord,
+  SavedDriveFolderPreset,
+} from '../../../types/driveSync.types';
 import { CategoryGroup } from '../../../types/tag.types';
 import { DriveCategoryStrategy } from './driveImport.types';
 
 interface DriveRecursiveConfigPanelProps {
   folderUrl: string;
   onFolderUrlChange: (url: string) => void;
+  activeFolderId: string;
+  savedFolders: SavedDriveFolderPreset[];
+  onSelectSavedFolder: (preset: SavedDriveFolderPreset) => void;
+  onSaveCurrentFolderPreset: (customName?: string) => void;
+  onRemoveSavedFolder: (folderId: string) => void;
   isScanning: boolean;
   onStartScan: () => void;
   onCancelScan: () => void;
@@ -40,6 +54,11 @@ interface DriveRecursiveConfigPanelProps {
 export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps> = ({
   folderUrl,
   onFolderUrlChange,
+  activeFolderId,
+  savedFolders,
+  onSelectSavedFolder,
+  onSaveCurrentFolderPreset,
+  onRemoveSavedFolder,
   isScanning,
   onStartScan,
   onCancelScan,
@@ -58,6 +77,13 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
   scanError,
   scanProgress,
 }) => {
+  const [isNamingFolder, setIsNamingFolder] = useState(false);
+  const [customFolderName, setCustomFolderName] = useState('');
+
+  const currentSavedPreset = savedFolders.find(
+    (f) => f.folderId === activeFolderId
+  );
+
   const formatSyncDate = (isoString?: string) => {
     if (!isoString) return '';
     try {
@@ -74,22 +100,67 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
     }
   };
 
+  const handleOpenNameEditor = () => {
+    setCustomFolderName(
+      currentSavedPreset?.folderName ||
+        folderSyncRecord?.folderName ||
+        ''
+    );
+    setIsNamingFolder(true);
+  };
+
+  const handleConfirmSavePreset = () => {
+    onSaveCurrentFolderPreset(customFolderName);
+    setIsNamingFolder(false);
+  };
+
   return (
     <>
-      {/* Folder Input & Delta Sync Controls */}
+      {/* Folder Input, Saved Folders Bar & Delta Sync Controls */}
       <div className="space-y-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl p-4">
         <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <label className="block text-xs font-bold text-slate-800">
-              ลิงก์โฟลเดอร์ Google Drive หรือ Folder ID:
-            </label>
-            {isLoadingSyncRecord && (
-              <span className="text-[11px] text-indigo-600 flex items-center gap-1">
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>กำลังเช็กประวัติการซิงค์โฟลเดอร์...</span>
-              </span>
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-2">
+              <label className="block text-xs font-bold text-slate-800">
+                ลิงก์โฟลเดอร์ Google Drive หรือ Folder ID:
+              </label>
+              {activeFolderId && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span>จำลิงก์อัตโนมัติ (Local + Cloud)</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isLoadingSyncRecord && (
+                <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>กำลังเช็กประวัติการซิงค์โฟลเดอร์...</span>
+                </span>
+              )}
+              {activeFolderId && !isNamingFolder && (
+                <button
+                  type="button"
+                  onClick={handleOpenNameEditor}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer"
+                >
+                  {currentSavedPreset ? (
+                    <>
+                      <Pencil className="w-3 h-3" />
+                      <span>ตั้งชื่อเรียกโฟลเดอร์นี้</span>
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="w-3 h-3" />
+                      <span>+ บันทึกไว้ในโฟลเดอร์ที่ใช้บ่อย</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
+
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
               <Link2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -130,6 +201,91 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
               )}
             </button>
           </div>
+
+          {/* Inline Custom Name Editor for Saving Preset */}
+          {isNamingFolder && (
+            <div className="mt-2 p-2.5 rounded-xl bg-white border border-indigo-200 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-700">
+                ชื่อเรียกโฟลเดอร์:
+              </span>
+              <input
+                type="text"
+                value={customFolderName}
+                onChange={(e) => setCustomFolderName(e.target.value)}
+                placeholder="เช่น คลังฟุตเทจเรียงเรื่องลั่น (หลัก), ฟุตเทจช่องสำรอง..."
+                className="flex-1 min-w-[200px] px-2.5 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={handleConfirmSavePreset}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+              >
+                บันทึก
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsNamingFolder(false)}
+                className="px-2.5 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+            </div>
+          )}
+
+          {/* Saved & Recent Folders Quick-Switch Bar */}
+          {savedFolders.length > 0 && (
+            <div className="mt-2.5 pt-2.5 border-t border-slate-200/70 space-y-1.5">
+              <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                <Bookmark className="w-3 h-3 text-indigo-600" />
+                <span>โฟลเดอร์ที่ใช้บ่อย / ประวัติโฟลเดอร์ที่บันทึกไว้ (คลิกเพื่อสลับ):</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {savedFolders.map((preset) => {
+                  const isActive = preset.folderId === activeFolderId;
+                  return (
+                    <div
+                      key={preset.folderId}
+                      className={`inline-flex items-center rounded-xl border text-xs transition-all ${
+                        isActive
+                          ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-2xs'
+                          : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onSelectSavedFolder(preset)}
+                        className="px-2.5 py-1 flex items-center gap-1.5 cursor-pointer text-left"
+                        title={`สลับไปยังโฟลเดอร์: ${preset.folderName} (ID: ${preset.folderId})`}
+                      >
+                        <Folder
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            isActive ? 'text-emerald-600' : 'text-indigo-500'
+                          }`}
+                        />
+                        <span className="font-bold truncate max-w-[180px]">
+                          {preset.folderName}
+                        </span>
+                        {typeof preset.totalClipsInFolder === 'number' &&
+                          preset.totalClipsInFolder > 0 && (
+                            <span className="text-[10px] font-mono tabular-nums text-slate-500">
+                              · {preset.totalClipsInFolder.toLocaleString()} คลิป
+                            </span>
+                          )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveSavedFolder(preset.folderId)}
+                        className="pr-2 pl-1 py-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                        title="ลบออกจากรายการที่ใช้บ่อย"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Delta Sync History & Mode Selector */}
@@ -141,12 +297,12 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                 <span className="font-semibold text-slate-900">
                   เคยซิงค์โฟลเดอร์นี้ล่าสุด:
                 </span>
-                <span className="font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/70">
+                <span className="font-mono tabular-nums text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/70">
                   {formatSyncDate(folderSyncRecord.lastSyncTimestamp)}
                 </span>
                 {folderSyncRecord.totalClipsInFolder > 0 && (
-                  <span className="text-[11px] text-slate-500">
-                    (สะสมแล้ว {folderSyncRecord.totalClipsInFolder} คลิป)
+                  <span className="text-[11px] font-mono tabular-nums text-slate-500">
+                    (สะสมแล้ว {folderSyncRecord.totalClipsInFolder.toLocaleString()} คลิป)
                   </span>
                 )}
               </div>
@@ -156,7 +312,7 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                 <button
                   type="button"
                   onClick={() => onSyncModeChange('DELTA')}
-                  className={`px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                     syncMode === 'DELTA'
                       ? 'bg-white text-emerald-800 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -169,7 +325,7 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                 <button
                   type="button"
                   onClick={() => onSyncModeChange('FULL')}
-                  className={`px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                     syncMode === 'FULL'
                       ? 'bg-white text-indigo-700 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -187,7 +343,9 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                 <span>
                   <strong>Server-side Delta Filter เปิดใช้งาน:</strong> Google Drive
-                  จะส่งมาเฉพาะไฟล์ที่มีการสร้างหรือแก้ไขหลังวันที่ {formatSyncDate(folderSyncRecord.lastSyncTimestamp)} เท่านั้น โดยข้ามไฟล์เก่าทั้งหมดเพื่อประหยัดแบนด์วิธ
+                  จะส่งมาเฉพาะไฟล์ที่มีการสร้างหรือแก้ไขหลังวันที่{' '}
+                  {formatSyncDate(folderSyncRecord.lastSyncTimestamp)} เท่านั้น
+                  โดยข้ามไฟล์เก่าทั้งหมดเพื่อประหยัดแบนด์วิธ
                 </span>
               </p>
             )}
@@ -196,7 +354,9 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
           <div className="px-3 py-2 rounded-xl bg-indigo-50/60 border border-indigo-100/80 flex items-center justify-between text-xs text-indigo-900">
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-indigo-600" />
-              <span>ยังไม่มีประวัติการซิงค์สำหรับโฟลเดอร์นี้ (จะทำการสแกนเต็มรูปแบบครั้งแรก)</span>
+              <span>
+                ยังไม่มีประวัติการซิงค์สำหรับโฟลเดอร์นี้ (จะทำการสแกนเต็มรูปแบบครั้งแรก)
+              </span>
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-200/80 text-indigo-800">
               โหมด Full Scan
@@ -258,7 +418,8 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                  จับคู่หมวดหมู่เดิมอัตโนมัติ หรือสร้างหมวดใหม่จากชื่อโฟลเดอร์ย่อย (เลือกสลับบางโฟลเดอร์เข้าพื้นที่พักได้)
+                  จับคู่หมวดหมู่เดิมอัตโนมัติ หรือสร้างหมวดใหม่จากชื่อโฟลเดอร์ย่อย
+                  (เลือกสลับบางโฟลเดอร์เข้าพื้นที่พักได้)
                 </p>
               </div>
             </button>
@@ -294,7 +455,8 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                  พักทุกคลิปไว้ในกลุ่ม &ldquo;พื้นที่พักรอจัดหมวดหมู่ (Staging Area)&rdquo; โดยไม่สร้างแท็กใหม่ เพื่อรอคัดแยกทีหลัง
+                  พักทุกคลิปไว้ในกลุ่ม &ldquo;พื้นที่พักรอจัดหมวดหมู่ (Staging
+                  Area)&rdquo; โดยไม่สร้างแท็กใหม่ เพื่อรอคัดแยกทีหลัง
                 </p>
               </div>
             </button>
@@ -304,7 +466,9 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
           {categoryStrategy === 'SUBFOLDER_TO_CATEGORY' && (
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
               <div className="flex flex-wrap items-center gap-2 text-slate-600">
-                <span>หากต้องสร้างหมวดหมู่หลักใหม่จาก Subfolder ให้จัดเข้ากลุ่มใหญ่:</span>
+                <span>
+                  หากต้องสร้างหมวดหมู่หลักใหม่จาก Subfolder ให้จัดเข้ากลุ่มใหญ่:
+                </span>
                 <select
                   value={targetGroupIdForNewTags}
                   onChange={(e) => onTargetGroupIdChange(e.target.value)}
@@ -364,24 +528,26 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <div className="p-2.5 rounded-xl bg-white border border-indigo-100">
               <div className="text-[10px] text-slate-500">สแกนแล้ว</div>
-              <div className="text-base font-bold font-mono text-slate-900">
+              <div className="text-base font-bold font-mono tabular-nums text-slate-900">
                 {scanProgress.foldersScanned} โฟลเดอร์
               </div>
             </div>
             <div className="p-2.5 rounded-xl bg-white border border-indigo-100">
               <div className="text-[10px] text-slate-500">คลิปใหม่</div>
-              <div className="text-base font-bold font-mono text-emerald-600">
+              <div className="text-base font-bold font-mono tabular-nums text-emerald-600">
                 {scanProgress.newVideosFound ?? scanProgress.videosFound} ไฟล์
               </div>
             </div>
             <div className="p-2.5 rounded-xl bg-white border border-indigo-100">
               <div className="text-[10px] text-slate-500">มีในระบบแล้ว</div>
-              <div className="text-base font-bold font-mono text-amber-700">
+              <div className="text-base font-bold font-mono tabular-nums text-amber-700">
                 {scanProgress.duplicatesFound ?? 0} ไฟล์
               </div>
             </div>
             <div className="p-2.5 rounded-xl bg-white border border-indigo-100 truncate">
-              <div className="text-[10px] text-slate-500 truncate">โฟลเดอร์ปัจจุบัน</div>
+              <div className="text-[10px] text-slate-500 truncate">
+                โฟลเดอร์ปัจจุบัน
+              </div>
               <div className="text-xs font-bold text-indigo-900 truncate">
                 {scanProgress.currentFolder}
               </div>

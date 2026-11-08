@@ -1,3 +1,5 @@
+import { SavedDriveFolderPreset } from './driveSync.types';
+
 export type TagGroupType = 'THEME' | 'PERSON' | 'ACTION' | 'GENERAL' | string;
 export type CategoryTier = 1 | 2;
 export type EntitySubtype = 'PERSON' | 'ANIMAL' | 'TOPIC' | 'ACTION' | 'GENERAL';
@@ -42,4 +44,5 @@ export interface SystemSettings {
   channelName: string;
   defaultMascotName: string;
   driveRootFolderUrl: string;
+  savedDriveFolders?: SavedDriveFolderPreset[];
 }
