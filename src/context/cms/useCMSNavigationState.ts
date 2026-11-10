@@ -31,6 +31,7 @@ export function useCMSNavigationState() {
   const [isGoogleDriveBatchModalOpen, setIsGoogleDriveBatchModalOpen] = useState(false);
   const [isBatchAssignCategoryModalOpen, setIsBatchAssignCategoryModalOpen] = useState(false);
   const [isSheetTagImportModalOpen, setIsSheetTagImportModalOpen] = useState(false);
+  const [isYouTubeDateSyncModalOpen, setIsYouTubeDateSyncModalOpen] = useState(false);
   const [isSupabaseSyncModalOpen, setIsSupabaseSyncModalOpen] = useState(false);
   const [isSupabaseConfigModalOpen, setIsSupabaseConfigModalOpen] = useState(false);
   const [selectedFootageIdsForBatch, setSelectedFootageIdsForBatch] = useState<string[]>([]);
@@ -109,6 +110,8 @@ export function useCMSNavigationState() {
     setIsBatchAssignCategoryModalOpen,
     isSheetTagImportModalOpen,
     setIsSheetTagImportModalOpen,
+    isYouTubeDateSyncModalOpen,
+    setIsYouTubeDateSyncModalOpen,
     isSupabaseSyncModalOpen,
     setIsSupabaseSyncModalOpen,
     isSupabaseConfigModalOpen,

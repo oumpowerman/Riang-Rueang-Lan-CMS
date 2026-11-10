@@ -20,6 +20,7 @@ export const MasterEpisodeArchiveView: React.FC = () => {
     setSelectedEpisodeDetailId,
     launchEpisodeBuilderForCategory,
     setIsSupabaseSyncModalOpen,
+    setIsYouTubeDateSyncModalOpen,
   } = useCMS();
 
   // 1. Metrics & Precomputed O(1) Maps Hook
@@ -83,6 +84,7 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         onCategoryFilterChange={setCategoryFilter}
         sortedEpisodesCount={sortedEpisodes.length}
         onOpenSupabaseSync={() => setIsSupabaseSyncModalOpen(true)}
+        onOpenYouTubeDateSync={() => setIsYouTubeDateSyncModalOpen(true)}
       />
 
       {/* 2. Category Distribution & Footage Utilization Drawer */}

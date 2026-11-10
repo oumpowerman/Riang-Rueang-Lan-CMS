@@ -48,15 +48,49 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
     batchAddTags,
     createSourceWithSplitFootage,
     batchCreateSourcesWithSplitFootage,
+    settings,
+    updateSettings,
   } = useCMS();
   const { driveAccessToken, signInWithGoogle } = useAuth();
 
   const [importMode, setImportMode] = useState<ImportStructureMode>('SINGLE_SOURCE');
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
   const [fallbackApiKey, setFallbackApiKey] = useState(
-    () => localStorage.getItem('DRIVE_API_KEY') || defaultGoogleDriveApiKey || ''
+    () =>
+      settings.driveApiKey?.trim() ||
+      localStorage.getItem('DRIVE_API_KEY') ||
+      defaultGoogleDriveApiKey ||
+      ''
   );
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+
+  React.useEffect(() => {
+    const cloudKey = settings.driveApiKey?.trim() || '';
+    const localKey = localStorage.getItem('DRIVE_API_KEY')?.trim() || '';
+    if (cloudKey) {
+      if (cloudKey !== localKey) {
+        try {
+          localStorage.setItem('DRIVE_API_KEY', cloudKey);
+        } catch {
+          // ignore
+        }
+      }
+      setFallbackApiKey((prev) => (prev !== cloudKey ? cloudKey : prev));
+    } else if (localKey) {
+      updateSettings({ driveApiKey: localKey });
+    }
+  }, [settings.driveApiKey, updateSettings]);
+
+  const handleUpdateFallbackApiKey = (val: string) => {
+    setFallbackApiKey(val);
+    const trimmed = val.trim();
+    if (trimmed) {
+      localStorage.setItem('DRIVE_API_KEY', trimmed);
+    } else {
+      localStorage.removeItem('DRIVE_API_KEY');
+    }
+    updateSettings({ driveApiKey: trimmed });
+  };
 
   const [platform, setPlatform] = useState<SourcePlatform>('YOUTUBE');
   const [channelOrCreator, setChannelOrCreator] = useState('');
@@ -556,8 +590,8 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
             <input
               type="password"
               value={fallbackApiKey}
-              onChange={(e) => setFallbackApiKey(e.target.value)}
-              placeholder="วาง Google Drive API Key สำรอง (สำหรับโฟลเดอร์ที่เปิดแชร์สาธารณะ Anyone with the link)..."
+              onChange={(e) => handleUpdateFallbackApiKey(e.target.value)}
+              placeholder="วาง Google Drive API Key สำรอง (ซิงก์ขึ้น Cloud ถาวรทุกเครื่องอัตโนมัติ)..."
               className="w-full px-3.5 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl"
             />
           )}

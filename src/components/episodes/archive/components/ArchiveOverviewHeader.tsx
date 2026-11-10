@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, Film, Layers, Repeat, TrendingUp, TrendingDown } from 'lucide-react';
+import { Package, Film, Layers, Repeat, TrendingUp, TrendingDown, CalendarClock } from 'lucide-react';
 import type { OverviewMetrics, CategoryRankingItem } from '../hooks/useMasterArchiveMetrics';
 import type { ArchiveTab } from '../hooks/useMasterArchiveFilter';
 
@@ -12,6 +12,7 @@ interface ArchiveOverviewHeaderProps {
   onCategoryFilterChange: (catId: string) => void;
   sortedEpisodesCount: number;
   onOpenSupabaseSync?: () => void;
+  onOpenYouTubeDateSync?: () => void;
 }
 
 export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
@@ -23,6 +24,7 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
   onCategoryFilterChange,
   sortedEpisodesCount,
   onOpenSupabaseSync,
+  onOpenYouTubeDateSync,
 }) => {
   return (
     <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
@@ -67,6 +69,19 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
               <span>คลังชั้นวางซีรีส์ ({categoryRanking.length})</span>
             </button>
           </div>
+
+          {/* Sync Real YouTube Publish Dates & Recalculate Cooldown Button */}
+          {onOpenYouTubeDateSync && (
+            <button
+              type="button"
+              onClick={onOpenYouTubeDateSync}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50/90 hover:bg-rose-100/90 text-rose-800 border border-rose-200/90 shadow-2xs transition-all cursor-pointer active:scale-98"
+              title="ซิงก์วันที่และเวลาเผยแพร่จริงจาก YouTube AI เพื่อคำนวณ Cooldown ฟุตเทจย่อยใหม่ตามจริง"
+            >
+              <CalendarClock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              <span>ซิงก์วันที่จริงจาก YouTube</span>
+            </button>
+          )}
 
           {/* Sync to Supabase Central Contents Table Button */}
           {onOpenSupabaseSync && (

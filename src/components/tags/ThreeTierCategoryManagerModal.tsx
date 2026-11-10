@@ -4,18 +4,19 @@ import { Tags } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { BaseModal } from '../ui/BaseModal';
 import { Tab1StatusRulesConfig } from './tabs/Tab1StatusRulesConfig';
+import { JunkTagCleanupModal } from './JunkTagCleanupModal';
 import { useThreeTierCategoryState } from './three-tier/useThreeTierCategoryState';
 import {
   ThreeTierHeaderRightControls,
   ThreeTierQuickSearchAndSummaryBar,
   ThreeTierConceptBanner,
   ThreeTierEmptyState,
-  ThreeTierModalFooter,
   UnifiedTagStudioTab,
 } from './three-tier/ThreeTierHeaderAndEmpty';
 import { Tier0GroupColumn } from './three-tier/Tier0GroupColumn';
 import { Tier1MainCategoryColumn } from './three-tier/Tier1MainCategoryColumn';
 import { Tier2SubcategoryColumn } from './three-tier/Tier2SubcategoryColumn';
+import { ThreeTierBatchMoveBar } from './three-tier/ThreeTierBatchMoveBar';
 import { ThreeTierConfirmModals } from './three-tier/ThreeTierConfirmModals';
 
 export const ThreeTierCategoryManagerModal: React.FC = () => {
@@ -43,7 +44,30 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     activeGroup,
     activeMainCat,
     mainCategoriesInActiveGroup,
+    filteredMainCategoriesInActiveGroup,
     subcategoriesInActiveCat,
+    filteredSubcategoriesInActiveCat,
+
+    // Column search filters
+    tier1SearchQuery,
+    setTier1SearchQuery,
+    tier2SearchQuery,
+    setTier2SearchQuery,
+
+    // Multi-select, Drag-and-Drop & Bulk Move
+    selectedTagIds,
+    draggingTagIds,
+    isBatchMovingTags,
+    batchMoveProgressText,
+    handleToggleSelectTag,
+    handleToggleSelectAllVisible,
+    handleClearSelectedTags,
+    handleStartDragTag,
+    handleEndDragTag,
+    handleExecuteBatchMove,
+    lastTagReorgUndoRecord,
+    undoLastTagReorg,
+    dismissTagReorgUndoRecord,
 
     // Tier 0 Group form state & handlers
     isEditingGroup,
@@ -103,6 +127,13 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     useState<UnifiedTagStudioTab>(threeTierStudioTab || 'STUDIO_3TIER');
   const [showConceptBanner, setShowConceptBanner] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isJunkTagCleanupOpen, setIsJunkTagCleanupOpen] = useState(false);
+  const [expandedFocusColumn, setExpandedFocusColumn] = useState<
+    'NONE' | 'TIER_1' | 'TIER_2'
+  >('NONE');
+
+  const isBulkFocusMode =
+    activeStudioTab === 'STUDIO_3TIER' && expandedFocusColumn !== 'NONE';
 
   React.useEffect(() => {
     if (isThreeTierManagerOpen && threeTierStudioTab) {
@@ -111,6 +142,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
   }, [isThreeTierManagerOpen, threeTierStudioTab]);
 
   const handleClose = () => {
+    if (isBatchMovingTags) return;
     setIsThreeTierManagerOpen(false);
   };
 
@@ -120,8 +152,13 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
   };
 
   const handleRequestClearAllClips = () => {
+    if (isBatchMovingTags) return;
     setIsThreeTierManagerOpen(false);
     setIsClearClipsModalOpen(true);
+  };
+
+  const handleToggleHeaderBulkFocus = () => {
+    setExpandedFocusColumn((prev) => (prev === 'NONE' ? 'TIER_1' : 'NONE'));
   };
 
   return (
@@ -129,13 +166,17 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
       <BaseModal
         isOpen={isThreeTierManagerOpen}
         onClose={handleClose}
-        fullScreen={isFullScreen}
+        closeOnBackdropClick={!isBatchMovingTags}
+        closeOnEsc={!isBatchMovingTags}
+        fullScreen={isFullScreen || isBulkFocusMode}
         maxWidthClass="max-w-[96vw] xl:max-w-[1440px]"
         heightClass="h-[92dvh] sm:h-[90vh]"
         icon={<Tags className="w-5 h-5" />}
         title="สตูดิโอกลุ่มแท็กหลายมิติ & ตั้งค่าเกณฑ์สีพักฟุต"
         subtitle={
-          activeStudioTab === 'STUDIO_3TIER'
+          isBulkFocusMode
+            ? undefined
+            : activeStudioTab === 'STUDIO_3TIER'
             ? 'มิติกลุ่มแท็ก (Tier 0) ➔ ป้ายแท็กหลัก & โทนสี (Tier 1) ➔ ป้ายแท็กย่อย & ความพร้อม Solo EP (Tier 2)'
             : 'ตั้งค่าเกณฑ์วันพักฟุตเทจ 4 สถานะ (ฟ้า · เขียว · เหลือง · แดง) พร้อมจำลองสัดส่วนคลิปแบบเรียลไทม์'
         }
@@ -153,12 +194,25 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
             onRequestWipe={() => setShowWipeConfirm(true)}
             onRestoreDefaults={handleRestoreDefaultsAndSelect}
             onRequestClearAllClips={handleRequestClearAllClips}
-            isFullScreen={isFullScreen}
-            onToggleFullScreen={() => setIsFullScreen((prev) => !prev)}
+            isFullScreen={isFullScreen || isBulkFocusMode}
+            onToggleFullScreen={() => {
+              if (isBulkFocusMode) {
+                setExpandedFocusColumn('NONE');
+                setIsFullScreen(false);
+              } else {
+                setIsFullScreen((prev) => !prev);
+              }
+            }}
+            isBulkFocusMode={isBulkFocusMode}
+            onToggleBulkFocusMode={handleToggleHeaderBulkFocus}
+            onOpenJunkTagCleanup={() => setIsJunkTagCleanupOpen(true)}
           />
         }
-        headerContent={<ThreeTierConceptBanner isOpen={showConceptBanner} />}
-        footer={<ThreeTierModalFooter onClose={handleClose} />}
+        headerContent={
+          isBulkFocusMode ? undefined : (
+            <ThreeTierConceptBanner isOpen={showConceptBanner} />
+          )
+        }
         bodyClassName="p-0 bg-[#FAF8F5] flex flex-col overflow-hidden"
       >
         <AnimatePresence mode="wait">
@@ -171,13 +225,15 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className="flex-1 min-h-0 flex flex-col overflow-hidden"
             >
-              {/* Quick Search & Unified KPI Summary Bar */}
-              <ThreeTierQuickSearchAndSummaryBar
-                categoryGroups={categoryGroups}
-                tags={tags}
-                categoryMatrix={categoryMatrix}
-                onJumpToTag={handleJumpToTag}
-              />
+              {/* Quick Search & Unified KPI Summary Bar (Hidden in Bulk Focus Mode to maximize vertical space) */}
+              {!isBulkFocusMode && (
+                <ThreeTierQuickSearchAndSummaryBar
+                  categoryGroups={categoryGroups}
+                  tags={tags}
+                  categoryMatrix={categoryMatrix}
+                  onJumpToTag={handleJumpToTag}
+                />
+              )}
 
               {/* Empty State when 0 Groups exist and not currently adding a new group */}
               {categoryGroups.length === 0 && !isEditingGroup ? (
@@ -186,78 +242,173 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                   onRestoreDefaults={handleRestoreDefaultsAndSelect}
                 />
               ) : (
-                /* 3-Column Cascading Studio */
-                <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#E8E2D8] overflow-hidden">
-                  {/* COLUMN 1: LEVEL 1 — มิติกลุ่มแท็ก (Tag Dimensions) */}
-                  <Tier0GroupColumn
+                <>
+                  {/* 3-Column Cascading Studio (Switches to Slim Drop Rails + Expanded Multi-Column Grid in Bulk Focus Mode) */}
+                  <div
+                    className={
+                      isBulkFocusMode
+                        ? 'flex-1 min-h-0 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-[#E8E2D8] overflow-hidden'
+                        : 'flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#E8E2D8] overflow-hidden'
+                    }
+                  >
+                    {/* COLUMN 1: LEVEL 1 — มิติกลุ่มแท็ก (Tag Dimensions) */}
+                    <div
+                      className={
+                        isBulkFocusMode
+                          ? 'md:w-52 lg:w-56 shrink-0 h-40 md:h-full min-h-0 overflow-hidden'
+                          : 'h-full min-h-0 overflow-hidden'
+                      }
+                    >
+                      <Tier0GroupColumn
+                        categoryGroups={categoryGroups}
+                        tags={tags}
+                        activeGroup={activeGroup}
+                        selectedTagIds={selectedTagIds}
+                        draggingTagIds={draggingTagIds}
+                        isBatchMovingTags={isBatchMovingTags}
+                        onExecuteBatchMove={handleExecuteBatchMove}
+                        isEditingGroup={isEditingGroup}
+                        setIsEditingGroup={setIsEditingGroup}
+                        editingGroupId={editingGroupId}
+                        groupFormName={groupFormName}
+                        setGroupFormName={setGroupFormName}
+                        groupFormIcon={groupFormIcon}
+                        setGroupFormIcon={setGroupFormIcon}
+                        groupFormDesc={groupFormDesc}
+                        setGroupFormDesc={setGroupFormDesc}
+                        onOpenAddGroup={handleOpenAddGroup}
+                        onOpenEditGroup={handleOpenEditGroup}
+                        onSaveGroup={handleSaveGroup}
+                        onSelectGroup={handleSelectGroup}
+                        onRequestDeleteGroup={(groupId) =>
+                          setShowDeleteGroupConfirm(groupId)
+                        }
+                        isCompactRail={isBulkFocusMode}
+                      />
+                    </div>
+
+                    {/* COLUMN 2: LEVEL 2 — ป้ายแท็กหลัก + โทนสี + สถิติฟุตเทจ/EP */}
+                    <div
+                      className={
+                        expandedFocusColumn === 'TIER_1'
+                          ? 'flex-1 min-w-0 h-full min-h-0 overflow-hidden'
+                          : expandedFocusColumn === 'TIER_2'
+                          ? 'md:w-56 lg:w-64 shrink-0 h-44 md:h-full min-h-0 overflow-hidden'
+                          : 'h-full min-h-0 overflow-hidden'
+                      }
+                    >
+                      <Tier1MainCategoryColumn
+                        activeGroup={activeGroup}
+                        mainCategoriesInActiveGroup={mainCategoriesInActiveGroup}
+                        filteredMainCategoriesInActiveGroup={
+                          filteredMainCategoriesInActiveGroup
+                        }
+                        activeMainCat={activeMainCat}
+                        tags={tags}
+                        categoryMatrix={categoryMatrix}
+                        tier1SearchQuery={tier1SearchQuery}
+                        setTier1SearchQuery={setTier1SearchQuery}
+                        selectedTagIds={selectedTagIds}
+                        draggingTagIds={draggingTagIds}
+                        isBatchMovingTags={isBatchMovingTags}
+                        onToggleSelectTag={handleToggleSelectTag}
+                        onToggleSelectAllVisible={handleToggleSelectAllVisible}
+                        onStartDragTag={handleStartDragTag}
+                        onEndDragTag={handleEndDragTag}
+                        onExecuteBatchMove={handleExecuteBatchMove}
+                        isEditingMainCat={isEditingMainCat}
+                        setIsEditingMainCat={setIsEditingMainCat}
+                        editingMainCatId={editingMainCatId}
+                        mainCatFormName={mainCatFormName}
+                        setMainCatFormName={setMainCatFormName}
+                        mainCatFormColor={mainCatFormColor}
+                        setMainCatFormColor={setMainCatFormColor}
+                        mainCatFormDesc={mainCatFormDesc}
+                        setMainCatFormDesc={setMainCatFormDesc}
+                        onOpenAddMainCat={handleOpenAddMainCat}
+                        onOpenEditMainCat={handleOpenEditMainCat}
+                        onSaveMainCat={handleSaveMainCat}
+                        onSelectMainCat={(catId) => setSelectedMainCatId(catId)}
+                        onRequestDeleteTag={(tagId) =>
+                          setShowDeleteTagConfirm(tagId)
+                        }
+                        isExpandedGrid={expandedFocusColumn === 'TIER_1'}
+                        isCompactRail={expandedFocusColumn === 'TIER_2'}
+                        onToggleExpandColumn={() =>
+                          setExpandedFocusColumn((prev) =>
+                            prev === 'TIER_1' ? 'NONE' : 'TIER_1'
+                          )
+                        }
+                      />
+                    </div>
+
+                    {/* COLUMN 3: LEVEL 3 — ป้ายแท็กย่อย + สถิติฟุตเทจ + Solo EP พร้อมผลิต */}
+                    <div
+                      className={
+                        expandedFocusColumn === 'TIER_2'
+                          ? 'flex-1 min-w-0 h-full min-h-0 overflow-hidden'
+                          : expandedFocusColumn === 'TIER_1'
+                          ? 'md:w-56 lg:w-64 shrink-0 h-44 md:h-full min-h-0 overflow-hidden'
+                          : 'h-full min-h-0 overflow-hidden'
+                      }
+                    >
+                      <Tier2SubcategoryColumn
+                        activeMainCat={activeMainCat}
+                        subcategoriesInActiveCat={subcategoriesInActiveCat}
+                        filteredSubcategoriesInActiveCat={
+                          filteredSubcategoriesInActiveCat
+                        }
+                        categoryMatrix={categoryMatrix}
+                        tier2SearchQuery={tier2SearchQuery}
+                        setTier2SearchQuery={setTier2SearchQuery}
+                        selectedTagIds={selectedTagIds}
+                        draggingTagIds={draggingTagIds}
+                        isBatchMovingTags={isBatchMovingTags}
+                        onToggleSelectTag={handleToggleSelectTag}
+                        onToggleSelectAllVisible={handleToggleSelectAllVisible}
+                        onStartDragTag={handleStartDragTag}
+                        onEndDragTag={handleEndDragTag}
+                        onExecuteBatchMove={handleExecuteBatchMove}
+                        isEditingSubCat={isEditingSubCat}
+                        setIsEditingSubCat={setIsEditingSubCat}
+                        editingSubCatId={editingSubCatId}
+                        subCatFormName={subCatFormName}
+                        setSubCatFormName={setSubCatFormName}
+                        subCatFormType={subCatFormType}
+                        setSubCatFormType={setSubCatFormType}
+                        subCatFormDesc={subCatFormDesc}
+                        setSubCatFormDesc={setSubCatFormDesc}
+                        onOpenAddSubCat={handleOpenAddSubCat}
+                        onOpenEditSubCat={handleOpenEditSubCat}
+                        onSaveSubCat={handleSaveSubCat}
+                        onRequestDeleteTag={(tagId) =>
+                          setShowDeleteTagConfirm(tagId)
+                        }
+                        isExpandedGrid={expandedFocusColumn === 'TIER_2'}
+                        isCompactRail={expandedFocusColumn === 'TIER_1'}
+                        onToggleExpandColumn={() =>
+                          setExpandedFocusColumn((prev) =>
+                            prev === 'TIER_2' ? 'NONE' : 'TIER_2'
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Docked Bulk Move & Convert Action Bar + Undo Toast */}
+                  <ThreeTierBatchMoveBar
                     categoryGroups={categoryGroups}
                     tags={tags}
-                    activeGroup={activeGroup}
-                    isEditingGroup={isEditingGroup}
-                    setIsEditingGroup={setIsEditingGroup}
-                    editingGroupId={editingGroupId}
-                    groupFormName={groupFormName}
-                    setGroupFormName={setGroupFormName}
-                    groupFormIcon={groupFormIcon}
-                    setGroupFormIcon={setGroupFormIcon}
-                    groupFormDesc={groupFormDesc}
-                    setGroupFormDesc={setGroupFormDesc}
-                    onOpenAddGroup={handleOpenAddGroup}
-                    onOpenEditGroup={handleOpenEditGroup}
-                    onSaveGroup={handleSaveGroup}
-                    onSelectGroup={handleSelectGroup}
-                    onRequestDeleteGroup={(groupId) =>
-                      setShowDeleteGroupConfirm(groupId)
-                    }
+                    selectedTagIds={selectedTagIds}
+                    isBatchMovingTags={isBatchMovingTags}
+                    batchMoveProgressText={batchMoveProgressText}
+                    lastTagReorgUndoRecord={lastTagReorgUndoRecord}
+                    onExecuteBatchMove={handleExecuteBatchMove}
+                    onClearSelectedTags={handleClearSelectedTags}
+                    onUndoLastTagReorg={undoLastTagReorg}
+                    onDismissTagReorgUndoRecord={dismissTagReorgUndoRecord}
                   />
-
-                  {/* COLUMN 2: LEVEL 2 — ป้ายแท็กหลัก + โทนสี + สถิติฟุตเทจ/EP */}
-                  <Tier1MainCategoryColumn
-                    activeGroup={activeGroup}
-                    mainCategoriesInActiveGroup={mainCategoriesInActiveGroup}
-                    activeMainCat={activeMainCat}
-                    tags={tags}
-                    categoryMatrix={categoryMatrix}
-                    isEditingMainCat={isEditingMainCat}
-                    setIsEditingMainCat={setIsEditingMainCat}
-                    editingMainCatId={editingMainCatId}
-                    mainCatFormName={mainCatFormName}
-                    setMainCatFormName={setMainCatFormName}
-                    mainCatFormColor={mainCatFormColor}
-                    setMainCatFormColor={setMainCatFormColor}
-                    mainCatFormDesc={mainCatFormDesc}
-                    setMainCatFormDesc={setMainCatFormDesc}
-                    onOpenAddMainCat={handleOpenAddMainCat}
-                    onOpenEditMainCat={handleOpenEditMainCat}
-                    onSaveMainCat={handleSaveMainCat}
-                    onSelectMainCat={(catId) => setSelectedMainCatId(catId)}
-                    onRequestDeleteTag={(tagId) =>
-                      setShowDeleteTagConfirm(tagId)
-                    }
-                  />
-
-                  {/* COLUMN 3: LEVEL 3 — ป้ายแท็กย่อย + สถิติฟุตเทจ + Solo EP พร้อมผลิต */}
-                  <Tier2SubcategoryColumn
-                    activeMainCat={activeMainCat}
-                    subcategoriesInActiveCat={subcategoriesInActiveCat}
-                    categoryMatrix={categoryMatrix}
-                    isEditingSubCat={isEditingSubCat}
-                    setIsEditingSubCat={setIsEditingSubCat}
-                    editingSubCatId={editingSubCatId}
-                    subCatFormName={subCatFormName}
-                    setSubCatFormName={setSubCatFormName}
-                    subCatFormType={subCatFormType}
-                    setSubCatFormType={setSubCatFormType}
-                    subCatFormDesc={subCatFormDesc}
-                    setSubCatFormDesc={setSubCatFormDesc}
-                    onOpenAddSubCat={handleOpenAddSubCat}
-                    onOpenEditSubCat={handleOpenEditSubCat}
-                    onSaveSubCat={handleSaveSubCat}
-                    onRequestDeleteTag={(tagId) =>
-                      setShowDeleteTagConfirm(tagId)
-                    }
-                  />
-                </div>
+                </>
               )}
             </motion.div>
           ) : (
@@ -294,6 +445,11 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
         categoryGroups={categoryGroups}
         tags={tags}
         computedFootage={computedFootage}
+      />
+
+      <JunkTagCleanupModal
+        isOpen={isJunkTagCleanupOpen}
+        onClose={() => setIsJunkTagCleanupOpen(false)}
       />
     </>
   );

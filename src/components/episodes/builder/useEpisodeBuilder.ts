@@ -237,6 +237,8 @@ export function useEpisodeBuilder() {
   const [masterDriveUrl, setMasterDriveUrl] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
+  const [tiktokUrl, setTiktokUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
   const [introMascotScript, setIntroMascotScript] = useState(
     'สวัสดีครับชาวเรียงเรื่องลั่น! วันนี้เจ้าลั่นคัด 5 อันดับช็อตฮาจังหวะโบ๊ะบ๊ะมาให้ขำกันแบบจุกๆ!'
   );
@@ -800,6 +802,8 @@ export function useEpisodeBuilder() {
           `https://drive.google.com/file/d/MASTER-${nextEpisodeId}/view`,
         youtubeUrl: youtubeUrl.trim(),
         facebookUrl: facebookUrl.trim(),
+        tiktokUrl: tiktokUrl.trim(),
+        instagramUrl: instagramUrl.trim(),
         viewsCount: 0,
         performanceNote: 'สร้างจากหน้า Episode Builder พร้อมไฟล์รวม 5 ฟุต',
       },
@@ -813,6 +817,8 @@ export function useEpisodeBuilder() {
     setMasterDriveUrl('');
     setYoutubeUrl('');
     setFacebookUrl('');
+    setTiktokUrl('');
+    setInstagramUrl('');
     setDuplicateConfirmModalOpen(false);
   };
 
@@ -937,6 +943,10 @@ export function useEpisodeBuilder() {
     setYoutubeUrl,
     facebookUrl,
     setFacebookUrl,
+    tiktokUrl,
+    setTiktokUrl,
+    instagramUrl,
+    setInstagramUrl,
     introMascotScript,
     setIntroMascotScript,
     outroMascotScript,

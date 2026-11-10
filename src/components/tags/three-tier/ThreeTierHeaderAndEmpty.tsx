@@ -15,6 +15,8 @@ import {
   X,
   FolderX,
   ArrowRight,
+  LayoutGrid,
+  Eraser,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
@@ -98,6 +100,9 @@ interface ThreeTierHeaderRightControlsProps {
   onRequestClearAllClips: () => void;
   isFullScreen: boolean;
   onToggleFullScreen: () => void;
+  isBulkFocusMode?: boolean;
+  onToggleBulkFocusMode?: () => void;
+  onOpenJunkTagCleanup?: () => void;
 }
 
 export const ThreeTierHeaderRightControls: React.FC<
@@ -114,95 +119,143 @@ export const ThreeTierHeaderRightControls: React.FC<
   onRequestClearAllClips,
   isFullScreen,
   onToggleFullScreen,
+  isBulkFocusMode = false,
+  onToggleBulkFocusMode,
+  onOpenJunkTagCleanup,
 }) => {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* 2-Tab Main Switcher with Sliding Pill Indicator */}
-      <div className="flex items-center p-1 bg-[#EFE7DC] rounded-xl border border-[#E2D5C4]">
+      {/* Prominent Bulk Focus / Multi-Column Expand Toggle */}
+      {activeStudioTab === 'STUDIO_3TIER' && onToggleBulkFocusMode && (
         <button
           type="button"
-          onClick={() => onChangeActiveStudioTab('STUDIO_3TIER')}
-          className={`relative px-3 py-1 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeStudioTab === 'STUDIO_3TIER'
-              ? 'text-[#3D332A]'
-              : 'text-[#6E5F52] hover:text-[#3D332A]'
+          onClick={onToggleBulkFocusMode}
+          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+            isBulkFocusMode
+              ? 'bg-[#3B6845] hover:bg-[#2C5235] text-white border-[#2C5235] shadow-2xs'
+              : 'bg-[#EEF5EE] hover:bg-[#DCECE0] text-[#1C4824] border-[#BAD8BF]'
           }`}
+          title={
+            isBulkFocusMode
+              ? 'ย่อกลับสู่มุมมอง 3 คอลัมน์ปกติ'
+              : 'ขยายเต็มพื้นที่: กางรายการแท็กเป็นตารางหลายคอลัมน์ และซ่อนส่วนที่ไม่จำเป็นเพื่อย้ายหมวดหมู่ด่วน'
+          }
         >
-          {activeStudioTab === 'STUDIO_3TIER' && (
-            <motion.span
-              layoutId="tagStudioMainTabPill"
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-            />
+          {isBulkFocusMode ? (
+            <>
+              <Minimize2 className="w-3.5 h-3.5" />
+              <span>ย่อกลับมุมมองปกติ</span>
+            </>
+          ) : (
+            <>
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>ขยายจัดการเต็มพื้นที่</span>
+            </>
           )}
-          <span className="relative z-10 inline-flex items-center gap-1.5">
-            <FolderTree className="w-3.5 h-3.5 text-[#3B6845]" />
-            <span>1. สตูดิโอแท็ก 3 ชั้น</span>
-          </span>
         </button>
+      )}
 
-        <button
-          type="button"
-          onClick={() => onChangeActiveStudioTab('COOLDOWN_RULES')}
-          className={`relative px-3 py-1 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeStudioTab === 'COOLDOWN_RULES'
-              ? 'text-[#3D332A]'
-              : 'text-[#6E5F52] hover:text-[#3D332A]'
-          }`}
-        >
-          {activeStudioTab === 'COOLDOWN_RULES' && (
-            <motion.span
-              layoutId="tagStudioMainTabPill"
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-            />
-          )}
-          <span className="relative z-10 inline-flex items-center gap-1.5">
-            <Sliders className="w-3.5 h-3.5 text-[#734B17]" />
-            <span>2. ตั้งค่าเกณฑ์สีพักฟุต</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
-              {cooldownDays}d/{greenReadyDays}d
+      {/* 2-Tab Main Switcher with Sliding Pill Indicator */}
+      {!isBulkFocusMode && (
+        <div className="flex items-center p-1 bg-[#EFE7DC] rounded-xl border border-[#E2D5C4]">
+          <button
+            type="button"
+            onClick={() => onChangeActiveStudioTab('STUDIO_3TIER')}
+            className={`relative px-3 py-1 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeStudioTab === 'STUDIO_3TIER'
+                ? 'text-[#3D332A]'
+                : 'text-[#6E5F52] hover:text-[#3D332A]'
+            }`}
+          >
+            {activeStudioTab === 'STUDIO_3TIER' && (
+              <motion.span
+                layoutId="tagStudioMainTabPill"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="absolute inset-0 rounded-lg bg-white shadow-2xs"
+              />
+            )}
+            <span className="relative z-10 inline-flex items-center gap-1.5">
+              <FolderTree className="w-3.5 h-3.5 text-[#3B6845]" />
+              <span>1. สตูดิโอแท็ก 3 ชั้น</span>
             </span>
-          </span>
-        </button>
-      </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChangeActiveStudioTab('COOLDOWN_RULES')}
+            className={`relative px-3 py-1 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeStudioTab === 'COOLDOWN_RULES'
+                ? 'text-[#3D332A]'
+                : 'text-[#6E5F52] hover:text-[#3D332A]'
+            }`}
+          >
+            {activeStudioTab === 'COOLDOWN_RULES' && (
+              <motion.span
+                layoutId="tagStudioMainTabPill"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="absolute inset-0 rounded-lg bg-white shadow-2xs"
+              />
+            )}
+            <span className="relative z-10 inline-flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-[#734B17]" />
+              <span>2. ตั้งค่าเกณฑ์สีพักฟุต</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
+                {cooldownDays}d/{greenReadyDays}d
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Icon-Only Utility Buttons with Framer Motion Hover Tooltips */}
       <div className="flex items-center gap-1.5">
-        <IconTooltipButton
-          onClick={onToggleConceptBanner}
-          active={showConceptBanner}
-          tooltip={
-            showConceptBanner
-              ? 'ซ่อนคำอธิบายแนวคิดแท็กหลายมิติ'
-              : 'ดูคำอธิบายแนวคิดแท็กหลายมิติ'
-          }
-        >
-          <Lightbulb className="w-4 h-4 text-[#A67438]" />
-        </IconTooltipButton>
+        {!isBulkFocusMode && (
+          <>
+            <IconTooltipButton
+              onClick={onToggleConceptBanner}
+              active={showConceptBanner}
+              tooltip={
+                showConceptBanner
+                  ? 'ซ่อนคำอธิบายแนวคิดแท็กหลายมิติ'
+                  : 'ดูคำอธิบายแนวคิดแท็กหลายมิติ'
+              }
+            >
+              <Lightbulb className="w-4 h-4 text-[#A67438]" />
+            </IconTooltipButton>
 
-        <IconTooltipButton
-          onClick={onRestoreDefaults}
-          tooltip="คืนค่าชุดหมวดหมู่ตัวอย่างเริ่มต้น"
-        >
-          <RotateCcw className="w-4 h-4 text-[#3B6845]" />
-        </IconTooltipButton>
+            <IconTooltipButton
+              onClick={onRestoreDefaults}
+              tooltip="คืนค่าชุดหมวดหมู่ตัวอย่างเริ่มต้น"
+            >
+              <RotateCcw className="w-4 h-4 text-[#3B6845]" />
+            </IconTooltipButton>
 
-        <IconTooltipButton
-          onClick={onRequestWipe}
-          danger
-          tooltip="ล้างโครงสร้างหมวดหมู่ทั้งหมด (Tier 0–2)"
-        >
-          <FolderX className="w-4 h-4" />
-        </IconTooltipButton>
+            <IconTooltipButton
+              onClick={onRequestWipe}
+              danger
+              tooltip="ล้างโครงสร้างหมวดหมู่ทั้งหมด (Tier 0–2)"
+            >
+              <FolderX className="w-4 h-4" />
+            </IconTooltipButton>
 
-        <IconTooltipButton
-          onClick={onRequestClearAllClips}
-          danger
-          tooltip="ล้างคลังคลิปทั้งหมด (เก็บหมวดหมู่และการตั้งค่าไว้)"
-        >
-          <Trash2 className="w-4 h-4" />
-        </IconTooltipButton>
+            {onOpenJunkTagCleanup && (
+              <IconTooltipButton
+                onClick={onOpenJunkTagCleanup}
+                tooltip="สแกนและล้างแท็กชื่อคลิป / แท็กขยะ"
+              >
+                <Eraser className="w-4 h-4 text-[#8A4D1F]" />
+              </IconTooltipButton>
+            )}
+
+            <IconTooltipButton
+              onClick={onRequestClearAllClips}
+              danger
+              tooltip="ล้างคลังคลิปทั้งหมด (เก็บหมวดหมู่และการตั้งค่าไว้)"
+            >
+              <Trash2 className="w-4 h-4" />
+            </IconTooltipButton>
+          </>
+        )}
 
         <IconTooltipButton
           onClick={onToggleFullScreen}

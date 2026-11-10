@@ -34,15 +34,19 @@ export const EpisodeDetailModal: React.FC = () => {
   const [masterDriveUrl, setMasterDriveUrl] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
+  const [tiktokUrl, setTiktokUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
   const [performanceNote, setPerformanceNote] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
 
   useEffect(() => {
     if (episode) {
-      setMasterDriveUrl(episode.masterVideoInfo.masterDriveUrl);
-      setYoutubeUrl(episode.masterVideoInfo.youtubeUrl);
-      setFacebookUrl(episode.masterVideoInfo.facebookUrl);
-      setPerformanceNote(episode.masterVideoInfo.performanceNote);
+      setMasterDriveUrl(episode.masterVideoInfo.masterDriveUrl || '');
+      setYoutubeUrl(episode.masterVideoInfo.youtubeUrl || '');
+      setFacebookUrl(episode.masterVideoInfo.facebookUrl || '');
+      setTiktokUrl(episode.masterVideoInfo.tiktokUrl || '');
+      setInstagramUrl(episode.masterVideoInfo.instagramUrl || '');
+      setPerformanceNote(episode.masterVideoInfo.performanceNote || '');
       setSavedNotice(false);
     }
   }, [episode]);
@@ -73,6 +77,8 @@ export const EpisodeDetailModal: React.FC = () => {
       masterDriveUrl: masterDriveUrl.trim(),
       youtubeUrl: youtubeUrl.trim(),
       facebookUrl: facebookUrl.trim(),
+      tiktokUrl: tiktokUrl.trim(),
+      instagramUrl: instagramUrl.trim(),
       viewsCount: episode.masterVideoInfo.viewsCount || 0,
       performanceNote: performanceNote.trim(),
     });
@@ -311,12 +317,62 @@ export const EpisodeDetailModal: React.FC = () => {
                     type="url"
                     value={facebookUrl}
                     onChange={(e) => setFacebookUrl(e.target.value)}
-                    placeholder="https://www.facebook.com/riangrueanglan/videos/..."
+                    placeholder="https://www.facebook.com/..."
                     className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
                   />
                   {facebookUrl && (
                     <a
                       href={facebookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:text-indigo-700"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ลิงก์อ้างอิง TikTok (ถ้ามี)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={tiktokUrl}
+                    onChange={(e) => setTiktokUrl(e.target.value)}
+                    placeholder="https://www.tiktok.com/@juijui.j/video/..."
+                    className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                  />
+                  {tiktokUrl && (
+                    <a
+                      href={tiktokUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:text-indigo-700"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ลิงก์อ้างอิง Instagram (ถ้ามี)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={instagramUrl}
+                    onChange={(e) => setInstagramUrl(e.target.value)}
+                    placeholder="https://www.instagram.com/reel/..."
+                    className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                  />
+                  {instagramUrl && (
+                    <a
+                      href={instagramUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:text-indigo-700"

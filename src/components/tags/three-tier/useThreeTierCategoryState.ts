@@ -20,11 +20,26 @@ export const useThreeTierCategoryState = () => {
     createSubcategory,
     wipeAllCategories,
     restoreDefaultCategories,
+    batchMoveOrReparentTags,
+    lastTagReorgUndoRecord,
+    undoLastTagReorg,
+    dismissTagReorgUndoRecord,
   } = useCMS();
 
   // Selected state for 3-tier cascade navigation
   const [selectedGroupId, setSelectedGroupId] = useState<string>(() => categoryGroups[0]?.id || '');
   const [selectedMainCatId, setSelectedMainCatId] = useState<string>('');
+
+  // Column-level search filters for fast filtering inside 190+ tags
+  const [tier1SearchQuery, setTier1SearchQuery] = useState<string>('');
+  const [tier2SearchQuery, setTier2SearchQuery] = useState<string>('');
+
+  // Multi-select & Drag-and-Drop states for bulk tag reorganization
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [lastClickedTagId, setLastClickedTagId] = useState<string | null>(null);
+  const [draggingTagIds, setDraggingTagIds] = useState<string[]>([]);
+  const [isBatchMovingTags, setIsBatchMovingTags] = useState<boolean>(false);
+  const [batchMoveProgressText, setBatchMoveProgressText] = useState<string | null>(null);
 
   // Forms / Editing states
   const [isEditingGroup, setIsEditingGroup] = useState<boolean>(false);
@@ -70,6 +85,18 @@ export const useThreeTierCategoryState = () => {
     });
   }, [tags, activeGroup]);
 
+  // Filtered Main Categories in Column 2
+  const filteredMainCategoriesInActiveGroup = useMemo(() => {
+    const q = tier1SearchQuery.trim().toLowerCase();
+    if (!q) return mainCategoriesInActiveGroup;
+    return mainCategoriesInActiveGroup.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q) ||
+        t.id.toLowerCase().includes(q)
+    );
+  }, [mainCategoriesInActiveGroup, tier1SearchQuery]);
+
   // Active Main Category
   const activeMainCat = useMemo(() => {
     if (selectedMainCatId) {
@@ -84,6 +111,18 @@ export const useThreeTierCategoryState = () => {
     if (!activeMainCat) return [];
     return tags.filter((t) => t.tier === 2 && t.parentId === activeMainCat.id);
   }, [tags, activeMainCat]);
+
+  // Filtered Subcategories in Column 3
+  const filteredSubcategoriesInActiveCat = useMemo(() => {
+    const q = tier2SearchQuery.trim().toLowerCase();
+    if (!q) return subcategoriesInActiveCat;
+    return subcategoriesInActiveCat.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q) ||
+        t.id.toLowerCase().includes(q)
+    );
+  }, [subcategoriesInActiveCat, tier2SearchQuery]);
 
   // Handlers for Group Form
   const handleOpenAddGroup = () => {
@@ -265,6 +304,85 @@ export const useThreeTierCategoryState = () => {
     setSelectedMainCatId('');
   };
 
+  // Multi-select & Shift+Click Range Selection Handler
+  const handleToggleSelectTag = (
+    tagId: string,
+    visibleOrderIds: string[],
+    shiftKey = false
+  ) => {
+    if (shiftKey && lastClickedTagId && lastClickedTagId !== tagId) {
+      const startIdx = visibleOrderIds.indexOf(lastClickedTagId);
+      const endIdx = visibleOrderIds.indexOf(tagId);
+      if (startIdx !== -1 && endIdx !== -1) {
+        const [from, to] =
+          startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+        const rangeIds = visibleOrderIds.slice(from, to + 1);
+        setSelectedTagIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+        setLastClickedTagId(tagId);
+        return;
+      }
+    }
+
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+    setLastClickedTagId(tagId);
+  };
+
+  const handleToggleSelectAllVisible = (visibleIds: string[]) => {
+    if (visibleIds.length === 0) return;
+    const allSelected = visibleIds.every((id) => selectedTagIds.includes(id));
+    if (allSelected) {
+      const visibleSet = new Set(visibleIds);
+      setSelectedTagIds((prev) => prev.filter((id) => !visibleSet.has(id)));
+    } else {
+      setSelectedTagIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const handleClearSelectedTags = () => {
+    setSelectedTagIds([]);
+    setLastClickedTagId(null);
+  };
+
+  // Drag-and-Drop Handlers for Tags
+  const handleStartDragTag = (tagId: string): string[] => {
+    const batch =
+      selectedTagIds.includes(tagId) && selectedTagIds.length > 0
+        ? selectedTagIds
+        : [tagId];
+    setDraggingTagIds(batch);
+    return batch;
+  };
+
+  const handleEndDragTag = () => {
+    setDraggingTagIds([]);
+  };
+
+  // Execute Bulk Move / Reparent
+  const handleExecuteBatchMove = async (
+    tagIdsToMove: string[],
+    destination: import('../../../context/cms/cms.types').BatchTagMoveDestination
+  ) => {
+    if (tagIdsToMove.length === 0 || isBatchMovingTags) return;
+    setIsBatchMovingTags(true);
+    setBatchMoveProgressText(`กำลังย้าย ${tagIdsToMove.length} แท็ก...`);
+    try {
+      await batchMoveOrReparentTags(tagIdsToMove, destination, (prog) => {
+        setBatchMoveProgressText(
+          `กำลังบันทึกขึ้น Cloud ก้อนที่ ${prog.completedChunks}/${prog.totalChunks} (${prog.completedOps}/${prog.totalOps})...`
+        );
+      });
+      setSelectedTagIds((prev) =>
+        prev.filter((id) => !tagIdsToMove.includes(id))
+      );
+      setDraggingTagIds([]);
+    } finally {
+      setIsBatchMovingTags(false);
+      setBatchMoveProgressText(null);
+    }
+  };
+
   return {
     isThreeTierManagerOpen,
     setIsThreeTierManagerOpen,
@@ -282,7 +400,31 @@ export const useThreeTierCategoryState = () => {
     activeGroup,
     activeMainCat,
     mainCategoriesInActiveGroup,
+    filteredMainCategoriesInActiveGroup,
     subcategoriesInActiveCat,
+    filteredSubcategoriesInActiveCat,
+
+    // Column search filters
+    tier1SearchQuery,
+    setTier1SearchQuery,
+    tier2SearchQuery,
+    setTier2SearchQuery,
+
+    // Multi-select, Drag-and-Drop & Bulk Move
+    selectedTagIds,
+    setSelectedTagIds,
+    draggingTagIds,
+    isBatchMovingTags,
+    batchMoveProgressText,
+    handleToggleSelectTag,
+    handleToggleSelectAllVisible,
+    handleClearSelectedTags,
+    handleStartDragTag,
+    handleEndDragTag,
+    handleExecuteBatchMove,
+    lastTagReorgUndoRecord,
+    undoLastTagReorg,
+    dismissTagReorgUndoRecord,
 
     // Tier 0 Group form state & handlers
     isEditingGroup,

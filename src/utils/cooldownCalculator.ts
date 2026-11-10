@@ -8,15 +8,22 @@ import {
 import { SystemSettings } from '../types/tag.types';
 
 /**
- * Reference date used for deterministic calculation across multi-year seed data and live usage.
+ * Returns the real-time current local date formatted as YYYY-MM-DD.
  */
 export function getReferenceTodayDate(): string {
-  return '2026-10-27';
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const localToday = `${y}-${m}-${d}`;
+  // Ensure at least 2026-11-09 if system clock is behind 2026 dataset
+  return localToday >= '2026-11-09' ? localToday : '2026-11-09';
 }
 
 export function calculateDaysDiff(fromDateStr: string, toDateStr: string): number {
   const fromMs = new Date(`${fromDateStr}T00:00:00Z`).getTime();
   const toMs = new Date(`${toDateStr}T00:00:00Z`).getTime();
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return 0;
   const diffDays = Math.floor((toMs - fromMs) / (1000 * 60 * 60 * 24));
   return Math.max(0, diffDays);
 }
@@ -120,8 +127,6 @@ export function computeFootageAnalytics(
   episodes: Episode[],
   settings: SystemSettings
 ): ComputedFootage[] {
-  const todayStr = getReferenceTodayDate();
-
   // Sort episodes chronologically descending by publishDate and slot
   const sortedEpisodes = [...episodes].sort((a, b) => {
     if (a.publishDate !== b.publishDate) {
@@ -129,6 +134,11 @@ export function computeFootageAnalytics(
     }
     return b.publishSlot.localeCompare(a.publishSlot);
   });
+
+  const baseTodayStr = getReferenceTodayDate();
+  const latestEpDate = sortedEpisodes.length > 0 ? sortedEpisodes[0].publishDate : '';
+  const todayStr =
+    latestEpDate && latestEpDate > baseTodayStr ? latestEpDate : baseTodayStr;
 
   return footageList.map((ft) => {
     const usageHistory: FootageUsageRecord[] = [];

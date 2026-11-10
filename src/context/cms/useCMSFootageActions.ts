@@ -632,6 +632,41 @@ export function useCMSFootageActions({
     }
   };
 
+  // Batch Sync Footage createdAt dates (e.g. when aligning with real historical Episode publishDate)
+  const batchSyncFootageCreatedAtByMap = async (
+    createdAtByFootageId: Record<string, string>,
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ): Promise<number> => {
+    const targetIds = Object.keys(createdAtByFootageId);
+    if (targetIds.length === 0) return 0;
+
+    const updatedFootages: Footage[] = [];
+    const nextList = footageRef.current.map((ft) => {
+      const targetDate = createdAtByFootageId[ft.id];
+      if (!targetDate || ft.createdAt === targetDate) return ft;
+
+      const updatedFt: Footage = {
+        ...ft,
+        createdAt: targetDate,
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    if (updatedFootages.length === 0) return 0;
+
+    footageRef.current = nextList;
+    setFootage(nextList);
+
+    try {
+      await firestoreService.batchSaveFootages(updatedFootages, onChunkProgress);
+    } catch (err) {
+      console.warn('Firestore batchSyncFootageCreatedAtByMap error:', err);
+    }
+
+    return updatedFootages.length;
+  };
+
   return {
     addDirectFootage,
     createSourceWithSplitFootage,
@@ -642,6 +677,7 @@ export function useCMSFootageActions({
     batchAddDirectFootage,
     batchUpdateFootageTags,
     batchSyncFootageTagsByMap,
+    batchSyncFootageCreatedAtByMap,
     batchDeleteFootage,
     lastQuickSortUndoRecord,
     quickAssignCategoryToFootage,

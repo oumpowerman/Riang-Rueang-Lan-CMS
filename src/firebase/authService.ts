@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './config';
+import { firestoreService } from './firestoreService';
 
 export type UserRole = 'ADMIN' | 'EDITOR' | 'PRODUCER';
 
@@ -26,40 +27,72 @@ export interface UserProfile {
 const DRIVE_TOKEN_STORAGE_KEY = 'rrl_google_drive_token_v1';
 const DRIVE_TOKEN_TTL_MS = 50 * 60 * 1000; // 50 minutes (Google OAuth access tokens last 60 mins)
 
-function loadPersistedDriveToken(): string | null {
+export interface PersistedDriveTokenPayload {
+  token: string;
+  expiresAt: number;
+  connectedEmail?: string;
+}
+
+export function loadPersistedDriveTokenPayload(): PersistedDriveTokenPayload | null {
   try {
-    const raw = sessionStorage.getItem(DRIVE_TOKEN_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(DRIVE_TOKEN_STORAGE_KEY) ||
+      sessionStorage.getItem(DRIVE_TOKEN_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { token: string; expiresAt: number };
+    const parsed = JSON.parse(raw) as PersistedDriveTokenPayload;
     if (!parsed.token || Date.now() > parsed.expiresAt) {
+      localStorage.removeItem(DRIVE_TOKEN_STORAGE_KEY);
       sessionStorage.removeItem(DRIVE_TOKEN_STORAGE_KEY);
       return null;
     }
-    return parsed.token;
+    return parsed;
   } catch {
     return null;
   }
 }
 
-function savePersistedDriveToken(token: string | null): void {
+function loadPersistedDriveToken(): string | null {
+  const payload = loadPersistedDriveTokenPayload();
+  return payload ? payload.token : null;
+}
+
+export function savePersistedDriveToken(
+  token: string | null,
+  options?: {
+    expiresAt?: number;
+    connectedEmail?: string;
+    syncToCloud?: boolean;
+  }
+): void {
+  const syncToCloud = options?.syncToCloud ?? true;
   try {
     if (!token) {
+      localStorage.removeItem(DRIVE_TOKEN_STORAGE_KEY);
       sessionStorage.removeItem(DRIVE_TOKEN_STORAGE_KEY);
+      if (syncToCloud) {
+        void firestoreService.saveGoogleDriveAuthToCloud({
+          token: null,
+          expiresAt: 0,
+        });
+      }
       return;
     }
-    sessionStorage.setItem(
-      DRIVE_TOKEN_STORAGE_KEY,
-      JSON.stringify({
-        token,
-        expiresAt: Date.now() + DRIVE_TOKEN_TTL_MS,
-      })
-    );
+    const expiresAt = options?.expiresAt || Date.now() + DRIVE_TOKEN_TTL_MS;
+    const payload: PersistedDriveTokenPayload = {
+      token,
+      expiresAt,
+      connectedEmail: options?.connectedEmail,
+    };
+    localStorage.setItem(DRIVE_TOKEN_STORAGE_KEY, JSON.stringify(payload));
+    if (syncToCloud) {
+      void firestoreService.saveGoogleDriveAuthToCloud(payload);
+    }
   } catch {
     // ignore storage errors
   }
 }
 
-// Token cache for Google Workspace Drive API (backed by sessionStorage for Vercel reloads)
+// Token cache for Google Workspace Drive API (backed by localStorage + Firestore Cloud for 50-minute cross-tab & cross-device reuse)
 let cachedDriveAccessToken: string | null = loadPersistedDriveToken();
 
 const googleDriveProvider = new GoogleAuthProvider();
@@ -98,26 +131,31 @@ export const authService = {
   // Listen to auth state changes
   onAuthChange(callback: (user: User | null) => void) {
     return onAuthStateChanged(auth, (user) => {
-      if (!user || user.isAnonymous) {
-        cachedDriveAccessToken = null;
-        savePersistedDriveToken(null);
-      } else if (!cachedDriveAccessToken) {
-        cachedDriveAccessToken = loadPersistedDriveToken();
+      // Preserve valid local/cloud Drive token within its 50-minute window even across devices
+      const validToken = loadPersistedDriveToken();
+      if (validToken) {
+        cachedDriveAccessToken = validToken;
       }
       callback(user);
     });
   },
 
   getDriveAccessToken(): string | null {
-    if (!cachedDriveAccessToken) {
-      cachedDriveAccessToken = loadPersistedDriveToken();
-    }
-    return cachedDriveAccessToken;
+    const validToken = loadPersistedDriveToken();
+    cachedDriveAccessToken = validToken;
+    return validToken;
   },
 
-  setDriveAccessToken(token: string | null) {
+  setDriveAccessToken(
+    token: string | null,
+    options?: {
+      expiresAt?: number;
+      connectedEmail?: string;
+      syncToCloud?: boolean;
+    }
+  ) {
     cachedDriveAccessToken = token;
-    savePersistedDriveToken(token);
+    savePersistedDriveToken(token, options);
   },
 
   // Fetch or create user profile doc in Firestore
@@ -258,7 +296,10 @@ export const authService = {
     const googleCredential = GoogleAuthProvider.credentialFromResult(cred);
     const accessToken = googleCredential?.accessToken || '';
     cachedDriveAccessToken = accessToken;
-    savePersistedDriveToken(accessToken);
+    savePersistedDriveToken(accessToken, {
+      connectedEmail: cred.user.email || undefined,
+      syncToCloud: true,
+    });
 
     const profile = await this.getUserProfile(cred.user, targetRole);
     return { user: cred.user, accessToken, profile };

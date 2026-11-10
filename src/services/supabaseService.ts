@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Episode } from '../types/episode.types';
 import {
   SupabaseConnectionConfig,
+  SupabaseRowDraftOverride,
   SupabaseSyncProgress,
   SupabaseSyncReport,
   SupabaseSyncReportItem,
@@ -12,8 +13,10 @@ import {
   isValidUUID,
   mapEpisodeToSupabasePayload,
 } from '../utils/supabasePayloadMapper';
+import { firestoreService } from '../firebase/firestoreService';
 
 const STORAGE_KEY = 'riangrueanglan_supabase_config_v1';
+const ROW_DRAFTS_STORAGE_KEY = 'riangrueanglan_supabase_row_drafts_v1';
 const TITLE_CHUNK_SIZE = 150;
 const BATCH_INSERT_SIZE = 50;
 const UPDATE_CONCURRENCY = 5;
@@ -49,6 +52,43 @@ function chunkArray<T>(items: T[], size: number): T[][] {
 }
 
 /**
+ * Normalizes a partial or raw Supabase config object
+ */
+export function normalizeSupabaseConfig(
+  parsed: Partial<SupabaseConnectionConfig> | null | undefined
+): SupabaseConnectionConfig {
+  if (!parsed) return DEFAULT_SUPABASE_CONFIG;
+
+  const status =
+    parsed.defaultStatus === 'TODO' || !parsed.defaultStatus
+      ? '01_IDEA/DRAFT_💡'
+      : parsed.defaultStatus;
+
+  let platforms = parsed.defaultTargetPlatforms;
+  if (
+    !Array.isArray(platforms) ||
+    platforms.length === 0 ||
+    platforms.includes('YOUTUBE_SHORTS') ||
+    platforms.includes('FACEBOOK_REELS')
+  ) {
+    platforms = ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
+  }
+
+  return {
+    ...DEFAULT_SUPABASE_CONFIG,
+    ...parsed,
+    defaultStatus: status,
+    defaultTargetPlatforms: platforms,
+    defaultIncludePillar: Boolean(parsed.defaultIncludePillar),
+    defaultIncludeCategory: Boolean(parsed.defaultIncludeCategory),
+    channels:
+      Array.isArray(parsed.channels) && parsed.channels.length > 0
+        ? parsed.channels
+        : DEFAULT_SUPABASE_CONFIG.channels,
+  };
+}
+
+/**
  * Loads Supabase configuration from localStorage with env fallback
  */
 export function loadSupabaseConfig(): SupabaseConnectionConfig {
@@ -56,34 +96,7 @@ export function loadSupabaseConfig(): SupabaseConnectionConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const status =
-        parsed.defaultStatus === 'TODO' || !parsed.defaultStatus
-          ? '01_IDEA/DRAFT_💡'
-          : parsed.defaultStatus;
-
-      // Ensure platform names follow standard YOUTUBE, FACEBOOK, TIKTOK, INSTAGRAM
-      let platforms = parsed.defaultTargetPlatforms;
-      if (
-        !Array.isArray(platforms) ||
-        platforms.length === 0 ||
-        platforms.includes('YOUTUBE_SHORTS') ||
-        platforms.includes('FACEBOOK_REELS')
-      ) {
-        platforms = ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
-      }
-
-      return {
-        ...DEFAULT_SUPABASE_CONFIG,
-        ...parsed,
-        defaultStatus: status,
-        defaultTargetPlatforms: platforms,
-        defaultIncludePillar: Boolean(parsed.defaultIncludePillar),
-        defaultIncludeCategory: Boolean(parsed.defaultIncludeCategory),
-        channels:
-          Array.isArray(parsed.channels) && parsed.channels.length > 0
-            ? parsed.channels
-            : DEFAULT_SUPABASE_CONFIG.channels,
-      };
+      return normalizeSupabaseConfig(parsed);
     }
   } catch (err) {
     console.warn('Failed to parse Supabase config from localStorage:', err);
@@ -92,14 +105,121 @@ export function loadSupabaseConfig(): SupabaseConnectionConfig {
 }
 
 /**
- * Persists Supabase configuration to localStorage
+ * Persists Supabase configuration to localStorage and (by default) Cloud Firestore
  */
-export function saveSupabaseConfig(config: SupabaseConnectionConfig): void {
+export function saveSupabaseConfig(
+  config: SupabaseConnectionConfig,
+  syncToCloud = true
+): void {
+  const normalized = normalizeSupabaseConfig(config);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   } catch (err) {
     console.error('Failed to save Supabase config to localStorage:', err);
   }
+
+  if (syncToCloud) {
+    void firestoreService.saveSupabaseConfigToCloud(normalized);
+  }
+}
+
+/**
+ * Loads per-row draft overrides from localStorage
+ */
+export function loadSupabaseRowDrafts(): Record<string, SupabaseRowDraftOverride> {
+  try {
+    const raw = localStorage.getItem(ROW_DRAFTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, SupabaseRowDraftOverride>;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to parse Supabase row drafts from localStorage:', err);
+  }
+  return {};
+}
+
+/**
+ * Saves per-row draft overrides to localStorage and optionally to Cloud Firestore
+ */
+export function saveSupabaseRowDrafts(
+  overrides: Record<string, SupabaseRowDraftOverride>,
+  syncToCloud = true
+): void {
+  try {
+    localStorage.setItem(ROW_DRAFTS_STORAGE_KEY, JSON.stringify(overrides));
+  } catch (err) {
+    console.error('Failed to save Supabase row drafts to localStorage:', err);
+  }
+
+  if (syncToCloud) {
+    void firestoreService.saveSupabaseRowDraftsToCloud(overrides);
+  }
+}
+
+/**
+ * Clears all saved per-row draft overrides in localStorage and Cloud Firestore
+ */
+export function clearSupabaseRowDrafts(syncToCloud = true): void {
+  try {
+    localStorage.removeItem(ROW_DRAFTS_STORAGE_KEY);
+  } catch (err) {
+    console.error('Failed to clear Supabase row drafts from localStorage:', err);
+  }
+
+  if (syncToCloud) {
+    void firestoreService.saveSupabaseRowDraftsToCloud({});
+  }
+}
+
+/**
+ * Extracts only the fields that differ from the default row state so the Cloud payload stays compact
+ */
+export function extractRowDraftOverride(
+  row: SupabaseSyncRowState,
+  config: SupabaseConnectionConfig
+): SupabaseRowDraftOverride | null {
+  const defaultIsSelected = row.matchStatus !== 'DUPLICATE';
+  const defaultChannelId = config.targetChannelId || '';
+  const defaultStatus = config.defaultStatus || '01_IDEA/DRAFT_💡';
+  const defaultPlatforms =
+    config.defaultTargetPlatforms && config.defaultTargetPlatforms.length > 0
+      ? config.defaultTargetPlatforms
+      : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
+  const defaultIncludeAssets = config.defaultIncludeAssets;
+  const defaultIncludePillar = Boolean(config.defaultIncludePillar);
+  const defaultIncludeCategory = Boolean(config.defaultIncludeCategory);
+
+  const platformsChanged =
+    row.targetPlatforms.length !== defaultPlatforms.length ||
+    row.targetPlatforms.some((p) => !defaultPlatforms.includes(p));
+
+  const hasDiff =
+    row.isSelected !== defaultIsSelected ||
+    row.channelId !== defaultChannelId ||
+    row.status !== defaultStatus ||
+    platformsChanged ||
+    row.includeAssets !== defaultIncludeAssets ||
+    row.includePillar !== defaultIncludePillar ||
+    row.includeCategory !== defaultIncludeCategory ||
+    Boolean(row.description.trim()) ||
+    row.upsertMode !== 'SKIP';
+
+  if (!hasDiff) return null;
+
+  return {
+    isSelected: row.isSelected,
+    channelId: row.channelId,
+    status: row.status,
+    targetPlatforms: row.targetPlatforms,
+    includeAssets: row.includeAssets,
+    includePillar: row.includePillar,
+    includeCategory: row.includeCategory,
+    description: row.description,
+    upsertMode: row.upsertMode,
+  };
 }
 
 /**

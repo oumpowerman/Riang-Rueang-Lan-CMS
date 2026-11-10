@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { useCMS } from '../../../context/CMSContext';
 import { defaultGoogleDriveApiKey } from '../../../firebase/config';
@@ -58,11 +58,35 @@ export const useGoogleDriveBatchImport = () => {
   // Mode: RECURSIVE (Enterprise Scan) vs PASTE (Manual Text)
   const [activeImportMode, setActiveImportMode] = useState<DriveImportMode>('RECURSIVE');
   const [apiKey, setApiKey] = useState(
-    () => localStorage.getItem('DRIVE_API_KEY') || defaultGoogleDriveApiKey || ''
+    () =>
+      settings.driveApiKey?.trim() ||
+      localStorage.getItem('DRIVE_API_KEY') ||
+      defaultGoogleDriveApiKey ||
+      ''
   );
   const [isApiKeyExpanded, setIsApiKeyExpanded] = useState(false);
   const [maxDepth, setMaxDepth] = useState<number>(10);
   const [idPrefix, setIdPrefix] = useState<DriveClipIdPrefix>('CLP');
+
+  // Sync DRIVE_API_KEY between localStorage and Cloud (system_settings/global_rules)
+  useEffect(() => {
+    const cloudKey = settings.driveApiKey?.trim() || '';
+    const localKey = localStorage.getItem('DRIVE_API_KEY')?.trim() || '';
+
+    if (cloudKey) {
+      if (cloudKey !== localKey) {
+        try {
+          localStorage.setItem('DRIVE_API_KEY', cloudKey);
+        } catch {
+          // ignore storage errors
+        }
+      }
+      setApiKey((prev) => (prev !== cloudKey ? cloudKey : prev));
+    } else if (localKey) {
+      // Auto-migrate existing local DRIVE_API_KEY up to Cloud so all devices receive it permanently
+      updateSettings({ driveApiKey: localKey });
+    }
+  }, [settings.driveApiKey, updateSettings]);
 
   const {
     folderUrl,
@@ -148,14 +172,16 @@ export const useGoogleDriveBatchImport = () => {
   const [importSuccessData, setImportSuccessData] =
     useState<DriveImportSuccessSummary | null>(null);
 
-  // Handle Save API Key
+  // Handle Save API Key (Persists to localStorage AND syncs permanently to Cloud Firestore)
   const handleSaveApiKey = (val: string) => {
     setApiKey(val);
-    if (val.trim()) {
-      localStorage.setItem('DRIVE_API_KEY', val.trim());
+    const trimmed = val.trim();
+    if (trimmed) {
+      localStorage.setItem('DRIVE_API_KEY', trimmed);
     } else {
       localStorage.removeItem('DRIVE_API_KEY');
     }
+    updateSettings({ driveApiKey: trimmed });
   };
 
   const handleSelectSubfolderStrategy = () => {

@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Sliders,
   ShieldCheck,
+  Cloud,
 } from 'lucide-react';
 import { BaseModal } from '../ui/BaseModal';
 import {
@@ -20,9 +21,11 @@ import {
 } from '../../types/supabaseSync.types';
 import {
   loadSupabaseConfig,
+  normalizeSupabaseConfig,
   saveSupabaseConfig,
   testSupabaseConnection,
 } from '../../services/supabaseService';
+import { firestoreService } from '../../firebase/firestoreService';
 import { isValidUUID } from '../../utils/supabasePayloadMapper';
 
 interface SupabaseConfigModalProps {
@@ -56,6 +59,20 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
     }
   }, [isOpen]);
 
+  // Real-time Cloud Sync subscription while modal is mounted
+  useEffect(() => {
+    const unsub = firestoreService.subscribeSupabaseConfig((cloudConfig) => {
+      if (cloudConfig && (cloudConfig.url || cloudConfig.anonKey)) {
+        const normalized = normalizeSupabaseConfig(cloudConfig);
+        saveSupabaseConfig(normalized, false);
+        if (!isOpen) {
+          setConfig(normalized);
+        }
+      }
+    });
+    return () => unsub();
+  }, [isOpen]);
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
@@ -82,7 +99,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
   };
 
   const handleSave = () => {
-    saveSupabaseConfig(config);
+    saveSupabaseConfig(config, true);
     onConfigSaved?.(config);
     onClose();
   };
@@ -123,11 +140,12 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
       icon={<Database className="w-5 h-5 text-[#2E7D32]" />}
       title="ตั้งค่าเชื่อมต่อฐานข้อมูล Supabase"
       badge={
-        <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] font-bold">
-          ตาราง contents
+        <span className="inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] font-bold">
+          <Cloud className="w-3.5 h-3.5 text-[#2E7D32]" />
+          <span>ซิงก์ Cloud ทุกเครื่องอัตโนมัติ</span>
         </span>
       }
-      subtitle="เชื่อมต่อฐานข้อมูลหลักเพื่อส่งออกข้อมูล EP เข้าสู่ตาราง public.contents ร่วมกับช่องอื่นๆ"
+      subtitle="บันทึกการตั้งค่า URL, API Key และรายชื่อช่องขึ้น Cloud เพื่อให้ทีมงานทุกเครื่องใช้งานได้ทันที"
       footer={
         <div className="flex items-center justify-between w-full">
           <button

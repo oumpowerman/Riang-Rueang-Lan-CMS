@@ -175,7 +175,7 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
     : selectedCount;
 
   return (
-    <div className="sticky top-2 z-30 space-y-2">
+    <div className={`${isDragging ? 'sticky top-2 z-30' : 'relative z-20'} space-y-2`}>
       {/* 1. Compact Undo Notification Toast */}
       <AnimatePresence>
         {lastUndoRecord && (

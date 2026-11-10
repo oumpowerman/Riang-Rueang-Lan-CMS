@@ -15,6 +15,7 @@ import {
   generateNextId,
 } from '../../utils/fileNameGenerator';
 import { BaseModal } from '../ui/BaseModal';
+import { JunkTagCleanupModal } from '../tags/JunkTagCleanupModal';
 import { SheetCollapsiblePasteSection } from './sheetImport/SheetCollapsiblePasteSection';
 import { SheetEpisodeGroupsPreview } from './sheetImport/SheetEpisodeGroupsPreview';
 import { SheetFootageRowsTable } from './sheetImport/SheetFootageRowsTable';
@@ -60,6 +61,7 @@ export const SheetTagImportModal: React.FC = () => {
   const [isInputExpanded, setIsInputExpanded] = useState(true);
   const [isAnalyzingPaste, setIsAnalyzingPaste] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isJunkTagCleanupOpen, setIsJunkTagCleanupOpen] = useState(false);
   const [rowDensity, setRowDensity] = useState<TableRowDensity>('COMPACT');
   const [activePreviewTab, setActivePreviewTab] = useState<
     'FOOTAGE_ROWS' | 'EPISODE_GROUPS'
@@ -90,7 +92,7 @@ export const SheetTagImportModal: React.FC = () => {
   const [autoCreateMissingFootage, setAutoCreateMissingFootage] =
     useState(true);
   const [includeSeriesTagOnFootage, setIncludeSeriesTagOnFootage] =
-    useState(true);
+    useState(false);
 
   // Processing & Chunked Progress States
   const [isProcessing, setIsProcessing] = useState(false);
@@ -337,7 +339,7 @@ export const SheetTagImportModal: React.FC = () => {
           });
         });
 
-        if (syncEpisodesFromColD && activeEpisodeGroups.length > 0) {
+        if (syncEpisodesFromColD && includeSeriesTagOnFootage && activeEpisodeGroups.length > 0) {
           activeEpisodeGroups.forEach((group) => {
             if (group.primaryTagName) {
               ensureTagExists(group.primaryTagName, true);
@@ -522,7 +524,22 @@ export const SheetTagImportModal: React.FC = () => {
               updatedEpisodesCount += 1;
             }
 
+            // Determine primary tag: use first valid tag from group's row tags, or existing episode tag, or fallback
+            let resolvedTagIdForGroup: string | null = null;
+            for (const r of groupActiveRows) {
+              for (const tName of r.tagNames) {
+                const foundId = tagIdByLowerName.get(tName.toLowerCase());
+                if (foundId) {
+                  resolvedTagIdForGroup = foundId;
+                  break;
+                }
+              }
+              if (resolvedTagIdForGroup) break;
+            }
+
             const primaryTagId =
+              resolvedTagIdForGroup ||
+              (existingEp?.seriesId ? existingEp.seriesId : null) ||
               tagIdByLowerName.get(group.primaryTagName.toLowerCase()) ||
               tags.find((t) => !isStagingTagId(t.id))?.id ||
               'TAG-0001';
@@ -711,6 +728,7 @@ export const SheetTagImportModal: React.FC = () => {
       onChangeAutoCreateMissingFootage={setAutoCreateMissingFootage}
       includeSeriesTagOnFootage={includeSeriesTagOnFootage}
       onChangeIncludeSeriesTagOnFootage={setIncludeSeriesTagOnFootage}
+      onOpenJunkTagCleanup={() => setIsJunkTagCleanupOpen(true)}
     />
   );
 
@@ -788,8 +806,9 @@ export const SheetTagImportModal: React.FC = () => {
     ) : undefined;
 
   return (
-    <BaseModal
-      isOpen={isSheetTagImportModalOpen}
+    <>
+      <BaseModal
+        isOpen={isSheetTagImportModalOpen}
       onClose={handleClose}
       closeOnBackdropClick={!isProcessing}
       closeOnEsc={!isProcessing}
@@ -900,6 +919,11 @@ export const SheetTagImportModal: React.FC = () => {
           )}
         </div>
       )}
-    </BaseModal>
+      </BaseModal>
+      <JunkTagCleanupModal
+        isOpen={isJunkTagCleanupOpen}
+        onClose={() => setIsJunkTagCleanupOpen(false)}
+      />
+    </>
   );
 };

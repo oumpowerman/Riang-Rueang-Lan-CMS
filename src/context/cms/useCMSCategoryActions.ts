@@ -282,6 +282,82 @@ export function useCMSCategoryActions({
     setSelectedTagFilter((prev) => prev.filter((tid) => !removedIds.includes(tid)));
   };
 
+  const batchDeleteTags = async (
+    tagIds: string[],
+    onProgress?: (progress: import('../../firebase/firestoreService').BatchChunkProgress) => void
+  ): Promise<{ deletedCount: number; updatedFootagesCount: number }> => {
+    const rawIds = Array.from(new Set(tagIds.filter((id) => Boolean(id) && !isStagingTagId(id))));
+    if (rawIds.length === 0) return { deletedCount: 0, updatedFootagesCount: 0 };
+
+    // Include any children subcategories if a parent tag is in the list
+    const allRemovedIds = new Set<string>(rawIds);
+    tags.forEach((t) => {
+      if (t.parentId && allRemovedIds.has(t.parentId)) {
+        allRemovedIds.add(t.id);
+      }
+    });
+
+    const removedList = Array.from(allRemovedIds);
+    cmsRepository.markTagIdsDeleted(removedList);
+
+    const nextTags = tags.filter((t) => !allRemovedIds.has(t.id));
+    setTags(nextTags);
+    cmsRepository.saveTags(nextTags);
+
+    const updatedFootages: Footage[] = [];
+    const nextFootage = footage.map((ft) => {
+      if (!ft.tags.some((tid) => allRemovedIds.has(tid))) return ft;
+      const updatedFt: Footage = {
+        ...ft,
+        tags: normalizeFootageTags(ft.tags.filter((tid) => !allRemovedIds.has(tid))),
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    if (updatedFootages.length > 0) {
+      setFootage(nextFootage);
+      cmsRepository.saveFootage(nextFootage);
+    }
+
+    const updatedSources: RawSource[] = [];
+    const nextSources = sources.map((src) => {
+      if (!src.tags.some((tid) => allRemovedIds.has(tid))) return src;
+      const updatedSrc: RawSource = {
+        ...src,
+        tags: src.tags.filter((tid) => !allRemovedIds.has(tid)),
+      };
+      updatedSources.push(updatedSrc);
+      return updatedSrc;
+    });
+
+    if (updatedSources.length > 0) {
+      setSources(nextSources);
+      cmsRepository.saveSources(nextSources);
+    }
+
+    setSelectedTagFilter((prev) => prev.filter((tid) => !allRemovedIds.has(tid)));
+
+    try {
+      await firestoreService.withBatchWriteLock(async () => {
+        await firestoreService.batchDeleteCategories(removedList, onProgress);
+        if (updatedFootages.length > 0) {
+          await firestoreService.batchSaveFootages(updatedFootages);
+        }
+        if (updatedSources.length > 0) {
+          await firestoreService.batchSaveSources(updatedSources);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore batchDeleteTags error:', err);
+    }
+
+    return {
+      deletedCount: removedList.length,
+      updatedFootagesCount: updatedFootages.length,
+    };
+  };
+
   const updateSettings = (updates: Partial<SystemSettings>) => {
     const nextSettings = { ...settings, ...updates };
     setSettings(nextSettings);
@@ -290,6 +366,9 @@ export function useCMSCategoryActions({
       .saveSettings(nextSettings)
       .catch((err) => console.warn('Firestore updateSettings error:', err));
   };
+
+  const [lastTagReorgUndoRecord, setLastTagReorgUndoRecord] =
+    React.useState<import('./cms.types').TagReorgUndoRecord | null>(null);
 
   const batchAddTags = async (
     newTags: CategoryTag[],
@@ -311,6 +390,247 @@ export function useCMSCategoryActions({
     }
   };
 
+  const batchMoveOrReparentTags = async (
+    tagIdsToMove: string[],
+    destination: import('./cms.types').BatchTagMoveDestination,
+    onChunkProgress?: (progress: import('../../firebase/firestoreService').BatchChunkProgress) => void
+  ): Promise<{
+    movedCount: number;
+    updatedClipsCount: number;
+    summaryText: string;
+  }> => {
+    const cleanIds = Array.from(
+      new Set(tagIdsToMove.filter((id) => Boolean(id) && !isStagingTagId(id)))
+    );
+    if (cleanIds.length === 0) {
+      return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
+    }
+
+    if (destination.mode === 'MOVE_TO_GROUP') {
+      const targetGroup = categoryGroups.find(
+        (g) => g.id === destination.targetGroupId
+      );
+      if (!targetGroup || isStagingGroupId(targetGroup.id)) {
+        return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
+      }
+
+      const moveSet = new Set(cleanIds);
+      const targetGroupType: TagGroupType =
+        (targetGroup.id.replace('GRP-', '') as TagGroupType) || 'GENERAL';
+
+      const previousTags: CategoryTag[] = [];
+      const changedTags: CategoryTag[] = [];
+
+      const nextTags = tags.map((t) => {
+        if (moveSet.has(t.id)) {
+          previousTags.push(t);
+          const updated: CategoryTag = {
+            ...t,
+            tier: 1,
+            parentId: null,
+            groupId: targetGroup.id,
+            groupType: targetGroupType,
+          };
+          changedTags.push(updated);
+          return updated;
+        }
+        // Also move any existing Tier 2 children of the moved Tier 1 tags into the new groupId
+        if (t.tier === 2 && t.parentId && moveSet.has(t.parentId)) {
+          previousTags.push(t);
+          const updatedChild: CategoryTag = {
+            ...t,
+            groupId: targetGroup.id,
+            groupType: targetGroupType,
+          };
+          changedTags.push(updatedChild);
+          return updatedChild;
+        }
+        return t;
+      });
+
+      if (changedTags.length === 0) {
+        return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
+      }
+
+      setTags(nextTags);
+      cmsRepository.saveTags(nextTags);
+
+      const summaryText = `ย้าย ${moveSet.size} แท็ก ➔ มิติ "${targetGroup.name}" (แท็กหลัก)`;
+      setLastTagReorgUndoRecord({
+        id: `UNDO-TAG-${Date.now()}`,
+        summaryText,
+        previousTags,
+        previousFootages: [],
+        timestamp: Date.now(),
+      });
+
+      try {
+        await firestoreService.withBatchWriteLock(async () => {
+          await firestoreService.batchSaveCategories(changedTags, onChunkProgress);
+        });
+      } catch (err) {
+        console.warn('Firestore batchMoveOrReparentTags (MOVE_TO_GROUP) error:', err);
+      }
+
+      return {
+        movedCount: moveSet.size,
+        updatedClipsCount: 0,
+        summaryText,
+      };
+    }
+
+    // Mode: MOVE_TO_PARENT_TAG (Convert/Move tags to Tier 2 Subcategories under targetParentTagId)
+    const parentTag = tags.find(
+      (t) =>
+        t.id === destination.targetParentTagId &&
+        !isStagingTagId(t.id) &&
+        (t.tier === 1 || !t.parentId)
+    );
+    if (!parentTag) {
+      return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
+    }
+
+    const validMoveIds = cleanIds.filter((id) => id !== parentTag.id);
+    if (validMoveIds.length === 0) {
+      return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
+    }
+
+    const moveSet = new Set(validMoveIds);
+    const parentGroupId =
+      parentTag.groupId || `GRP-${parentTag.groupType || 'GENERAL'}`;
+    const parentGroupType: TagGroupType = parentTag.groupType || 'GENERAL';
+
+    const previousTags: CategoryTag[] = [];
+    const changedTags: CategoryTag[] = [];
+    const allSubtagIdsUnderParent = new Set<string>();
+
+    const nextTags = tags.map((t) => {
+      if (moveSet.has(t.id)) {
+        previousTags.push(t);
+        const updated: CategoryTag = {
+          ...t,
+          tier: 2,
+          parentId: parentTag.id,
+          groupId: parentGroupId,
+          groupType: parentGroupType,
+          entityType: destination.entityType || t.entityType || 'TOPIC',
+          color: t.color || parentTag.color || 'blue',
+        };
+        changedTags.push(updated);
+        allSubtagIdsUnderParent.add(updated.id);
+        return updated;
+      }
+      // If a moved Tier 1 tag previously had its own Tier 2 children, re-parent those children to parentTag as well
+      if (t.tier === 2 && t.parentId && moveSet.has(t.parentId)) {
+        previousTags.push(t);
+        const updatedChild: CategoryTag = {
+          ...t,
+          tier: 2,
+          parentId: parentTag.id,
+          groupId: parentGroupId,
+          groupType: parentGroupType,
+        };
+        changedTags.push(updatedChild);
+        allSubtagIdsUnderParent.add(updatedChild.id);
+        return updatedChild;
+      }
+      return t;
+    });
+
+    // Ensure all Footage items carrying any of the moved subtags also include parentTag.id
+    const previousFootages: Footage[] = [];
+    const updatedFootages: Footage[] = [];
+
+    const nextFootage = footage.map((ft) => {
+      const hasMovedSubtag = ft.tags.some((tid) =>
+        allSubtagIdsUnderParent.has(tid)
+      );
+      if (!hasMovedSubtag || ft.tags.includes(parentTag.id)) {
+        return ft;
+      }
+      previousFootages.push(ft);
+      const updatedFt: Footage = {
+        ...ft,
+        tags: normalizeFootageTags([...ft.tags, parentTag.id]),
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    setTags(nextTags);
+    cmsRepository.saveTags(nextTags);
+
+    if (updatedFootages.length > 0) {
+      setFootage(nextFootage);
+      cmsRepository.saveFootage(nextFootage);
+    }
+
+    const summaryText = `ย้าย ${moveSet.size} แท็ก ➔ เป็นแท็กย่อยใต้ "#${parentTag.name}"${
+      updatedFootages.length > 0 ? ` (เชื่อมโยง ${updatedFootages.length} คลิป)` : ''
+    }`;
+
+    setLastTagReorgUndoRecord({
+      id: `UNDO-TAG-${Date.now()}`,
+      summaryText,
+      previousTags,
+      previousFootages,
+      timestamp: Date.now(),
+    });
+
+    try {
+      await firestoreService.withBatchWriteLock(async () => {
+        await firestoreService.batchSaveCategories(changedTags, onChunkProgress);
+        if (updatedFootages.length > 0) {
+          await firestoreService.batchSaveFootages(updatedFootages, onChunkProgress);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore batchMoveOrReparentTags (MOVE_TO_PARENT_TAG) error:', err);
+    }
+
+    return {
+      movedCount: moveSet.size,
+      updatedClipsCount: updatedFootages.length,
+      summaryText,
+    };
+  };
+
+  const undoLastTagReorg = async (): Promise<void> => {
+    if (!lastTagReorgUndoRecord) return;
+    const record = lastTagReorgUndoRecord;
+    setLastTagReorgUndoRecord(null);
+
+    const prevTagMap = new Map(record.previousTags.map((t) => [t.id, t]));
+    const nextTags = tags.map((t) => prevTagMap.get(t.id) || t);
+    setTags(nextTags);
+    cmsRepository.saveTags(nextTags);
+
+    let nextFootage = footage;
+    if (record.previousFootages.length > 0) {
+      const prevFtMap = new Map(record.previousFootages.map((f) => [f.id, f]));
+      nextFootage = footage.map((f) => prevFtMap.get(f.id) || f);
+      setFootage(nextFootage);
+      cmsRepository.saveFootage(nextFootage);
+    }
+
+    try {
+      await firestoreService.withBatchWriteLock(async () => {
+        if (record.previousTags.length > 0) {
+          await firestoreService.batchSaveCategories(record.previousTags);
+        }
+        if (record.previousFootages.length > 0) {
+          await firestoreService.batchSaveFootages(record.previousFootages);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore undoLastTagReorg error:', err);
+    }
+  };
+
+  const dismissTagReorgUndoRecord = () => {
+    setLastTagReorgUndoRecord(null);
+  };
+
   return {
     createCategoryGroup,
     updateCategoryGroup,
@@ -320,8 +640,13 @@ export function useCMSCategoryActions({
     createTag,
     createSubcategory,
     batchAddTags,
+    batchMoveOrReparentTags,
+    lastTagReorgUndoRecord,
+    undoLastTagReorg,
+    dismissTagReorgUndoRecord,
     updateTag,
     deleteTag,
+    batchDeleteTags,
     updateSettings,
   };
 }

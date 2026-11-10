@@ -47,6 +47,8 @@ export function useCMSEpisodeActions({
         `https://drive.google.com/file/d/MASTER-${nextEpId}/view`,
       youtubeUrl: episodePayload.masterVideoInfo?.youtubeUrl || '',
       facebookUrl: episodePayload.masterVideoInfo?.facebookUrl || '',
+      tiktokUrl: episodePayload.masterVideoInfo?.tiktokUrl || '',
+      instagramUrl: episodePayload.masterVideoInfo?.instagramUrl || '',
       viewsCount: episodePayload.masterVideoInfo?.viewsCount || 0,
       performanceNote:
         episodePayload.masterVideoInfo?.performanceNote ||

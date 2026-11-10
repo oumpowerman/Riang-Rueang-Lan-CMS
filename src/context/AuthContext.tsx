@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { authService, UserProfile, UserRole } from '../firebase/authService';
+import {
+  authService,
+  loadPersistedDriveTokenPayload,
+  UserProfile,
+  UserRole,
+} from '../firebase/authService';
+import { firestoreService } from '../firebase/firestoreService';
 import { testFirestoreConnection } from '../firebase/config';
 
 interface AuthContextType {
@@ -28,6 +34,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() =>
+    authService.getDriveAccessToken()
+  );
 
   useEffect(() => {
     // Test initial connection
@@ -59,6 +68,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Real-time Cloud Sync for Google Drive OAuth Token (50-minute valid window across tabs & devices)
+  useEffect(() => {
+    let expiryTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleExpiry = (expiresAt: number) => {
+      if (expiryTimeout) clearTimeout(expiryTimeout);
+      const remainingMs = expiresAt - Date.now();
+      if (remainingMs <= 0) {
+        authService.setDriveAccessToken(null, { syncToCloud: false });
+        setDriveAccessToken(null);
+        return;
+      }
+      expiryTimeout = setTimeout(() => {
+        authService.setDriveAccessToken(null, { syncToCloud: false });
+        setDriveAccessToken(null);
+      }, remainingMs);
+    };
+
+    const unsubDriveAuth = firestoreService.subscribeGoogleDriveAuth(
+      (cloudAuth) => {
+        const now = Date.now();
+        const localPayload = loadPersistedDriveTokenPayload();
+
+        if (cloudAuth && cloudAuth.token && cloudAuth.expiresAt > now) {
+          // Valid token on Cloud -> sync to localStorage and state on this machine
+          authService.setDriveAccessToken(cloudAuth.token, {
+            expiresAt: cloudAuth.expiresAt,
+            connectedEmail: cloudAuth.connectedEmail,
+            syncToCloud: false,
+          });
+          setDriveAccessToken(cloudAuth.token);
+          scheduleExpiry(cloudAuth.expiresAt);
+        } else if (localPayload && localPayload.token && localPayload.expiresAt > now) {
+          // Valid token in local browser -> auto-upload to Cloud so other devices receive it
+          authService.setDriveAccessToken(localPayload.token, {
+            expiresAt: localPayload.expiresAt,
+            connectedEmail: localPayload.connectedEmail,
+            syncToCloud: true,
+          });
+          setDriveAccessToken(localPayload.token);
+          scheduleExpiry(localPayload.expiresAt);
+        } else {
+          // Both expired or empty
+          authService.setDriveAccessToken(null, { syncToCloud: false });
+          setDriveAccessToken(null);
+        }
+      },
+      (err) => {
+        console.warn('Google Drive auth Cloud subscription warning:', err);
+      }
+    );
+
+    return () => {
+      unsubDriveAuth();
+      if (expiryTimeout) clearTimeout(expiryTimeout);
+    };
   }, []);
 
   const loginWithEmail = async (email: string, pass: string) => {
@@ -96,8 +163,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(authService.getDriveAccessToken());
-
   const signInWithGoogle = async (): Promise<string> => {
     setIsLoading(true);
     try {
@@ -127,7 +192,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentRole: UserRole = userProfile?.role || 'EDITOR';
   const isAdmin = currentRole === 'ADMIN' || currentRole === 'PRODUCER';
   const isEditor = currentRole === 'EDITOR' || isAdmin;
-  const isGoogleDriveConnected = Boolean(driveAccessToken && currentUser && !currentUser.isAnonymous);
+  // Connected if a valid (non-expired) driveAccessToken is available locally or via Cloud Sync
+  const isGoogleDriveConnected = Boolean(driveAccessToken);
 
   return (
     <AuthContext.Provider

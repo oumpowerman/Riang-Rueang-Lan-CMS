@@ -51,22 +51,53 @@ export function normalizeCompareKey(str: string): string {
     .replace(/\s+/g, ' ');
 }
 
+/**
+ * Extracts strictly hashtag words (starting with #) from a string.
+ * Discards plain words, URLs, and pure numbers (e.g. #1, #EP1).
+ */
+export function extractHashtagsOnly(rawText: string): string[] {
+  if (!rawText || !rawText.trim()) return [];
+  const results: string[] = [];
+  // Match # followed by non-space, non-comma, non-hashtag characters
+  const matches = rawText.match(/#([^\s#,\t\n\r"']+)/g);
+  if (!matches) return [];
+
+  for (const m of matches) {
+    const word = m.replace(/^#+/, '').trim();
+    // Exclude empty, pure numbers, pure EP tags, or URLs
+    if (
+      !word ||
+      /^\d+$/.test(word) ||
+      /^(ep\.?|ตอนที่)\d+$/i.test(word) ||
+      word.startsWith('http')
+    ) {
+      continue;
+    }
+    results.push(word);
+  }
+
+  return Array.from(new Set(results));
+}
+
 export function parseEpisodeTitleAndNumber(rawEpTitle: string): {
   seriesBaseName: string;
   episodeNo: number;
 } {
   const cleaned = rawEpTitle.trim();
-  const match = cleaned.match(/^(.*?)\s*(?:EP\.?|ตอนที่|#|Ep\.?)\s*(\d+)\s*$/i);
+  // Support prefixes like "5 อันดับ", and suffixes like "EP.1 สุดฮา!"
+  const match = cleaned.match(/^(.*?)\s*(?:EP\.?|ตอนที่|#|Ep\.?)\s*(\d+)(.*)$/i);
   if (match) {
-    const base = match[1].trim() || cleaned;
+    let base = match[1].trim();
+    // Strip ranking prefixes like "5 อันดับ", "10 อันดับ", "20 อันดับ" to get clean series title
+    base = base.replace(/^\d+\s*(?:อันดับ|จัดอันดับ|ดับ)\s*/i, '').trim();
     const epNo = parseInt(match[2], 10);
     return {
-      seriesBaseName: base,
+      seriesBaseName: base || cleaned,
       episodeNo: Number.isFinite(epNo) && epNo > 0 ? epNo : 1,
     };
   }
   return {
-    seriesBaseName: cleaned,
+    seriesBaseName: cleaned.replace(/^\d+\s*(?:อันดับ|จัดอันดับ|ดับ)\s*/i, '').trim() || cleaned,
     episodeNo: 1,
   };
 }
@@ -235,16 +266,13 @@ export function parseSheetClipboardData(params: {
     const { rawLine, title, rawColB, episodeUrl, episodeTitle } = item;
     const normTitle = normalizeCompareKey(title);
 
-    // Extract tags from Column B
-    const extractedTags = rawColB
-      .split(/[#,\s]+/)
-      .map((t) => t.trim())
-      .filter(Boolean);
+    // Extract tags strictly with # from Column B
+    const extractedTags = extractHashtagsOnly(rawColB);
 
-    // Optionally include seriesBaseName from Column D as a tag on the footage
+    // Only include seriesBaseName as a tag if explicitly opted-in (default is false)
     if (episodeTitle && includeSeriesTagOnFootage) {
       const { seriesBaseName } = parseEpisodeTitleAndNumber(episodeTitle);
-      if (seriesBaseName) {
+      if (seriesBaseName && !extractedTags.includes(seriesBaseName)) {
         extractedTags.push(seriesBaseName);
       }
     }
@@ -410,14 +438,16 @@ export function parseSheetClipboardData(params: {
     r.tagsToCreate.forEach((t) => uniqueNewTags.add(t));
   });
 
-  episodeGroups.forEach((eg) => {
-    if (
-      eg.primaryTagName &&
-      !tagByLowerName.has(eg.primaryTagName.toLowerCase())
-    ) {
-      uniqueNewTags.add(eg.primaryTagName);
-    }
-  });
+  if (includeSeriesTagOnFootage) {
+    episodeGroups.forEach((eg) => {
+      if (
+        eg.primaryTagName &&
+        !tagByLowerName.has(eg.primaryTagName.toLowerCase())
+      ) {
+        uniqueNewTags.add(eg.primaryTagName);
+      }
+    });
+  }
 
   const existingEpisodesToUpdateCount = episodeGroups.filter(
     (g) => g.existingEpisode !== null

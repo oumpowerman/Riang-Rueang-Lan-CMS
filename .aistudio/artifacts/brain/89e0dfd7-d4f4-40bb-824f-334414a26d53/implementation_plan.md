@@ -1,49 +1,52 @@
-# แผนการพัฒนาระบบบันทึกข้อมูลก้อนใหญ่ขึ้น Cloud (Firestore) ครบ 100% (Batch Write Lock & Await All Chunks)
+# แผนการพัฒนา: ปรับปรุงระบบจับคู่แท็กจาก Sheet (ดึงเฉพาะ `#` ในคอลัมน์ B) & เครื่องมือสแกนล้างแท็กชื่อคลิปออกจากคลัง
 
-## 1. ภาพรวมของปัญหาและแนวทางแก้ไข (Overview)
-เมื่อนำเข้าคลิปหรือจัดการข้อมูลจำนวนมาก (เช่น 900+ คลิป หรือหลายพันคลิป) Firestore จำกัดการเขียนต่อ 1 Batch ไม่เกิน **400 รายการ** (`MAX_BATCH_OPERATIONS = 400`) จึงต้องแบ่งส่งเป็นก้อนๆ (เช่น 950 คลิป = 3 ก้อน: 400 + 400 + 150)
+## 1. ภาพรวมของแนวทางแก้ไข (Solution Overview)
 
-**สาเหตุที่ข้อมูลเหลือ 400 รายการก่อนหน้านี้:**
-1. **`onSnapshot` แทรกกลางระหว่างส่งก้อนข้อมูล:** ทันทีที่ก้อนที่ 1 (400 คลิปแรก) บันทึกเสร็จ Listener `onSnapshot` ของ Firestore จะยิงข้อมูล 400 คลิปกลับมาทับ State บนหน้าจอและ `localStorage` ทันทีในขณะที่ก้อนที่ 2 และ 3 ยังส่งไม่เสร็จ
-2. **UI แจ้ง 100% ก่อนส่งขึ้น Cloud ครบทุกก้อน:** ฟังก์ชัน `batchAddDirectFootage`, `batchSyncFootageTagsByMap`, และคำสั่งกลุ่มอื่นๆ ไม่ได้ `await` รอให้ทุกก้อนบันทึกลง Firestore เสร็จสมบูรณ์ ทำให้หน้าจอขึ้น "สำเร็จ 100%" ทันที และหากผู้ใช้กดรีเฟรชเบราว์เซอร์ ก้อนที่เหลือจะถูกตัดจบกลางคัน
+### 1.1 แก้ไขตัวดึงแท็กจาก Sheet ให้ดึงเฉพาะคำที่มี `#` นำหน้าในคอลัมน์ B เท่านั้น (`sheetImportParser.ts` & `SheetTagImportModal.tsx`)
+1. **Strict Hashtag Extraction (`/#([^\s#,]+)/g`)**:
+   - เปลี่ยนวิธีอ่านคอลัมน์ B จากเดิมที่ใช้ `.split(/[#,\s]+/)` (ซึ่งทำให้ข้อความธรรมดาหรือชื่อคลิปที่ไม่มี `#` ถูกหั่นกลายเป็นแท็ก) มาเป็นการดึง**เฉพาะคำที่มีเครื่องหมาย `#` นำหน้าอย่างชัดเจนเท่านั้น**
+   - กรองคำที่เป็นหมายเลขตอน (เช่น `#1`, `#EP1`, `EP.1`) หรือลิงก์ URL ไม่ให้หลุดมาเป็นแท็กหมวดหมู่
+2. **ยกเลิกการดึงชื่อคลิปหลัก (คอลัมน์ D) มาสร้างเป็น `#แท็กหมวดหมู่`**:
+   - ปรับค่าเริ่มต้น `includeSeriesTagOnFootage` เป็น `false`
+   - ยกเลิกการเรียก `ensureTagExists(group.primaryTagName, true)` จากคอลัมน์ D ตอนสร้าง EP — ให้ EP ใช้หมวดหมู่หลักจากแท็ก `#...` ที่มีอยู่ในคอลัมน์ B ของฟุตเทจในกลุ่มนั้นแทน เพื่อไม่ให้ชื่อคลิป EP (เช่น `พี่เสกสุดฮา EP.1` หรือ `5 อันดับ...`) ถูกนำไปสร้างเป็น `#แท็ก` ใหม่อีกต่อไป
 
 ---
 
-## 2. รายละเอียดการปรับปรุงระบบ (Key Changes)
+### 1.2 เพิ่มเครื่องมือค้นหาและลบแท็กที่เป็นชื่อคลิป / แท็กขยะออกจากคลัง (`JunkTagCleanupModal.tsx`)
+1. **ระบบตรวจจับแท็กที่เป็นชื่อคลิปอัตโนมัติ (Smart Clip-Title & Junk Tag Detector)**:
+   - สแกนแท็กทั้งหมดในคลังและคัดกรองแท็กต้องสงสัยออกเป็นกลุ่มให้เลือกติ๊กลบได้ทันที:
+     - **ตรงกับชื่อฟุตเทจย่อยหรือชื่อ EP ในคลัง**: แท็กที่มีชื่อตรงกับ `footage.title`, `episode.title` หรือ `episode.seriesTitle`
+     - **แท็กที่ถูกสร้างจากชื่อ EP อัตโนมัติ**: แท็กที่มีคำว่า `EP.`, `อันดับ`, `สุดฮา`, หรือมีคำอธิบาย `"สร้างอัตโนมัติจากชื่อรายการจัดอันดับใน Google Sheets"`
+     - **แท็กที่ไม่มีคลิปใช้งาน (`0 คลิป`) หรือประโยคยาวผิดปกติ**: แท็กที่ไม่ได้ผูกกับคลิปใดเลย หรือมีความยาวเกินชื่อหมวดหมู่ปกติ
+2. **ระบบลบแท็กแบบกลุ่มความเร็วสูง (`batchDeleteTags` + Cloud Firestore Sync)**:
+   - ลบแท็กที่เลือกออกจากรายการหมวดหมู่ทั้งหมดในคลิกเดียว
+   - ถอดรหัสแท็กที่ถูกลบออกจาก `footage.tags` และ `sources.tags` อัตโนมัติ (หากคลิปใดถอดแท็กขยะออกแล้วไม่เหลือหมวดหมู่อื่น ระบบจะส่งกลับเข้า **"ไม่มีหมวดหมู่ (Staging)"** อย่างปลอดภัย ไม่ทำให้คลิปหาย)
+   - ซิงก์การลบขึ้น Cloud (Firestore) ทันทีเพื่อให้ทุกเครื่องเห็นหมวดหมู่ที่สะอาดตรงกัน
+3. **จุดกดเรียกใช้งานสะดวก 2 จุด**:
+   - ปุ่ม **"ล้างแท็กชื่อคลิป/แท็กขยะ"** บนแถบด้านขวาบนของหน้าต่าง **ซิงก์แท็กจาก Sheet (`SheetTagImportModal`)**
+   - ปุ่ม **"ล้างแท็กชื่อคลิป/แท็กขยะ"** ในหน้าต่าง **จัดการหมวดหมู่ 3 ระดับ (`ThreeTierCategoryManagerModal`)**
 
-### 2.1 ระบบล็อก `onSnapshot` ชั่วคราวระหว่างส่งข้อมูลก้อนใหญ่ (`activeBatchWritesCount`)
-- **ไฟล์ที่เกี่ยวข้อง:** `src/firebase/firestoreService.ts`, `src/context/cms/useCMSCloudAndStorageSync.ts`
-- **การทำงาน:**
-  - เพิ่มตัวนับสถานะการเขียนข้อมูลก้อนใหญ่ (`activeBatchWritesCount`) และฟังก์ชัน `firestoreService.isBatchWriteInProgress()`
-  - ในขณะที่ `activeBatchWritesCount > 0` ระบบจะระงับการนำข้อมูลครึ่งๆ กลางๆ จาก `onSnapshot` (`subscribeFootages`, `subscribeSources`, `subscribeEpisodes`, `subscribeCategories`, `subscribeCategoryGroups`) มาทับ State บนหน้าจอชั่วคราว
-  - เมื่อส่งครบทุกก้อนแล้ว (`activeBatchWritesCount === 0`) ระบบจะปลดล็อกและซิงก์ข้อมูลล่าสุดจาก Firestore ลงหน้าจอและ `localStorage` ให้ตรงกัน 100%
+---
 
-### 2.2 ระบบรอ (`await`) ให้ครบทุกก้อนและรายงานความคืบหน้ารายก้อน (`BatchChunkProgress`)
-- **ไฟล์ที่เกี่ยวข้อง:**
-  - `src/firebase/firestoreService.ts`
-  - `src/context/cms/cms.types.ts`
-  - `src/context/cms/useCMSFootageActions.ts`
-  - `src/context/cms/useCMSCategoryActions.ts`
-  - `src/context/cms/useCMSEpisodeActions.ts`
-- **การทำงาน:**
-  - เพิ่ม Callback `onProgress?: (progress: BatchChunkProgress) => void` ใน `commitOperationsInChunks` เพื่อส่งค่า `{ completedChunks, totalChunks, completedOps, totalOps }` หลังแต่ละก้อนบันทึกขึ้น Cloud สำเร็จ
-  - ปรับฟังก์ชันจัดการข้อมูลกลุ่มทั้งหมด (`batchAddDirectFootage`, `batchAddTags`, `batchSyncFootageTagsByMap`, `batchUpdateFootageTags`, `batchDeleteFootage`, `batchUpsertEpisodes`) ให้คืนค่าเป็น `Promise` ที่รอจนกว่าทุกก้อนจะบันทึกขึ้น Firestore เสร็จสมบูรณ์
+## 2. รายละเอียดการแก้ไขไฟล์ (File Changes)
 
-### 2.3 แสดงสถานะก้อนข้อมูลจริง (ก้อนที่ 1/3 ➔ 2/3 ➔ 3/3) ในทุกหน้าต่างนำเข้าและซิงก์
-- **ไฟล์ที่เกี่ยวข้อง:**
-  - `src/components/footage/driveImport/useGoogleDriveBatchImport.ts`
-  - `src/components/footage/GoogleDriveBatchImportModal.tsx`
-  - `src/components/footage/driveImport/DriveImportModalFooter.tsx`
-  - `src/components/footage/SheetTagImportModal.tsx`
-- **การทำงาน:**
-  - **หน้าต่างนำเข้า Google Drive (`GoogleDriveBatchImportModal`):** รอ (`await`) การบันทึกหมวดหมู่และคลิปทุกก้อนขึ้น Cloud จริงๆ พร้อมแสดงข้อความสถานะ เช่น `"กำลังบันทึกขึ้น Cloud ก้อนที่ 2/3 (800/950 รายการ)..."` และแสดงเปอร์เซ็นต์ตามก้อนที่ส่งจริง ก่อนเปลี่ยนเป็นหน้าจอสำเร็จ 100%
-  - **หน้าต่างซิงก์ Google Sheet (`SheetTagImportModal`):** รอ (`await`) การบันทึกคลิปใหม่, อัปเดตหมวดหมู่, และสร้าง/อัปเดต EP จนครบทุกก้อนบน Cloud พร้อมแสดงความคืบหน้ารายก้อนแบบเรียลไทม์
+1. **`src/components/footage/sheetImport/sheetImportParser.ts`**:
+   - เพิ่มฟังก์ชัน `extractHashtagsOnly(rawColB: string): string[]` ที่ดึงเฉพาะคำที่มี `#` นำหน้า และกรองชื่อคลิป/เลข EP ออก
+   - ปรับ `parseEpisodeTitleAndNumber` ให้รองรับกรณีที่มีข้อความต่อท้ายหลัง `EP.X` (เช่น `5 อันดับ... EP.1 สุดฮา!`)
+   - ยกเลิกการนำ `primaryTagName` จากคอลัมน์ D เข้าสู่ `uniqueNewTags`
+2. **`src/components/footage/SheetTagImportModal.tsx` & `src/components/footage/sheetImport/SheetInspectionHeaderBar.tsx`**:
+   - เปลี่ยนค่าเริ่มต้น `includeSeriesTagOnFootage` เป็น `false`
+   - ยกเลิกการบังคับสร้างแท็กจาก `group.primaryTagName` (คอลัมน์ D) ใน Phase 1 โดยให้ผูก `primaryTagId` ของ EP เข้ากับแท็ก `#` ตัวแรกของแถวในกลุ่มนั้นแทน
+   - เพิ่มปุ่มเปิดหน้าต่าง **ล้างแท็กชื่อคลิป (`JunkTagCleanupModal`)**
+3. **`src/firebase/firestoreService.ts` & `src/context/cms/useCMSCategoryActions.ts` & `src/context/cms/cms.types.ts`**:
+   - เพิ่ม `batchDeleteCategories(categoryIds: string[])` ใน `firestoreService.ts`
+   - เพิ่ม `batchDeleteTags(tagIds: string[])` ใน `useCMSCategoryActions.ts` ที่ลบแท็กแบบกลุ่มพร้อมอัปเดต `footage` และ `sources` ขึ้น Cloud ในครั้งเดียว
+4. **`src/components/tags/JunkTagCleanupModal.tsx` & `src/components/tags/ThreeTierCategoryManagerModal.tsx`**:
+   - สร้าง Modal สแกนและลบแท็กที่เป็นชื่อคลิป/แท็กขยะ (ใช้ `BaseModal` + Portal + Light Pastel Theme) พร้อมตัวกรอง ค้นหา เลือกทั้งหมด และรายงานผลการลบ
 
-### 2.4 ระบบป้องกันการเผลอปิดหน้าต่างหรือรีเฟรชเบราว์เซอร์ก่อนครบ 100%
-- **ไฟล์ที่เกี่ยวข้อง:**
-  - `src/firebase/firestoreService.ts`
-  - `src/components/footage/GoogleDriveBatchImportModal.tsx`
-  - `src/components/footage/SheetTagImportModal.tsx`
-- **การทำงาน:**
-  - **เตือนเมื่อกด Refresh / ปิดแท็บ (`beforeunload`):** ผูก Event `window.addEventListener('beforeunload', ...)` อัตโนมัติตราบใดที่ยังมีก้อนข้อมูลกำลังส่งขึ้น Cloud (`activeBatchWritesCount > 0`) เพื่อแจ้งเตือนผู้ใช้ไม่ให้เผลอรีเฟรชหน้าเว็บก่อนส่งครบทุกก้อน
-  - **ล็อกปุ่มปิด Modal ชั่วคราว:** ปิดการทำงานของปุ่มปิด (`X`), ปุ่มยกเลิก, การคลิกพื้นหลัง (`closeOnBackdropClick={false}`), และปุ่ม `ESC` (`closeOnEsc={false}`) ในระหว่างที่กำลังส่งก้อนข้อมูลขึ้น Cloud
+---
+
+## 3. ขั้นตอนการตรวจสอบ (Verification Plan)
+1. ตรวจสอบการคอมไพล์และ TypeScript ด้วย `compile_applet` และ `lint_applet`
+2. ทดสอบวางข้อมูล Sheet ใน `SheetTagImportModal` เพื่อยืนยันว่าระบบดึงเฉพาะคำที่มี `#` นำหน้าในคอลัมน์ B เท่านั้น และไม่นำชื่อ EP ในคอลัมน์ D มาสร้างเป็นแท็กใหม่
+3. ทดสอบเปิด `JunkTagCleanupModal` เพื่อตรวจสอบการสแกนหาแท็กที่เป็นชื่อคลิป/ชื่อ EP และการกดลบแบบกลุ่มขึ้น Cloud

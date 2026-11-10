@@ -77,6 +77,25 @@ export interface QuickSortUndoRecord {
   timestamp: number;
 }
 
+export interface TagReorgUndoRecord {
+  id: string;
+  summaryText: string;
+  previousTags: CategoryTag[];
+  previousFootages: Footage[];
+  timestamp: number;
+}
+
+export type BatchTagMoveDestination =
+  | {
+      mode: 'MOVE_TO_GROUP';
+      targetGroupId: string;
+    }
+  | {
+      mode: 'MOVE_TO_PARENT_TAG';
+      targetParentTagId: string;
+      entityType?: EntitySubtype;
+    };
+
 export interface BuilderPreselectRequest {
   tagId: string;
   recipeId: MixRecipeId;
@@ -112,6 +131,8 @@ export interface CMSContextType {
   setIsBatchAssignCategoryModalOpen: (open: boolean) => void;
   isSheetTagImportModalOpen: boolean;
   setIsSheetTagImportModalOpen: (open: boolean) => void;
+  isYouTubeDateSyncModalOpen: boolean;
+  setIsYouTubeDateSyncModalOpen: (open: boolean) => void;
   isSupabaseSyncModalOpen: boolean;
   setIsSupabaseSyncModalOpen: (open: boolean) => void;
   isSupabaseConfigModalOpen: boolean;
@@ -193,8 +214,27 @@ export interface CMSContextType {
     newTags: CategoryTag[],
     onChunkProgress?: (progress: BatchChunkProgress) => void
   ) => Promise<void>;
+  batchMoveOrReparentTags: (
+    tagIdsToMove: string[],
+    destination: BatchTagMoveDestination,
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<{
+    movedCount: number;
+    updatedClipsCount: number;
+    summaryText: string;
+  }>;
+  lastTagReorgUndoRecord: TagReorgUndoRecord | null;
+  undoLastTagReorg: () => Promise<void>;
+  dismissTagReorgUndoRecord: () => void;
   updateTag: (id: string, updates: Partial<Omit<CategoryTag, 'id'>>) => void;
   deleteTag: (id: string) => void;
+  batchDeleteTags: (
+    tagIds: string[],
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<{
+    deletedCount: number;
+    updatedFootagesCount: number;
+  }>;
   updateSettings: (updates: Partial<SystemSettings>) => void;
 
   // Actions: Flow A (1-to-1 Direct Footage)
@@ -266,6 +306,10 @@ export interface CMSContextType {
     mode?: 'REPLACE' | 'APPEND',
     onChunkProgress?: (progress: BatchChunkProgress) => void
   ) => Promise<void>;
+  batchSyncFootageCreatedAtByMap: (
+    createdAtByFootageId: Record<string, string>,
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<number>;
   batchDeleteFootage: (
     footageIds: string[],
     onChunkProgress?: (progress: BatchChunkProgress) => void

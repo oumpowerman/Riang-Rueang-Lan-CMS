@@ -13,6 +13,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
   channelName: 'เรียงเรื่องลั่น (Riang-Rueang-Lan)',
   defaultMascotName: 'เจ้าลั่น (มาสคอตไมค์ทอง)',
   driveRootFolderUrl: 'https://drive.google.com/drive/folders/riang-rueang-lan-vault',
+  driveApiKey: '',
 };
 
 export const STAGING_GROUP_ID = 'GRP-STAGING';

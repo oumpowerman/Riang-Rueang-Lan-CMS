@@ -28,6 +28,7 @@ import { E2EPipelineBoard } from './components/workflow/E2EPipelineBoard';
 import { AuthModal } from './components/auth/AuthModal';
 import { SupabaseContentSyncModal } from './components/supabase/SupabaseContentSyncModal';
 import { SupabaseConfigModal } from './components/supabase/SupabaseConfigModal';
+import { YouTubeDateSyncModal } from './components/episodes/youtubeDateSync/YouTubeDateSyncModal';
 import { CMSProvider, useCMS } from './context/CMSContext';
 import { AuthProvider } from './context/AuthContext';
 
@@ -58,7 +59,7 @@ const MainWorkspace: React.FC = () => {
         <Navbar onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
 
         {/* Scrollable Content Viewport with Thin Scrollbars & Framer Motion Page Transitions */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 pb-24 md:pb-6">
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin p-3 sm:p-6 pb-24 md:pb-6">
           <div className="max-w-[1440px] w-full mx-auto">
             <AnimatePresence mode="wait">
               <motion.div
@@ -92,6 +93,7 @@ const MainWorkspace: React.FC = () => {
       <GoogleDriveBatchImportModal />
       <SheetTagImportModal />
       <BatchAssignCategoryModal />
+      <YouTubeDateSyncModal />
       <SupabaseContentSyncModal
         isOpen={isSupabaseSyncModalOpen}
         onClose={() => setIsSupabaseSyncModalOpen(false)}

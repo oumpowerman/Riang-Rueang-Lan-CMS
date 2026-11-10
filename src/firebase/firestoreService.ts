@@ -16,6 +16,10 @@ import { RawSource } from '../types/source.types';
 import { CategoryGroup, CategoryTag, SystemSettings } from '../types/tag.types';
 import { Episode } from '../types/episode.types';
 import { DriveSyncRecord } from '../types/driveSync.types';
+import {
+  SupabaseConnectionConfig,
+  SupabaseRowDraftOverride,
+} from '../types/supabaseSync.types';
 import { INITIAL_CATEGORY_GROUPS } from '../services/seedData';
 
 /**
@@ -317,6 +321,18 @@ export const firestoreService = {
   async deleteCategory(categoryId: string) {
     const docRef = doc(db, 'categories', categoryId);
     await deleteDoc(docRef);
+  },
+
+  async batchDeleteCategories(
+    categoryIds: string[],
+    onProgress?: (progress: BatchChunkProgress) => void
+  ) {
+    if (!categoryIds.length) return;
+    const ops: BatchWriteOp[] = categoryIds.map((id) => ({
+      type: 'delete',
+      ref: doc(db, 'categories', id),
+    }));
+    await commitOperationsInChunks(ops, onProgress);
   },
 
   // Source CRUD (Flow B 1:N Livestream Sources SRC-XXXX)
@@ -692,6 +708,150 @@ export const firestoreService = {
     } catch (err) {
       console.warn('Failed to fetch all DriveSyncRecords:', err);
       return [];
+    }
+  },
+
+  // ==========================================
+  // SUPABASE CENTRAL SYNC CLOUD PERSISTENCE
+  // ==========================================
+
+  subscribeSupabaseConfig(
+    onUpdate: (config: SupabaseConnectionConfig | null) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const docRef = doc(db, 'system_settings', 'supabase_config');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) {
+          onUpdate(null);
+        } else {
+          onUpdate(snap.data() as SupabaseConnectionConfig);
+        }
+      },
+      onError
+    );
+  },
+
+  async saveSupabaseConfigToCloud(config: SupabaseConnectionConfig): Promise<void> {
+    try {
+      const docRef = doc(db, 'system_settings', 'supabase_config');
+      await setDoc(
+        docRef,
+        sanitizeForFirestore({
+          ...config,
+          updatedAt: new Date().toISOString(),
+        }),
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn('Failed to save Supabase config to Cloud:', err);
+    }
+  },
+
+  subscribeSupabaseRowDrafts(
+    onUpdate: (overrides: Record<string, SupabaseRowDraftOverride> | null) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const docRef = doc(db, 'system_settings', 'supabase_row_drafts');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) {
+          onUpdate(null);
+        } else {
+          const data = snap.data() as {
+            overrides?: Record<string, SupabaseRowDraftOverride>;
+          };
+          onUpdate(data?.overrides || {});
+        }
+      },
+      onError
+    );
+  },
+
+  async saveSupabaseRowDraftsToCloud(
+    overrides: Record<string, SupabaseRowDraftOverride>
+  ): Promise<void> {
+    try {
+      const docRef = doc(db, 'system_settings', 'supabase_row_drafts');
+      // Overwrite the document so removed overrides are also cleared in Cloud
+      await setDoc(
+        docRef,
+        sanitizeForFirestore({
+          overrides,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    } catch (err) {
+      console.warn('Failed to save Supabase row drafts to Cloud:', err);
+    }
+  },
+
+  // ==========================================
+  // GOOGLE DRIVE OAUTH TOKEN CLOUD SYNC (50-MIN SHARED WINDOW)
+  // ==========================================
+
+  subscribeGoogleDriveAuth(
+    onUpdate: (
+      authData: {
+        token: string;
+        expiresAt: number;
+        connectedEmail?: string;
+        updatedAt?: string;
+      } | null
+    ) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const docRef = doc(db, 'system_settings', 'google_drive_auth');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) {
+          onUpdate(null);
+        } else {
+          const data = snap.data() as {
+            token?: string;
+            expiresAt?: number;
+            connectedEmail?: string;
+            updatedAt?: string;
+          };
+          if (data && data.token && typeof data.expiresAt === 'number') {
+            onUpdate({
+              token: data.token,
+              expiresAt: data.expiresAt,
+              connectedEmail: data.connectedEmail,
+              updatedAt: data.updatedAt,
+            });
+          } else {
+            onUpdate(null);
+          }
+        }
+      },
+      onError
+    );
+  },
+
+  async saveGoogleDriveAuthToCloud(
+    authData: {
+      token: string | null;
+      expiresAt: number;
+      connectedEmail?: string;
+    }
+  ): Promise<void> {
+    try {
+      const docRef = doc(db, 'system_settings', 'google_drive_auth');
+      await setDoc(
+        docRef,
+        sanitizeForFirestore({
+          token: authData.token || '',
+          expiresAt: authData.expiresAt || 0,
+          connectedEmail: authData.connectedEmail || '',
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    } catch (err) {
+      console.warn('Failed to save Google Drive auth token to Cloud:', err);
     }
   },
 };

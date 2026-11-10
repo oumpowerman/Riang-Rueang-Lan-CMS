@@ -30,6 +30,10 @@ interface BuilderStep4MetadataFormProps {
   onChangeYoutubeUrl: (val: string) => void;
   facebookUrl: string;
   onChangeFacebookUrl: (val: string) => void;
+  tiktokUrl?: string;
+  onChangeTiktokUrl?: (val: string) => void;
+  instagramUrl?: string;
+  onChangeInstagramUrl?: (val: string) => void;
   introMascotScript: string;
   onChangeIntroMascotScript: (val: string) => void;
   outroMascotScript: string;
@@ -68,6 +72,10 @@ export const BuilderStep4MetadataForm: React.FC<
   onChangeYoutubeUrl,
   facebookUrl,
   onChangeFacebookUrl,
+  tiktokUrl = '',
+  onChangeTiktokUrl,
+  instagramUrl = '',
+  onChangeInstagramUrl,
   introMascotScript,
   onChangeIntroMascotScript,
   outroMascotScript,
@@ -343,7 +351,37 @@ export const BuilderStep4MetadataForm: React.FC<
                             onChange={(e) =>
                               onChangeFacebookUrl(e.target.value)
                             }
-                            placeholder="https://www.facebook.com/riangrueanglan/videos/..."
+                            placeholder="https://www.facebook.com/..."
+                            className="w-full px-3 py-1.5 text-xs bg-[#faf7f2] border border-[#e8dfd3] rounded-lg focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
+                            <Video className="w-3.5 h-3.5 text-[#2563EB]" />
+                            <span>ลิงก์ TikTok</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={tiktokUrl}
+                            onChange={(e) =>
+                              onChangeTiktokUrl && onChangeTiktokUrl(e.target.value)
+                            }
+                            placeholder="https://www.tiktok.com/@juijui.j/video/..."
+                            className="w-full px-3 py-1.5 text-xs bg-[#faf7f2] border border-[#e8dfd3] rounded-lg focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
+                            <Video className="w-3.5 h-3.5 text-[#D946EF]" />
+                            <span>ลิงก์ Instagram</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={instagramUrl}
+                            onChange={(e) =>
+                              onChangeInstagramUrl && onChangeInstagramUrl(e.target.value)
+                            }
+                            placeholder="https://www.instagram.com/reel/..."
                             className="w-full px-3 py-1.5 text-xs bg-[#faf7f2] border border-[#e8dfd3] rounded-lg focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
                           />
                         </div>

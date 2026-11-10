@@ -29,6 +29,7 @@ export const FootageLibraryView: React.FC = () => {
         onOpenGoogleDriveBatchModal={() => vault.setIsGoogleDriveBatchModalOpen(true)}
         onOpenFullscreenStudio={() => vault.setIsFullscreenStudioOpen(true)}
         onOpenSheetTagImportModal={() => vault.setIsSheetTagImportModalOpen(true)}
+        onOpenYouTubeDateSyncModal={() => vault.setIsYouTubeDateSyncModalOpen(true)}
       />
 
       {/* 2. Progressive 3-Tier Category Explorer (Group -> Main Category -> Subcategory) */}

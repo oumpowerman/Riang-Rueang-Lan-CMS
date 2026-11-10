@@ -74,7 +74,7 @@
 }
 
 /* ==========================================================================
-   Ultra-Slim 2px Translucent Scrollbars (Global & Utility Classes)
+   Slim 5px Pastel Translucent Scrollbars (Global & Utility Classes)
    ========================================================================== */
 *::-webkit-scrollbar,
 ::-webkit-scrollbar,
@@ -82,8 +82,8 @@
 .scrollbar-earth::-webkit-scrollbar,
 .thin-scrollbar::-webkit-scrollbar,
 .scrollbar-ultraslim::-webkit-scrollbar {
-  width: 2px !important;
-  height: 2px !important;
+  width: 5px !important;
+  height: 5px !important;
 }
 
 *::-webkit-scrollbar-button,
@@ -112,7 +112,7 @@
 .scrollbar-earth::-webkit-scrollbar-thumb,
 .thin-scrollbar::-webkit-scrollbar-thumb,
 .scrollbar-ultraslim::-webkit-scrollbar-thumb {
-  background-color: rgba(196, 180, 160, 0.22) !important;
+  background-color: rgba(180, 164, 144, 0.48) !important;
   border-radius: 9999px !important;
 }
 
@@ -122,7 +122,7 @@
 .scrollbar-earth::-webkit-scrollbar-thumb:hover,
 .thin-scrollbar::-webkit-scrollbar-thumb:hover,
 .scrollbar-ultraslim::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(150, 130, 108, 0.85) !important;
+  background-color: rgba(140, 122, 102, 0.85) !important;
 }
 
 *::-webkit-scrollbar-corner,

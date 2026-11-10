@@ -44,5 +44,6 @@ export interface SystemSettings {
   channelName: string;
   defaultMascotName: string;
   driveRootFolderUrl: string;
+  driveApiKey?: string;
   savedDriveFolders?: SavedDriveFolderPreset[];
 }

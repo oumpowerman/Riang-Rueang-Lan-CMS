@@ -22,6 +22,24 @@ export interface BaseModalProps {
   children: React.ReactNode;
 }
 
+let activeOpenModalsCount = 0;
+
+const syncGlobalScrollLock = () => {
+  if (typeof document === 'undefined') return;
+  const mainEl = document.querySelector('main');
+  if (activeOpenModalsCount > 0) {
+    document.body.style.overflow = 'hidden';
+    if (mainEl) {
+      mainEl.style.overflow = 'hidden';
+    }
+  } else {
+    document.body.style.overflow = '';
+    if (mainEl) {
+      mainEl.style.overflow = '';
+    }
+  }
+};
+
 export const BaseModal: React.FC<BaseModalProps> = ({
   isOpen,
   onClose,
@@ -40,33 +58,34 @@ export const BaseModal: React.FC<BaseModalProps> = ({
   closeOnEsc = true,
   children,
 }) => {
+  // 1. Scroll lock effect — depends ONLY on `isOpen` so re-renders with inline `onClose` never corrupt scroll state
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      syncGlobalScrollLock();
+      return;
+    }
+
+    activeOpenModalsCount += 1;
+    syncGlobalScrollLock();
+
+    return () => {
+      activeOpenModalsCount = Math.max(0, activeOpenModalsCount - 1);
+      syncGlobalScrollLock();
+    };
+  }, [isOpen]);
+
+  // 2. Escape key listener effect
+  useEffect(() => {
+    if (!isOpen || !closeOnEsc) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (closeOnEsc && e.key === 'Escape') {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-
-    const mainEl = document.querySelector('main');
-    const originalBodyOverflow = document.body.style.overflow;
-    const originalMainOverflow = mainEl ? mainEl.style.overflow : '';
-
-    document.body.style.overflow = 'hidden';
-    if (mainEl) {
-      mainEl.style.overflow = 'hidden';
-    }
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = originalBodyOverflow;
-      if (mainEl) {
-        mainEl.style.overflow = originalMainOverflow;
-      }
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, closeOnEsc]);
 
   if (typeof document === 'undefined') return null;

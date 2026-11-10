@@ -76,6 +76,24 @@ export interface SupabaseSyncRowState {
   upsertMode: 'SKIP' | 'UPDATE'; // when duplicate: skip or update
 }
 
+export interface SupabaseRowDraftOverride {
+  isSelected?: boolean;
+  channelId?: string;
+  status?: string;
+  targetPlatforms?: string[];
+  includeAssets?: boolean;
+  includePillar?: boolean;
+  includeCategory?: boolean;
+  description?: string;
+  upsertMode?: 'SKIP' | 'UPDATE';
+  updatedAt?: string;
+}
+
+export interface SupabaseCloudDraftsDoc {
+  overrides: Record<string, SupabaseRowDraftOverride>;
+  updatedAt: string;
+}
+
 export interface SupabaseContentPayload {
   id?: string;
   title: string;

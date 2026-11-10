@@ -95,6 +95,10 @@ export const EpisodeBuilderView: React.FC = () => {
     setYoutubeUrl,
     facebookUrl,
     setFacebookUrl,
+    tiktokUrl,
+    setTiktokUrl,
+    instagramUrl,
+    setInstagramUrl,
     introMascotScript,
     setIntroMascotScript,
     outroMascotScript,
@@ -237,6 +241,10 @@ export const EpisodeBuilderView: React.FC = () => {
         onChangeYoutubeUrl={setYoutubeUrl}
         facebookUrl={facebookUrl}
         onChangeFacebookUrl={setFacebookUrl}
+        tiktokUrl={tiktokUrl}
+        onChangeTiktokUrl={setTiktokUrl}
+        instagramUrl={instagramUrl}
+        onChangeInstagramUrl={setInstagramUrl}
         introMascotScript={introMascotScript}
         onChangeIntroMascotScript={setIntroMascotScript}
         outroMascotScript={outroMascotScript}

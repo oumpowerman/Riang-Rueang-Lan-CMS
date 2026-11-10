@@ -10,6 +10,7 @@ import {
   Settings2,
   Sparkles,
   Tag,
+  Eraser,
 } from 'lucide-react';
 import {
   SheetSyncSummaryStats,
@@ -99,6 +100,7 @@ interface SheetHeaderRightControlsProps {
   onChangeAutoCreateMissingFootage: (val: boolean) => void;
   includeSeriesTagOnFootage: boolean;
   onChangeIncludeSeriesTagOnFootage: (val: boolean) => void;
+  onOpenJunkTagCleanup?: () => void;
 }
 
 export const SheetHeaderRightControls: React.FC<
@@ -122,6 +124,7 @@ export const SheetHeaderRightControls: React.FC<
   onChangeAutoCreateMissingFootage,
   includeSeriesTagOnFootage,
   onChangeIncludeSeriesTagOnFootage,
+  onOpenJunkTagCleanup,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -255,6 +258,15 @@ export const SheetHeaderRightControls: React.FC<
               onClick={onClearPastedText}
             />
           </>
+        )}
+
+        {/* Junk Tag Cleanup Modal Trigger */}
+        {onOpenJunkTagCleanup && (
+          <IconTooltipButton
+            icon={<Eraser className="w-4 h-4 text-[#8A4D1F]" />}
+            tooltip="สแกนและล้างแท็กชื่อคลิป/แท็กขยะ"
+            onClick={onOpenJunkTagCleanup}
+          />
         )}
 
         {/* Sync Settings Popover Icon Button */}

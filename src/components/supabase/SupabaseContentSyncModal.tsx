@@ -2,27 +2,22 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Database,
   RefreshCw,
-  Search,
   CheckCircle2,
-  AlertTriangle,
   Settings,
-  Sparkles,
+  Cloud,
 } from 'lucide-react';
 import { BaseModal } from '../ui/BaseModal';
 import { useCMS } from '../../context/CMSContext';
 import {
-  SupabaseConnectionConfig,
   SupabaseContentPayload,
   SupabaseSyncProgress,
   SupabaseSyncReport,
   SupabaseSyncRowState,
-  SUPABASE_CONTENT_STATUSES,
-  SUPABASE_TARGET_PLATFORMS,
 } from '../../types/supabaseSync.types';
 import {
   batchSyncToSupabase,
   fetchExistingContentsForEpisodes,
-  loadSupabaseConfig,
+  loadSupabaseRowDrafts,
 } from '../../services/supabaseService';
 import {
   extractEpRefFromRemark,
@@ -33,6 +28,8 @@ import { SupabasePayloadPreviewModal } from './SupabasePayloadPreviewModal';
 import { SupabaseSyncProgressView } from './SupabaseSyncProgressView';
 import { SupabaseSyncReportView } from './SupabaseSyncReportView';
 import { SupabasePaginationBar } from './SupabasePaginationBar';
+import { SupabaseSyncToolbar } from './SupabaseSyncToolbar';
+import { useSupabaseCloudSync } from './useSupabaseCloudSync';
 
 interface SupabaseContentSyncModalProps {
   isOpen: boolean;
@@ -45,8 +42,15 @@ export const SupabaseContentSyncModal: React.FC<
 > = ({ isOpen, onClose, onOpenConfig }) => {
   const { episodes } = useCMS();
 
-  const [config, setConfig] =
-    useState<SupabaseConnectionConfig>(loadSupabaseConfig);
+  // Real-time Cloud Sync of Supabase connection config & per-row draft overrides
+  const {
+    config,
+    rowDrafts,
+    isCloudSynced,
+    persistRowsToDrafts,
+    handleResetAllRowDrafts,
+  } = useSupabaseCloudSync(isOpen);
+
   const [rows, setRows] = useState<SupabaseSyncRowState[]>([]);
   const [isLoadingExisting, setIsLoadingExisting] = useState(false);
   const [dedupProgressLabel, setDedupProgressLabel] = useState(
@@ -79,19 +83,67 @@ export const SupabaseContentSyncModal: React.FC<
     setCurrentPage(1);
   }, [activeTab, searchQuery, pageSize]);
 
-  // Load existing contents using Chunked Batch Deduplication on open
+  // Apply real-time rowDrafts from Cloud onto existing rows if another device edits a row while modal is open
+  useEffect(() => {
+    if (!isOpen || rows.length === 0 || isLoadingExisting || isProcessing) return;
+
+    setRows((prev) =>
+      prev.map((row) => {
+        const draft = rowDrafts[row.episode.id];
+        if (!draft) return row;
+
+        return {
+          ...row,
+          isSelected:
+            typeof draft.isSelected === 'boolean'
+              ? draft.isSelected
+              : row.isSelected,
+          channelId:
+            typeof draft.channelId === 'string'
+              ? draft.channelId
+              : row.channelId,
+          status: typeof draft.status === 'string' ? draft.status : row.status,
+          targetPlatforms:
+            Array.isArray(draft.targetPlatforms) &&
+            draft.targetPlatforms.length > 0
+              ? draft.targetPlatforms
+              : row.targetPlatforms,
+          includeAssets:
+            typeof draft.includeAssets === 'boolean'
+              ? draft.includeAssets
+              : row.includeAssets,
+          includePillar:
+            typeof draft.includePillar === 'boolean'
+              ? draft.includePillar
+              : row.includePillar,
+          includeCategory:
+            typeof draft.includeCategory === 'boolean'
+              ? draft.includeCategory
+              : row.includeCategory,
+          description:
+            typeof draft.description === 'string'
+              ? draft.description
+              : row.description,
+          upsertMode:
+            draft.upsertMode === 'UPDATE' || draft.upsertMode === 'SKIP'
+              ? draft.upsertMode
+              : row.upsertMode,
+        };
+      })
+    );
+  }, [rowDrafts, isOpen]);
+
+  // Load existing contents using Chunked Batch Deduplication on open or when config changes
   useEffect(() => {
     if (!isOpen) return;
 
-    const currentConfig = loadSupabaseConfig();
-    setConfig(currentConfig);
     setProgress(null);
     setReport(null);
     setSyncErrorMessage(null);
     setIsProcessing(false);
     setCurrentPage(1);
 
-    if (!currentConfig.url || !currentConfig.anonKey) {
+    if (!config.url || !config.anonKey) {
       setRows([]);
       return;
     }
@@ -101,9 +153,9 @@ export const SupabaseContentSyncModal: React.FC<
       setDedupProgressLabel('กำลังตรวจสอบความซ้ำแบบ Batch กับฐานข้อมูล Supabase...');
       try {
         const existingRecords = await fetchExistingContentsForEpisodes(
-          currentConfig,
+          config,
           episodes,
-          currentConfig.targetChannelId,
+          config.targetChannelId,
           (info) => {
             setDedupProgressLabel(info.label);
           }
@@ -125,7 +177,6 @@ export const SupabaseContentSyncModal: React.FC<
           if (rec.title) {
             titleMap.set(rec.title.trim().toLowerCase(), rec);
           }
-          // Published links (case-insensitive keys)
           if (rec.published_links) {
             Object.values(rec.published_links).forEach((url) => {
               if (typeof url === 'string' && url.trim()) {
@@ -133,7 +184,6 @@ export const SupabaseContentSyncModal: React.FC<
               }
             });
           }
-          // Assets links (e.g. Google Drive master or footage in assets)
           if (Array.isArray(rec.assets)) {
             rec.assets.forEach((ast: any) => {
               if (ast && typeof ast.url === 'string' && ast.url.trim()) {
@@ -143,7 +193,9 @@ export const SupabaseContentSyncModal: React.FC<
           }
         });
 
-        // Map local episodes into row states
+        const latestDrafts = loadSupabaseRowDrafts();
+
+        // Map local episodes into row states merged with Cloud/local per-row draft overrides
         const initialRows: SupabaseSyncRowState[] = episodes.map((ep) => {
           const cleanTitle = ep.title.trim().toLowerCase();
           const cleanYoutubeUrl = ep.masterVideoInfo?.youtubeUrl?.trim();
@@ -162,26 +214,55 @@ export const SupabaseContentSyncModal: React.FC<
             (cleanInstagramUrl ? linkMap.get(cleanInstagramUrl) : null);
 
           const isDuplicate = Boolean(matched);
+          const draft = latestDrafts[ep.id];
+
+          const defaultPlatforms =
+            config.defaultTargetPlatforms &&
+            config.defaultTargetPlatforms.length > 0
+              ? config.defaultTargetPlatforms
+              : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
 
           return {
             episode: ep,
-            isSelected: !isDuplicate, // Default check only NEW items
+            isSelected:
+              typeof draft?.isSelected === 'boolean'
+                ? draft.isSelected
+                : !isDuplicate,
             matchStatus: isDuplicate ? 'DUPLICATE' : 'NEW',
             existingRecordId: matched?.id,
             existingCreatedAt: matched?.created_at,
             existingStatus: matched?.status,
-            channelId: currentConfig.targetChannelId || '',
-            status: currentConfig.defaultStatus || '01_IDEA/DRAFT_💡',
+            channelId:
+              typeof draft?.channelId === 'string'
+                ? draft.channelId
+                : config.targetChannelId || '',
+            status:
+              typeof draft?.status === 'string'
+                ? draft.status
+                : config.defaultStatus || '01_IDEA/DRAFT_💡',
             targetPlatforms:
-              currentConfig.defaultTargetPlatforms &&
-              currentConfig.defaultTargetPlatforms.length > 0
-                ? currentConfig.defaultTargetPlatforms
-                : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'],
-            includeAssets: currentConfig.defaultIncludeAssets,
-            includePillar: Boolean(currentConfig.defaultIncludePillar),
-            includeCategory: Boolean(currentConfig.defaultIncludeCategory),
-            description: '',
-            upsertMode: 'SKIP',
+              Array.isArray(draft?.targetPlatforms) &&
+              draft.targetPlatforms.length > 0
+                ? draft.targetPlatforms
+                : defaultPlatforms,
+            includeAssets:
+              typeof draft?.includeAssets === 'boolean'
+                ? draft.includeAssets
+                : config.defaultIncludeAssets,
+            includePillar:
+              typeof draft?.includePillar === 'boolean'
+                ? draft.includePillar
+                : Boolean(config.defaultIncludePillar),
+            includeCategory:
+              typeof draft?.includeCategory === 'boolean'
+                ? draft.includeCategory
+                : Boolean(config.defaultIncludeCategory),
+            description:
+              typeof draft?.description === 'string' ? draft.description : '',
+            upsertMode:
+              draft?.upsertMode === 'UPDATE' || draft?.upsertMode === 'SKIP'
+                ? draft.upsertMode
+                : 'SKIP',
           };
         });
 
@@ -194,11 +275,22 @@ export const SupabaseContentSyncModal: React.FC<
     };
 
     runDeduplicationCheck();
-  }, [isOpen, episodes]);
+  }, [isOpen, episodes, config.url, config.anonKey, config.targetChannelId]);
+
+  // Helper to update rows and persist draft overrides to Cloud
+  const applyRowsUpdate = (
+    updater: (prev: SupabaseSyncRowState[]) => SupabaseSyncRowState[]
+  ) => {
+    setRows((prev) => {
+      const next = updater(prev);
+      persistRowsToDrafts(next, config);
+      return next;
+    });
+  };
 
   // Bulk Selection Handlers
   const handleSelectAllNew = () => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => ({
         ...r,
         isSelected: r.matchStatus === 'NEW',
@@ -207,11 +299,35 @@ export const SupabaseContentSyncModal: React.FC<
   };
 
   const handleSelectAll = () => {
-    setRows((prev) => prev.map((r) => ({ ...r, isSelected: true })));
+    applyRowsUpdate((prev) => prev.map((r) => ({ ...r, isSelected: true })));
   };
 
   const handleDeselectAll = () => {
-    setRows((prev) => prev.map((r) => ({ ...r, isSelected: false })));
+    applyRowsUpdate((prev) => prev.map((r) => ({ ...r, isSelected: false })));
+  };
+
+  // Reset all row draft overrides to config defaults
+  const handleResetRowsToDefaults = () => {
+    handleResetAllRowDrafts();
+    const defaultPlatforms =
+      config.defaultTargetPlatforms && config.defaultTargetPlatforms.length > 0
+        ? config.defaultTargetPlatforms
+        : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
+
+    setRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        isSelected: r.matchStatus === 'NEW',
+        channelId: config.targetChannelId || '',
+        status: config.defaultStatus || '01_IDEA/DRAFT_💡',
+        targetPlatforms: defaultPlatforms,
+        includeAssets: config.defaultIncludeAssets,
+        includePillar: Boolean(config.defaultIncludePillar),
+        includeCategory: Boolean(config.defaultIncludeCategory),
+        description: '',
+        upsertMode: 'SKIP',
+      }))
+    );
   };
 
   // Row update handler
@@ -219,14 +335,14 @@ export const SupabaseContentSyncModal: React.FC<
     episodeId: string,
     updates: Partial<SupabaseSyncRowState>
   ) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => (r.episode.id === episodeId ? { ...r, ...updates } : r))
     );
   };
 
   // Toggle single row selection
   const handleToggleSelectRow = (episodeId: string) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) =>
         r.episode.id === episodeId ? { ...r, isSelected: !r.isSelected } : r
       )
@@ -235,37 +351,37 @@ export const SupabaseContentSyncModal: React.FC<
 
   // Batch property override for selected rows
   const handleBatchSetStatus = (newStatus: string) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => (r.isSelected ? { ...r, status: newStatus } : r))
     );
   };
 
   const handleBatchSetChannel = (newChannelId: string) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => (r.isSelected ? { ...r, channelId: newChannelId } : r))
     );
   };
 
   const handleBatchToggleAssets = (include: boolean) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => (r.isSelected ? { ...r, includeAssets: include } : r))
     );
   };
 
   const handleBatchSetPillar = (include: boolean) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => (r.isSelected ? { ...r, includePillar: include } : r))
     );
   };
 
   const handleBatchSetCategory = (include: boolean) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => (r.isSelected ? { ...r, includeCategory: include } : r))
     );
   };
 
   const handleBatchTogglePlatform = (platformId: string) => {
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) => {
         if (!r.isSelected) return r;
         const currentList = r.targetPlatforms || [];
@@ -284,12 +400,10 @@ export const SupabaseContentSyncModal: React.FC<
   // Filtered rows across entire dataset
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      // 1. Tab filter
       if (activeTab === 'NEW' && r.matchStatus !== 'NEW') return false;
       if (activeTab === 'DUPLICATE' && r.matchStatus !== 'DUPLICATE')
         return false;
 
-      // 2. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const titleMatch = r.episode.title.toLowerCase().includes(q);
@@ -323,7 +437,7 @@ export const SupabaseContentSyncModal: React.FC<
 
   const handleSelectAllFiltered = () => {
     const idsToSelect = new Set(filteredRows.map((fr) => fr.episode.id));
-    setRows((prev) =>
+    applyRowsUpdate((prev) =>
       prev.map((r) =>
         idsToSelect.has(r.episode.id) ? { ...r, isSelected: true } : r
       )
@@ -386,6 +500,8 @@ export const SupabaseContentSyncModal: React.FC<
     config.channels.find((c) => c.id === config.targetChannelId)?.name ||
     'ช่องเริ่มต้น';
 
+  const savedDraftOverridesCount = Object.keys(rowDrafts).length;
+
   return (
     <>
       <BaseModal
@@ -396,13 +512,24 @@ export const SupabaseContentSyncModal: React.FC<
         icon={<Database className="w-5 h-5 text-[#2E7D32]" />}
         title="ส่งออกคอนเทนต์สู่ระบบ Supabase กลาง (ตาราง public.contents)"
         badge={
-          <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] font-bold">
-            Batch Sync · Enterprise
-          </span>
+          <div className="inline-flex items-center gap-1.5">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] font-bold">
+              Batch Sync · Enterprise
+            </span>
+            {isCloudSynced && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200 font-bold"
+                title="การตั้งค่าเชื่อมต่อและค่าที่ปรับแต่งรายแถวถูกซิงก์ผ่าน Cloud (Firestore) ให้ทุกเครื่องเห็นตรงกันอัตโนมัติ"
+              >
+                <Cloud className="w-3 h-3 text-sky-600" />
+                <span>Cloud Synced</span>
+              </span>
+            )}
+          </div>
         }
         subtitle={
           isConfigured
-            ? `ตรวจสอบความซ้ำด้วย Batch Title + รหัส EP และส่งออกข้อมูลแบบกลุ่มความเร็วสูง (ช่องปัจจุบัน: ${currentChannelName})`
+            ? `ตรวจสอบความซ้ำด้วย Batch Title + รหัส EP และซิงก์การตั้งค่ารายแถวผ่าน Cloud ทุกเครื่อง (ช่องปัจจุบัน: ${currentChannelName})`
             : undefined
         }
         headerRight={
@@ -485,9 +612,8 @@ export const SupabaseContentSyncModal: React.FC<
                   ยังไม่ได้ตั้งค่าเชื่อมต่อฐานข้อมูล Supabase
                 </h3>
                 <p className="text-xs text-[#6E5F52] leading-relaxed">
-                  กรุณากรอก Supabase Project URL และ API Key
-                  เพื่อให้ระบบสามารถเข้าถึงตาราง public.contents
-                  และตรวจสอบรายการซ้ำได้
+                  กรุณากรอก Supabase Project URL และ API Key เพียงครั้งเดียว
+                  ระบบจะซิงก์การตั้งค่าขึ้น Cloud ให้ทุกเครื่องพร้อมใช้งานทันที
                 </p>
               </div>
               <button
@@ -530,233 +656,25 @@ export const SupabaseContentSyncModal: React.FC<
             )}
 
             {/* Top Toolbar: Tabs, Quick Selectors, Bulk Field Overrides */}
-            <div className="p-3 bg-white border-b border-[#E8DFD3] shrink-0 space-y-2.5">
-              {/* Row 1: Filter Tabs + Search Box */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5">
-                {/* Tabs */}
-                <div className="flex items-center gap-1.5 bg-[#FAF7F2] p-1 rounded-xl border border-[#E8DFD3]">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ALL')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      activeTab === 'ALL'
-                        ? 'bg-white text-[#2D241E] shadow-xs'
-                        : 'text-[#6E5F52] hover:text-[#2D241E]'
-                    }`}
-                  >
-                    ทั้งหมด (
-                    <span className="font-mono tabular-nums">
-                      {stats.total.toLocaleString()}
-                    </span>
-                    )
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('NEW')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap ${
-                      activeTab === 'NEW'
-                        ? 'bg-[#EEF5EE] text-[#1C4824] shadow-xs'
-                        : 'text-[#6E5F52] hover:text-[#1C4824]'
-                    }`}
-                  >
-                    <Sparkles className="w-3 h-3 text-[#2E7D32]" />
-                    <span>
-                      คลิปใหม่ (
-                      <span className="font-mono tabular-nums">
-                        {stats.newCount.toLocaleString()}
-                      </span>
-                      )
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('DUPLICATE')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap ${
-                      activeTab === 'DUPLICATE'
-                        ? 'bg-[#FEF3C7] text-[#92400E] shadow-xs'
-                        : 'text-[#6E5F52] hover:text-[#92400E]'
-                    }`}
-                  >
-                    <AlertTriangle className="w-3 h-3 text-[#B45309]" />
-                    <span>
-                      ซ้ำในระบบ (
-                      <span className="font-mono tabular-nums">
-                        {stats.duplicateCount.toLocaleString()}
-                      </span>
-                      )
-                    </span>
-                  </button>
-                </div>
-
-                {/* Search */}
-                <div className="relative min-w-[200px] sm:min-w-[280px]">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ค้นหาชื่อคลิป, หมวดหมู่, แท็ก..."
-                    className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#E3D8CB] bg-[#FAF8F5] text-xs focus:outline-none focus:ring-1 focus:ring-[#8FA892]"
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Bulk Action Buttons & Global Overrides for Selected Rows */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
-                {/* Selection Actions */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handleSelectAllNew}
-                    className="px-2.5 py-1 rounded-lg font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] hover:bg-[#E2EFE2] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    เลือกเฉพาะคลิปใหม่ทั้งหมด ({stats.newCount.toLocaleString()})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSelectAll}
-                    className="px-2.5 py-1 rounded-lg font-semibold bg-[#FAF7F2] text-[#524538] border border-[#E2D5C4] hover:bg-[#F2EBE0] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    เลือกทั้งหมดทุกหน้า
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeselectAll}
-                    className="px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-700 transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    ล้างการเลือก
-                  </button>
-                </div>
-
-                {/* Bulk Field Modifiers for Selected */}
-                {stats.selectedCount > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#524538]">
-                    <span className="font-semibold text-slate-400">
-                      ปรับค่าที่เลือก (
-                      <span className="font-mono tabular-nums">
-                        {stats.selectedCount.toLocaleString()}
-                      </span>
-                      ):
-                    </span>
-
-                    {/* Change Status */}
-                    <select
-                      onChange={(e) => handleBatchSetStatus(e.target.value)}
-                      defaultValue=""
-                      className="px-2 py-1 rounded border border-[#E3D8CB] bg-white text-xs font-semibold"
-                    >
-                      <option value="" disabled>
-                        เปลี่ยน Status ที่เลือก...
-                      </option>
-                      {SUPABASE_CONTENT_STATUSES.map((statusVal) => (
-                        <option key={statusVal} value={statusVal}>
-                          {statusVal}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Change Channel */}
-                    {config.channels.length > 1 && (
-                      <select
-                        onChange={(e) => handleBatchSetChannel(e.target.value)}
-                        defaultValue=""
-                        className="px-2 py-1 rounded border border-[#E3D8CB] bg-white text-xs"
-                      >
-                        <option value="" disabled>
-                          เปลี่ยนช่องที่เลือก...
-                        </option>
-                        {config.channels.map((ch) => (
-                          <option key={ch.id} value={ch.id}>
-                            {ch.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {/* Toggle Target Platform */}
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleBatchTogglePlatform(e.target.value);
-                          e.target.value = '';
-                        }
-                      }}
-                      defaultValue=""
-                      className="px-2 py-1 rounded border border-[#E3D8CB] bg-white text-xs font-semibold text-[#1C4824]"
-                    >
-                      <option value="" disabled>
-                        เปิด/ปิด แพลตฟอร์มที่เลือก...
-                      </option>
-                      {SUPABASE_TARGET_PLATFORMS.map((plat) => (
-                        <option key={plat.id} value={plat.id}>
-                          สลับ: {plat.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Toggle Assets */}
-                    <button
-                      type="button"
-                      onClick={() => handleBatchToggleAssets(true)}
-                      className="px-2 py-1 rounded border border-[#E3D8CB] bg-white hover:bg-slate-50 text-[10px] font-bold cursor-pointer whitespace-nowrap"
-                      title="แนบฟุตเทจ 5 คลิปใน assets สำหรับแถวที่เลือก"
-                    >
-                      + แนบ Assets ทั้งหมด
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleBatchToggleAssets(false)}
-                      className="px-2 py-1 rounded border border-[#E3D8CB] bg-white hover:bg-slate-50 text-[10px] text-slate-500 cursor-pointer whitespace-nowrap"
-                      title="เว้นว่าง assets [] สำหรับแถวที่เลือก"
-                    >
-                      เว้นว่าง Assets
-                    </button>
-
-                    {/* Batch Pillar Toggle */}
-                    <div className="flex items-center gap-0.5 border border-[#E3D8CB] rounded bg-white p-0.5 text-[10px]">
-                      <span className="px-1 text-[#6E5F52] font-semibold">Pillar:</span>
-                      <button
-                        type="button"
-                        onClick={() => handleBatchSetPillar(true)}
-                        className="px-1.5 py-0.5 rounded text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-bold cursor-pointer"
-                        title="เปิดใส่ค่าชื่อหมวดหมู่ใน Pillar สำหรับแถวที่เลือก"
-                      >
-                        เปิด
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleBatchSetPillar(false)}
-                        className="px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 cursor-pointer"
-                        title="ปิด (เว้นว่าง null) Pillar สำหรับแถวที่เลือก"
-                      >
-                        ปิด (null)
-                      </button>
-                    </div>
-
-                    {/* Batch Category Toggle */}
-                    <div className="flex items-center gap-0.5 border border-[#E3D8CB] rounded bg-white p-0.5 text-[10px]">
-                      <span className="px-1 text-[#6E5F52] font-semibold">Category:</span>
-                      <button
-                        type="button"
-                        onClick={() => handleBatchSetCategory(true)}
-                        className="px-1.5 py-0.5 rounded text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-bold cursor-pointer"
-                        title="เปิดใส่ค่าชื่อหมวดหมู่ใน Category สำหรับแถวที่เลือก"
-                      >
-                        เปิด
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleBatchSetCategory(false)}
-                        className="px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 cursor-pointer"
-                        title="ปิด (เว้นว่าง null) Category สำหรับแถวที่เลือก"
-                      >
-                        ปิด (null)
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <SupabaseSyncToolbar
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              stats={stats}
+              config={config}
+              savedDraftOverridesCount={savedDraftOverridesCount}
+              onSelectAllNew={handleSelectAllNew}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
+              onResetAllRowDrafts={handleResetRowsToDefaults}
+              onBatchSetStatus={handleBatchSetStatus}
+              onBatchSetChannel={handleBatchSetChannel}
+              onBatchTogglePlatform={handleBatchTogglePlatform}
+              onBatchToggleAssets={handleBatchToggleAssets}
+              onBatchSetPillar={handleBatchSetPillar}
+              onBatchSetCategory={handleBatchSetCategory}
+            />
 
             {/* Table Area */}
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
@@ -784,7 +702,7 @@ export const SupabaseContentSyncModal: React.FC<
                           checked={isAllCurrentPageSelected}
                           onChange={(e) => {
                             const checked = e.target.checked;
-                            setRows((prev) => {
+                            applyRowsUpdate((prev) => {
                               const idsToToggle = new Set(
                                 paginatedRows.map((pr) => pr.episode.id)
                               );

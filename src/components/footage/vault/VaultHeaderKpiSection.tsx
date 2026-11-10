@@ -10,6 +10,7 @@ import {
   Maximize2,
   X,
   FileSpreadsheet,
+  CalendarClock,
 } from 'lucide-react';
 import { CooldownStatus } from '../../../types/footage.types';
 import { SystemSettings } from '../../../types/tag.types';
@@ -36,6 +37,7 @@ export interface VaultHeaderKpiSectionProps {
   onOpenGoogleDriveBatchModal?: () => void;
   onOpenFullscreenStudio?: () => void;
   onOpenSheetTagImportModal?: () => void;
+  onOpenYouTubeDateSyncModal?: () => void;
 }
 
 export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
@@ -53,6 +55,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
   onOpenGoogleDriveBatchModal,
   onOpenFullscreenStudio,
   onOpenSheetTagImportModal,
+  onOpenYouTubeDateSyncModal,
 }) => {
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl p-4 space-y-3.5 shadow-2xs">
@@ -120,7 +123,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
           )}
         </div>
 
-        {/* Right: Active Filter Chip (if filtered) + Google Drive Import */}
+        {/* Right: Active Filter Chip (if filtered) + YouTube Date Sync + Sheet Match + Google Drive Import */}
         <div className="flex flex-wrap items-center gap-2">
           {hasHierarchySelection && (
             <button
@@ -131,6 +134,18 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
             >
               <span>{activeScopeDescription.label}</span>
               <X className="w-3.5 h-3.5 text-indigo-600" />
+            </button>
+          )}
+
+          {onOpenYouTubeDateSyncModal && (
+            <button
+              type="button"
+              onClick={onOpenYouTubeDateSyncModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-800 bg-rose-50/90 hover:bg-rose-100 border border-rose-200/90 rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+              title="ซิงก์วันที่เผยแพร่จริงจาก YouTube AI เพื่อคำนวณวันพัก (Cooldown) ของฟุตเทจย่อยใหม่ตามจริง"
+            >
+              <CalendarClock className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>ซิงก์วันที่จริง YouTube</span>
             </button>
           )}
 
