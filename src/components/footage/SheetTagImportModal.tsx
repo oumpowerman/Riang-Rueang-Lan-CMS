@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { FileSpreadsheet, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { firestoreService } from '../../firebase/firestoreService';
 import {
@@ -16,10 +16,14 @@ import {
 } from '../../utils/fileNameGenerator';
 import { BaseModal } from '../ui/BaseModal';
 import { JunkTagCleanupModal } from '../tags/JunkTagCleanupModal';
+import { YouTubeDateSyncTabContent } from '../episodes/youtubeDateSync/YouTubeDateSyncModal';
 import { SheetCollapsiblePasteSection } from './sheetImport/SheetCollapsiblePasteSection';
 import { SheetEpisodeGroupsPreview } from './sheetImport/SheetEpisodeGroupsPreview';
 import { SheetFootageRowsTable } from './sheetImport/SheetFootageRowsTable';
-import { SheetHeaderRightControls } from './sheetImport/SheetInspectionHeaderBar';
+import {
+  SheetHeaderRightControls,
+  UnifiedSyncMainTab,
+} from './sheetImport/SheetInspectionHeaderBar';
 import {
   normalizeCompareKey,
   parseSheetClipboardData,
@@ -46,6 +50,8 @@ export const SheetTagImportModal: React.FC = () => {
   const {
     isSheetTagImportModalOpen,
     setIsSheetTagImportModalOpen,
+    isYouTubeDateSyncModalOpen,
+    setIsYouTubeDateSyncModalOpen,
     computedFootage,
     tags,
     tagMap,
@@ -57,6 +63,8 @@ export const SheetTagImportModal: React.FC = () => {
     setActiveTab,
   } = useCMS();
 
+  const [activeMainSyncTab, setActiveMainSyncTab] =
+    useState<UnifiedSyncMainTab>('SHEET_SYNC');
   const [pastedText, setPastedText] = useState('');
   const [isInputExpanded, setIsInputExpanded] = useState(true);
   const [isAnalyzingPaste, setIsAnalyzingPaste] = useState(false);
@@ -113,6 +121,19 @@ export const SheetTagImportModal: React.FC = () => {
       }
     };
   }, []);
+
+  // Automatically select Step 1 or Step 2 depending on which open state triggered the modal
+  useEffect(() => {
+    if (isSheetTagImportModalOpen) {
+      setActiveMainSyncTab('SHEET_SYNC');
+    }
+  }, [isSheetTagImportModalOpen]);
+
+  useEffect(() => {
+    if (isYouTubeDateSyncModalOpen) {
+      setActiveMainSyncTab('YOUTUBE_DATE_SYNC');
+    }
+  }, [isYouTubeDateSyncModalOpen]);
 
   // Auto-switch to FOOTAGE_ROWS tab if EP sync is turned off while on EPISODE_GROUPS tab
   useEffect(() => {
@@ -685,6 +706,7 @@ export const SheetTagImportModal: React.FC = () => {
   const handleClose = () => {
     if (isProcessing) return;
     setIsSheetTagImportModalOpen(false);
+    setIsYouTubeDateSyncModalOpen(false);
     setPastedText('');
     setIsInputExpanded(true);
     setIsAnalyzingPaste(false);
@@ -703,11 +725,17 @@ export const SheetTagImportModal: React.FC = () => {
     setActiveTab('MASTER_ARCHIVE');
   };
 
+  const isModalOpen = isSheetTagImportModalOpen || isYouTubeDateSyncModalOpen;
   const hasData = parsedRows.length > 0;
 
-  // Minimalist Single-Row Header Right Controls (Main Tab Pill Switcher + Icon-Only Buttons with Hover Tooltips)
-  const modalHeaderRight = !isProcessing && !successReport && (
+  // Minimalist Single-Row Header Right Controls (2-Step Workflow Switcher + Sub-Switcher + Icon-Only Buttons)
+  const modalHeaderRight = !isProcessing && (
     <SheetHeaderRightControls
+      activeMainSyncTab={activeMainSyncTab}
+      onChangeMainSyncTab={(tab) => {
+        setSuccessReport(null);
+        setActiveMainSyncTab(tab);
+      }}
       hasData={hasData}
       stats={stats}
       activePreviewTab={activePreviewTab}
@@ -733,7 +761,7 @@ export const SheetTagImportModal: React.FC = () => {
   );
 
   const modalFooter =
-    !successReport && !isProcessing ? (
+    activeMainSyncTab === 'SHEET_SYNC' && !successReport && !isProcessing ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-xs text-[#6E5F52]">
           <button
@@ -808,117 +836,141 @@ export const SheetTagImportModal: React.FC = () => {
   return (
     <>
       <BaseModal
-        isOpen={isSheetTagImportModalOpen}
-      onClose={handleClose}
-      closeOnBackdropClick={!isProcessing}
-      closeOnEsc={!isProcessing}
-      fullScreen={isFullScreen}
-      maxWidthClass="max-w-[96vw] xl:max-w-[1680px]"
-      heightClass="h-[94dvh] sm:h-[92vh]"
-      icon={<FileSpreadsheet className="w-5 h-5 text-[#3B6845]" />}
-      title={
-        syncEpisodesFromColD
-          ? 'ซิงค์แท็ก & จัดอันดับ EP จาก Sheet'
-          : 'ซิงค์แท็กฟุตเทจจาก Sheet (คอลัมน์ A–B)'
-      }
-      badge={
-        syncEpisodesFromColD ? (
-          <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#254B2D] border border-[#BAD8BF] font-bold">
-            4-Col Sync
-          </span>
-        ) : (
-          <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#F0F7FF] text-[#1E40AF] border border-[#BFDBFE] font-bold">
-            2-Col Tag Sync
-          </span>
-        )
-      }
-      subtitle={
-        !hasData
-          ? syncEpisodesFromColD
-            ? 'ก๊อปปี้แถว 4 คอลัมน์ (A–D) จาก Google Sheets มาวางเพื่อจับคู่แท็กและจัดอันดับคลังคลิปหลัก'
-            : 'ก๊อปปี้คอลัมน์ A (ชื่อคลิป) และ B (แท็ก) จาก Google Sheets มาวางเพื่อจับคู่หมวดหมู่ฟุตเทจ'
-          : undefined
-      }
-      headerRight={modalHeaderRight}
-      footer={modalFooter}
-      bodyClassName="p-0 bg-[#FAF8F5] flex flex-col overflow-hidden"
-    >
-      {isProcessing ? (
-        <div className="flex-1 min-h-0 flex items-center justify-center overflow-y-auto scrollbar-thin">
-          <SheetSyncProgressView progress={syncProgress} />
-        </div>
-      ) : successReport ? (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
-          <SheetSyncSuccessReportView
-            report={successReport}
+        isOpen={isModalOpen}
+        onClose={handleClose}
+        closeOnBackdropClick={!isProcessing}
+        closeOnEsc={!isProcessing}
+        fullScreen={isFullScreen}
+        maxWidthClass="max-w-[96vw] xl:max-w-[1680px]"
+        heightClass="h-[94dvh] sm:h-[92vh]"
+        icon={
+          activeMainSyncTab === 'YOUTUBE_DATE_SYNC' ? (
+            <CalendarClock className="w-5 h-5 text-[#3B6845]" />
+          ) : (
+            <FileSpreadsheet className="w-5 h-5 text-[#3B6845]" />
+          )
+        }
+        title={
+          activeMainSyncTab === 'YOUTUBE_DATE_SYNC'
+            ? 'ซิงก์วันที่เผยแพร่จริง (จาก YouTube / ตารางวันที่)'
+            : syncEpisodesFromColD
+            ? 'ซิงก์แท็ก & จัดอันดับ EP (จาก Google Sheets 4 คอลัมน์)'
+            : 'ซิงก์แท็กฟุตเทจจาก Sheet (คอลัมน์ A–B)'
+        }
+        badge={
+          activeMainSyncTab === 'YOUTUBE_DATE_SYNC' ? (
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#254B2D] border border-[#BAD8BF] font-bold">
+              ขั้นที่ 2/2 · YouTube Date
+            </span>
+          ) : syncEpisodesFromColD ? (
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#254B2D] border border-[#BAD8BF] font-bold">
+              ขั้นที่ 1/2 · 4-Col Sheet
+            </span>
+          ) : (
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#F0F7FF] text-[#1E40AF] border border-[#BFDBFE] font-bold">
+              ขั้นที่ 1/2 · 2-Col Tag
+            </span>
+          )
+        }
+        subtitle={
+          activeMainSyncTab === 'YOUTUBE_DATE_SYNC'
+            ? 'วางตาราง วันที่ลงคลิป + ชื่อคลิปหลัก EP เพื่ออัปเดตวันเผยแพร่จริงและคำนวณวันพักฟุต (Cooldown) ใหม่'
+            : !hasData
+            ? syncEpisodesFromColD
+              ? 'วางข้อมูล ชื่อฟุตเทจ | #แท็ก | ลิงก์ | ชื่อ EP จาก Google Sheets เพื่อผูกแท็กให้คลิปย่อยและสร้าง EP'
+              : 'ก๊อปปี้คอลัมน์ A (ชื่อคลิป) และ B (#แท็ก) จาก Google Sheets มาวางเพื่อจับคู่หมวดหมู่ฟุตเทจ'
+            : undefined
+        }
+        headerRight={modalHeaderRight}
+        footer={modalFooter}
+        bodyClassName="p-0 bg-[#FAF8F5] flex flex-col overflow-hidden"
+      >
+        {activeMainSyncTab === 'YOUTUBE_DATE_SYNC' ? (
+          <YouTubeDateSyncTabContent
             onClose={handleClose}
+            onSwitchToSheetTab={() => setActiveMainSyncTab('SHEET_SYNC')}
             onGoToMasterEpisodes={handleGoToMasterEpisodes}
           />
-        </div>
-      ) : isAnalyzingPaste ? (
-        <SheetPasteAnalyzingView
-          detectedLineCount={stats.totalRows}
-          matchedCount={stats.matchedCount}
-          episodeGroupsCount={stats.episodeGroupsCount}
-        />
-      ) : (
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* 1. Paste Input Canvas (Full-screen when empty, or Slide-Down Drawer when editing existing paste) */}
-          <AnimatePresence initial={false}>
-            {(!hasData || isInputExpanded) && (
-              <SheetCollapsiblePasteSection
-                pastedText={pastedText}
-                onChangePastedText={handleChangePastedText}
-                isExpanded={isInputExpanded}
-                onToggleExpanded={() => setIsInputExpanded((prev) => !prev)}
-                stats={stats}
-                syncEpisodesFromColD={syncEpisodesFromColD}
-              />
-            )}
-          </AnimatePresence>
+        ) : isProcessing ? (
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-y-auto scrollbar-thin">
+            <SheetSyncProgressView progress={syncProgress} />
+          </div>
+        ) : successReport ? (
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+            <SheetSyncSuccessReportView
+              report={successReport}
+              onClose={handleClose}
+              onGoToMasterEpisodes={handleGoToMasterEpisodes}
+              onGoToYouTubeDateSyncTab={() => {
+                setSuccessReport(null);
+                setActiveMainSyncTab('YOUTUBE_DATE_SYNC');
+              }}
+            />
+          </div>
+        ) : isAnalyzingPaste ? (
+          <SheetPasteAnalyzingView
+            detectedLineCount={stats.totalRows}
+            matchedCount={stats.matchedCount}
+            episodeGroupsCount={stats.episodeGroupsCount}
+          />
+        ) : (
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            {/* 1. Paste Input Canvas (Full-screen when empty, or Slide-Down Drawer when editing existing paste) */}
+            <AnimatePresence initial={false}>
+              {(!hasData || isInputExpanded) && (
+                <SheetCollapsiblePasteSection
+                  pastedText={pastedText}
+                  onChangePastedText={handleChangePastedText}
+                  isExpanded={isInputExpanded}
+                  onToggleExpanded={() => setIsInputExpanded((prev) => !prev)}
+                  stats={stats}
+                  syncEpisodesFromColD={syncEpisodesFromColD}
+                />
+              )}
+            </AnimatePresence>
 
-          {/* 2. Full-Bleed Table / Episode Accordion Flushed Directly Against the Single-Row Modal Header */}
-          {hasData && (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <AnimatePresence mode="wait">
-                {activePreviewTab === 'EPISODE_GROUPS' ? (
-                  <SheetEpisodeGroupsPreview
-                    key="tab-episode-groups"
-                    episodeGroups={episodeGroups}
-                    rankingOrder={rankingOrder}
-                    onChangeRankingOrder={setRankingOrder}
-                    autoCreateMissingFootage={autoCreateMissingFootage}
-                    filterMode={epFilterMode}
-                    onChangeFilterMode={setEpFilterMode}
-                    searchQuery={epSearchQuery}
-                    onChangeSearchQuery={setEpSearchQuery}
-                    excludedEpisodeKeys={excludedEpisodeKeys}
-                    onToggleEpisodeSelection={handleToggleEpisodeSelection}
-                    onBatchSetEpisodeSelection={handleBatchSetEpisodeSelection}
-                    excludedRowIndices={excludedRowIndices}
-                    rowDensity={rowDensity}
-                  />
-                ) : (
-                  <SheetFootageRowsTable
-                    key="tab-footage-rows"
-                    parsedRows={parsedRows}
-                    stats={stats}
-                    filterMode={rowFilterMode}
-                    onChangeFilterMode={setRowFilterMode}
-                    searchQuery={rowSearchQuery}
-                    onChangeSearchQuery={setRowSearchQuery}
-                    excludedRowIndices={excludedRowIndices}
-                    onToggleRowSelection={handleToggleRowSelection}
-                    onBatchSetRowSelection={handleBatchSetRowSelection}
-                    autoCreateMissingFootage={autoCreateMissingFootage}
-                    rowDensity={rowDensity}
-                  />
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-      )}
+            {/* 2. Full-Bleed Table / Episode Accordion Flushed Directly Against the Single-Row Modal Header */}
+            {hasData && (
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <AnimatePresence mode="wait">
+                  {activePreviewTab === 'EPISODE_GROUPS' ? (
+                    <SheetEpisodeGroupsPreview
+                      key="tab-episode-groups"
+                      episodeGroups={episodeGroups}
+                      rankingOrder={rankingOrder}
+                      onChangeRankingOrder={setRankingOrder}
+                      autoCreateMissingFootage={autoCreateMissingFootage}
+                      filterMode={epFilterMode}
+                      onChangeFilterMode={setEpFilterMode}
+                      searchQuery={epSearchQuery}
+                      onChangeSearchQuery={setEpSearchQuery}
+                      excludedEpisodeKeys={excludedEpisodeKeys}
+                      onToggleEpisodeSelection={handleToggleEpisodeSelection}
+                      onBatchSetEpisodeSelection={handleBatchSetEpisodeSelection}
+                      excludedRowIndices={excludedRowIndices}
+                      rowDensity={rowDensity}
+                    />
+                  ) : (
+                    <SheetFootageRowsTable
+                      key="tab-footage-rows"
+                      parsedRows={parsedRows}
+                      stats={stats}
+                      filterMode={rowFilterMode}
+                      onChangeFilterMode={setRowFilterMode}
+                      searchQuery={rowSearchQuery}
+                      onChangeSearchQuery={setRowSearchQuery}
+                      excludedRowIndices={excludedRowIndices}
+                      onToggleRowSelection={handleToggleRowSelection}
+                      onBatchSetRowSelection={handleBatchSetRowSelection}
+                      autoCreateMissingFootage={autoCreateMissingFootage}
+                      rowDensity={rowDensity}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+        )}
       </BaseModal>
       <JunkTagCleanupModal
         isOpen={isJunkTagCleanupOpen}

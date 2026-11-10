@@ -137,26 +137,18 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
             </button>
           )}
 
-          {onOpenYouTubeDateSyncModal && (
-            <button
-              type="button"
-              onClick={onOpenYouTubeDateSyncModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-800 bg-rose-50/90 hover:bg-rose-100 border border-rose-200/90 rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-              title="ซิงก์วันที่เผยแพร่จริงจาก YouTube AI เพื่อคำนวณวันพัก (Cooldown) ของฟุตเทจย่อยใหม่ตามจริง"
-            >
-              <CalendarClock className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>ซิงก์วันที่จริง YouTube</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={onOpenSheetTagImportModal}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#3d332a] bg-[#faf7f2] hover:bg-[#f2ebe0] border border-[#e2d5c4] rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-            title="จับคู่แท็กและจัดอันดับ EP ย้อนหลังจาก Google Sheets (ก๊อปปี้วาง)"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#1C4824] bg-[#EEF5EE] hover:bg-[#E2EFE2] border border-[#BAD8BF] rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+            title="สตูดิโอซิงก์ข้อมูล 2 ขั้นตอน: (1) ซิงก์แท็ก & จัดอันดับ EP จาก Sheet และ (2) ซิงก์วันที่เผยแพร่จริงจาก YouTube"
           >
-            <FileSpreadsheet className="w-4 h-4 text-[#3b6845] shrink-0" />
-            <span>จับคู่แท็กจาก Sheet ให้คลิปในคลัง</span>
+            <FileSpreadsheet className="w-4 h-4 text-[#3B6845] shrink-0" />
+            <span>ซิงก์ข้อมูล Sheet & วันที่ YouTube</span>
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-white/90 text-[#1C4824] border border-[#BAD8BF] font-mono text-[10px] font-extrabold">
+              <CalendarClock className="w-3 h-3 text-[#3B6845]" />
+              <span>2 ขั้นตอน</span>
+            </span>
           </button>
 
           <button

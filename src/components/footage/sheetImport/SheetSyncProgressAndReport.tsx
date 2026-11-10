@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
+  CalendarClock,
   Check,
   CheckCircle2,
   FileSpreadsheet,
@@ -220,11 +221,17 @@ interface SheetSyncSuccessReportViewProps {
   report: SheetSyncSuccessReport;
   onClose: () => void;
   onGoToMasterEpisodes: () => void;
+  onGoToYouTubeDateSyncTab?: () => void;
 }
 
 export const SheetSyncSuccessReportView: React.FC<
   SheetSyncSuccessReportViewProps
-> = ({ report, onClose, onGoToMasterEpisodes }) => {
+> = ({
+  report,
+  onClose,
+  onGoToMasterEpisodes,
+  onGoToYouTubeDateSyncTab,
+}) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -237,7 +244,7 @@ export const SheetSyncSuccessReportView: React.FC<
 
       <div className="space-y-1.5 max-w-lg mx-auto">
         <h4 className="text-xl font-extrabold text-[#3D332A]">
-          ซิงค์ฐานข้อมูลฟุตเทจและจัดอันดับ EP สำเร็จ!
+          ขั้นที่ 1: ซิงค์ฐานข้อมูลฟุตเทจและจัดอันดับ EP สำเร็จ!
         </h4>
         <p className="text-xs sm:text-sm text-[#6E5F52] leading-relaxed">
           ระบบได้จับคู่แท็ก ย้ายฟุตเทจออกจากพื้นที่พัก และจัดชุดคลิปหลัก 5 อันดับลงฐานข้อมูลเรียบร้อยแล้ว
@@ -351,11 +358,22 @@ export const SheetSyncSuccessReportView: React.FC<
           กลับไปหน้าคลังฟุตเทจ
         </button>
 
+        {onGoToYouTubeDateSyncTab && (
+          <button
+            type="button"
+            onClick={onGoToYouTubeDateSyncTab}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-[#3B6845] hover:bg-[#2C5235] text-white shadow-xs transition-colors cursor-pointer"
+          >
+            <CalendarClock className="w-4 h-4" />
+            <span>ไปขั้นที่ 2: ซิงก์วันที่เผยแพร่จริงจาก YouTube ต่อทันที ➔</span>
+          </button>
+        )}
+
         {report.syncedEpisodeTitles.length > 0 && (
           <button
             type="button"
             onClick={onGoToMasterEpisodes}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#3B6845] hover:bg-[#2C5235] text-white shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#FEF8ED] hover:bg-[#FAEED6] text-[#734B17] border border-[#EDD7AF] transition-colors cursor-pointer"
           >
             <Film className="w-4 h-4" />
             <span>เปิดดูคลังคลิปหลักที่จัดอันดับแล้ว ➔</span>

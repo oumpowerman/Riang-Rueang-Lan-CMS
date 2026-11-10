@@ -17,6 +17,7 @@ import {
   ArrowDownToDot,
   Maximize2,
   Minimize2,
+  PencilLine,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { BatchTagMoveDestination } from '../../../context/cms/cms.types';
@@ -50,6 +51,14 @@ interface Tier1MainCategoryColumnProps {
     tagIdsToMove: string[],
     destination: BatchTagMoveDestination
   ) => void;
+  // Inline Rename Props
+  inlineEditingTagId?: string | null;
+  inlineEditingName?: string;
+  setInlineEditingName?: (val: string) => void;
+  onStartInlineRename?: (tag: CategoryTag, e?: React.MouseEvent) => void;
+  onCommitInlineRename?: (tagId: string) => void;
+  onCancelInlineRename?: () => void;
+  // Full Edit Form Props
   isEditingMainCat: boolean;
   setIsEditingMainCat: (val: boolean) => void;
   editingMainCatId: string | null;
@@ -86,6 +95,12 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
   onStartDragTag,
   onEndDragTag,
   onExecuteBatchMove,
+  inlineEditingTagId,
+  inlineEditingName = '',
+  setInlineEditingName,
+  onStartInlineRename,
+  onCommitInlineRename,
+  onCancelInlineRename,
   isEditingMainCat,
   setIsEditingMainCat,
   editingMainCatId,
@@ -136,6 +151,10 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
   };
 
   const handleRowDragStart = (e: React.DragEvent, catId: string) => {
+    if (inlineEditingTagId === catId) {
+      e.preventDefault();
+      return;
+    }
     const batch = onStartDragTag(catId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-cms-tag-ids', JSON.stringify(batch));
@@ -173,11 +192,10 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
     }
   };
 
-  const isCompactMode = isExpandedGrid || isCompactRail;
-
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#faf8f5] overflow-hidden">
-      <div className="p-2.5 sm:p-3 border-b border-[#e5ded4] flex items-center justify-between bg-white shrink-0 gap-1.5">
+      {/* Column Header */}
+      <div className="p-2.5 sm:p-3 border-b border-[#e5ded4] flex flex-wrap items-center justify-between bg-white shrink-0 gap-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="w-5 h-5 rounded-md bg-[#dce9f4] text-[#1b3d5b] text-[11px] font-bold flex items-center justify-center shrink-0">
             2
@@ -198,18 +216,29 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
             {mainCategoriesInActiveGroup.length}
           </span>
           {isExpandedGrid && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] px-2 py-0.5 rounded-md shrink-0">
-              โหมดตารางจัดการด่วน — ลากไปวางคอลัมน์ซ้าย/ขวา หรือติ๊กเลือกหลายอัน
+            <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] px-2 py-0.5 rounded-md shrink-0">
+              โหมดตารางอ่านชื่อเต็ม — ดับเบิลคลิกชื่อเพื่อแก้ด่วน หรือติ๊กเลือกจัดการเป็นกลุ่ม
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {activeGroup && !isCompactRail && (
+            <button
+              type="button"
+              onClick={onOpenAddMainCat}
+              className="text-[11px] font-semibold text-[#24496b] hover:text-[#14324d] bg-[#edf4fa] hover:bg-[#dfeaf4] border border-[#b8cfe3] px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3 h-3" />
+              <span>เพิ่มแท็กหลัก</span>
+            </button>
+          )}
+
           {activeGroup && onToggleExpandColumn && (
             <button
               type="button"
               onClick={onToggleExpandColumn}
-              className={`text-[11px] font-bold px-2 py-1 rounded-md border transition-colors flex items-center gap-1 cursor-pointer ${
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-md border transition-colors flex items-center gap-1 cursor-pointer ${
                 isExpandedGrid
                   ? 'bg-[#2C5378] text-white border-[#2C5378] shadow-2xs'
                   : 'bg-[#FAF5EB] hover:bg-[#EFE4D2] text-[#523715] border-[#DFC9A8]'
@@ -217,7 +246,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               title={
                 isExpandedGrid
                   ? 'ย่อกลับเป็นคอลัมน์ปกติ'
-                  : 'กางคอลัมน์ป้ายแท็กหลักเป็นตารางหลายคอลัมน์เพื่อย้ายหมวดหมู่จำนวนมากได้ง่ายขึ้น'
+                  : 'กางคอลัมน์ป้ายแท็กหลักเป็นตารางหลายคอลัมน์เพื่ออ่านชื่อเต็มและจัดการจำนวนมาก'
               }
             >
               {isExpandedGrid ? (
@@ -233,17 +262,6 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               )}
             </button>
           )}
-
-          {activeGroup && !isCompactMode && (
-            <button
-              type="button"
-              onClick={onOpenAddMainCat}
-              className="text-[11px] font-semibold text-[#24496b] hover:text-[#14324d] bg-[#edf4fa] hover:bg-[#dfeaf4] px-2 py-1 rounded-md transition-colors flex items-center gap-0.5 shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3 h-3" />
-              <span>เพิ่มแท็กหลัก</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -254,7 +272,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
             <button
               type="button"
               onClick={() => onToggleSelectAllVisible(visibleOrderIds)}
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors flex items-center gap-1 cursor-pointer shrink-0 ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors flex items-center gap-1 cursor-pointer shrink-0 ${
                 isAllVisibleSelected
                   ? 'bg-[#2C5378] text-white border-[#2C5378]'
                   : selectedInVisibleCount > 0
@@ -276,7 +294,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
             </button>
           )}
 
-          <div className="relative flex-1 min-w-[110px]">
+          <div className="relative flex-1 min-w-[120px]">
             <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
@@ -285,7 +303,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               placeholder={
                 isCompactRail
                   ? 'กรองแท็กหลัก...'
-                  : `กรองใน ${activeGroup.name} (${mainCategoriesInActiveGroup.length})...`
+                  : `ค้นหาแท็กใน ${activeGroup.name} (${mainCategoriesInActiveGroup.length})...`
               }
               className="w-full pl-7 pr-6 py-1 rounded-lg bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#628FB6]"
             />
@@ -302,9 +320,9 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
         </div>
       )}
 
-      {/* Add / Edit Main Cat Inline Form (Now includes Pastel Color Swatch Picker!) */}
+      {/* Add / Edit Main Cat Inline Form (Available in both Standard and Expanded Grid modes!) */}
       <AnimatePresence>
-        {isEditingMainCat && !isCompactMode && (
+        {isEditingMainCat && !isCompactRail && (
           <motion.form
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -315,7 +333,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#1b3c5c]">
                 {editingMainCatId
-                  ? 'แก้ไขป้ายแท็กหลัก & โทนสี'
+                  ? 'แก้ไขป้ายแท็กหลัก & โทนสีพาสเทล'
                   : `เพิ่มป้ายแท็กหลักใต้ ${activeGroup?.name}`}
               </span>
               <button
@@ -327,18 +345,33 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               </button>
             </div>
 
-            <div>
-              <label className="text-[10px] font-semibold text-[#2b4b6a] block mb-0.5">
-                ชื่อป้ายแท็กหลัก (เช่น ดาราฮาๆ, แกล้งสุดฮา, สัมภาษณ์ฮาๆ):
-              </label>
-              <input
-                type="text"
-                value={mainCatFormName}
-                onChange={(e) => setMainCatFormName(e.target.value)}
-                placeholder="ชื่อป้ายแท็กหลัก..."
-                autoFocus
-                className="w-full bg-white border border-[#b8cfe3] rounded-md px-2.5 py-1 text-xs text-[#3e3427] focus:outline-hidden focus:ring-1 focus:ring-[#628fb6]"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[10px] font-semibold text-[#2b4b6a] block mb-0.5">
+                  ชื่อป้ายแท็กหลัก (เช่น ดาราฮาๆ, แกล้งสุดฮา, สัมภาษณ์ฮาๆ):
+                </label>
+                <input
+                  type="text"
+                  value={mainCatFormName}
+                  onChange={(e) => setMainCatFormName(e.target.value)}
+                  placeholder="ชื่อป้ายแท็กหลัก..."
+                  autoFocus
+                  className="w-full bg-white border border-[#b8cfe3] rounded-md px-2.5 py-1.5 text-xs text-[#3e3427] focus:outline-hidden focus:ring-1 focus:ring-[#628fb6]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-semibold text-[#2b4b6a] block mb-0.5">
+                  คำอธิบายแท็ก (ไม่บังคับ):
+                </label>
+                <input
+                  type="text"
+                  value={mainCatFormDesc}
+                  onChange={(e) => setMainCatFormDesc(e.target.value)}
+                  placeholder="รายละเอียดสั้นๆ..."
+                  className="w-full bg-white border border-[#b8cfe3] rounded-md px-2.5 py-1.5 text-xs text-[#3e3427] focus:outline-hidden"
+                />
+              </div>
             </div>
 
             {/* Pastel Color Swatch Picker */}
@@ -372,19 +405,6 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-semibold text-[#2b4b6a] block mb-0.5">
-                คำอธิบายแท็ก (ไม่บังคับ):
-              </label>
-              <input
-                type="text"
-                value={mainCatFormDesc}
-                onChange={(e) => setMainCatFormDesc(e.target.value)}
-                placeholder="รายละเอียดสั้นๆ..."
-                className="w-full bg-white border border-[#b8cfe3] rounded-md px-2.5 py-1 text-xs text-[#3e3427] focus:outline-hidden"
-              />
-            </div>
-
             <div className="flex items-center gap-1.5 pt-1">
               <button
                 type="submit"
@@ -406,7 +426,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
       </AnimatePresence>
 
       {/* Main Categories List */}
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-2 sm:p-2.5">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-2 sm:p-3">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeGroup?.id || 'no-group'}
@@ -418,8 +438,8 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               isExpandedGrid &&
               activeGroup &&
               filteredMainCategoriesInActiveGroup.length > 0
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 content-start'
-                : 'h-full space-y-1.5'
+                ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 content-start'
+                : 'h-full space-y-2'
             }
           >
             {!activeGroup ? (
@@ -476,6 +496,7 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
                 const isBeingDragged = draggingTagIds.includes(cat.id);
                 const isDragOver =
                   dragOverCatId === cat.id && !draggingTagIds.includes(cat.id);
+                const isInlineEditing = inlineEditingTagId === cat.id;
 
                 const subCount = tags.filter(
                   (t) => t.tier === 2 && t.parentId === cat.id
@@ -489,228 +510,213 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
                 const canNestSelectedHere =
                   selectedTagIds.length > 0 && !selectedTagIds.includes(cat.id);
 
-                // COMPACT CARD MODE (Expanded Multi-Column Grid or Slim Drop Rail)
-                if (isCompactMode) {
+                // SLIM DROP RAIL MODE (Only when Column 3 is expanded)
+                if (isCompactRail) {
                   return (
                     <div
                       key={cat.id}
-                      draggable
+                      draggable={!isInlineEditing}
                       onDragStart={(e) => handleRowDragStart(e, cat.id)}
                       onDragEnd={onEndDragTag}
                       onDragOver={(e) => handleDragOverCat(e, cat.id)}
                       onDragLeave={(e) => handleDragLeaveCat(e, cat.id)}
                       onDrop={(e) => handleDropOnCat(e, cat.id)}
-                      onClick={(e) => {
-                        if (isExpandedGrid) {
-                          onToggleSelectTag(
-                            cat.id,
-                            visibleOrderIds,
-                            e.shiftKey
-                          );
-                          onSelectMainCat(cat.id);
-                        } else {
-                          onSelectMainCat(cat.id);
-                        }
-                      }}
-                      className={`group px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex flex-col justify-center gap-1 ${
+                      onClick={() => onSelectMainCat(cat.id)}
+                      className={`group p-2 rounded-xl border transition-all cursor-pointer flex flex-col gap-1 ${
                         isDragOver
-                          ? 'bg-[#EEF5EE] text-[#1C4824] border-2 border-[#3B6845] ring-2 ring-[#BAD8BF] shadow-sm scale-[1.01]'
-                          : isBeingDragged
-                          ? 'opacity-50 bg-[#E7F1F9] border-dashed border-[#628FB6]'
-                          : isChecked
-                          ? 'bg-[#EEF5EE] text-[#1C4824] border-[#3B6845] ring-1 ring-[#BAD8BF] shadow-2xs font-bold'
+                          ? 'bg-[#EEF5EE] text-[#1C4824] border-2 border-[#3B6845] ring-2 ring-[#BAD8BF] shadow-sm'
                           : isSelected
-                          ? 'bg-[#e7f1f9] text-[#1b4369] border-[#b2d5ed] shadow-2xs font-semibold'
-                          : 'bg-white hover:bg-[#faf7f2] border-[#e8e2d8] text-[#3e3427] font-medium'
+                          ? 'bg-[#e7f1f9] text-[#1b4369] border-[#b2d5ed] font-semibold'
+                          : 'bg-white hover:bg-[#faf7f2] border-[#e8e2d8] text-[#3e3427]'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1.5 min-w-0">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span
-                            className="text-[#B8AB9C] group-hover:text-[#6E5F52] cursor-grab active:cursor-grabbing shrink-0"
-                            title="คลิกค้างเพื่อลากย้ายหมวดหมู่"
-                          >
-                            <GripVertical className="w-3.5 h-3.5" />
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleSelectTag(
-                                cat.id,
-                                visibleOrderIds,
-                                e.shiftKey
-                              );
-                            }}
-                            className={`w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
-                              isChecked
-                                ? 'bg-[#3B6845] text-white'
-                                : 'bg-white border border-[#C7BDB0] hover:border-[#3B6845] text-transparent'
-                            }`}
-                            title="ติ๊กเลือกเพื่อย้ายหลายรายการ (กด Shift+คลิก เพื่อเลือกเป็นช่วง)"
-                          >
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </button>
-
-                          <span
-                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorCfg.swatchBg}`}
-                          />
-                          <span
-                            className="text-xs font-bold truncate"
-                            title={`#${cat.name} (${totalCount} คลิป)`}
-                          >
-                            #{cat.name}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono tabular-nums ${
-                              isChecked
-                                ? 'bg-[#BAD8BF] text-[#1C4824] font-bold'
-                                : 'bg-[#F2ECE4] text-[#635749]'
-                            }`}
-                            title={`คลิปทั้งหมด ${totalCount} คลิป`}
-                          >
-                            {totalCount} คลิป
-                          </span>
-
-                          {canNestSelectedHere && (
-                            <button
-                              type="button"
-                              disabled={isBatchMovingTags}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onExecuteBatchMove(selectedTagIds, {
-                                  mode: 'MOVE_TO_PARENT_TAG',
-                                  targetParentTagId: cat.id,
-                                });
-                              }}
-                              className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-[#EEF5EE] hover:bg-[#3B6845] text-[#1C4824] hover:text-white border border-[#BAD8BF] transition-colors flex items-center gap-0.5 cursor-pointer"
-                              title={`แปลง/ย้าย ${selectedTagIds.length} แท็กที่เลือกให้มาเป็นแท็กย่อย (Tier 2) ใต้ #${cat.name}`}
-                            >
-                              <CornerDownRight className="w-2.5 h-2.5" />
-                              <span>ย่อย</span>
-                            </button>
-                          )}
-                        </div>
+                      <div className="flex items-start gap-1.5 min-w-0">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${colorCfg.swatchBg}`}
+                        />
+                        <span className="text-xs font-bold leading-snug line-clamp-2 break-words flex-1">
+                          #{cat.name}
+                        </span>
+                        <span className="text-[10px] font-mono bg-[#F2ECE4] text-[#635749] px-1.5 py-0.2 rounded shrink-0 tabular-nums">
+                          {totalCount}
+                        </span>
                       </div>
-
-                      {isDragOver && (
-                        <div className="px-2 py-0.5 rounded-md bg-[#3B6845] text-white text-[10px] font-bold flex items-center justify-center gap-1">
-                          <ArrowDownToDot className="w-3 h-3" />
-                          <span className="truncate">
-                            ปล่อยเป็นย่อยใต้ #{cat.name}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   );
                 }
 
-                // STANDARD DETAILED CARD MODE
+                // UNIFIED TWO-DECK READABLE CARD (Works seamlessly in both Expanded Grid and Standard Column!)
                 return (
                   <div
                     key={cat.id}
-                    draggable
+                    draggable={!isInlineEditing}
                     onDragStart={(e) => handleRowDragStart(e, cat.id)}
                     onDragEnd={onEndDragTag}
                     onDragOver={(e) => handleDragOverCat(e, cat.id)}
                     onDragLeave={(e) => handleDragLeaveCat(e, cat.id)}
                     onDrop={(e) => handleDropOnCat(e, cat.id)}
-                    onClick={() => onSelectMainCat(cat.id)}
-                    className={`group p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                    onClick={() => {
+                      if (!isInlineEditing) {
+                        onSelectMainCat(cat.id);
+                      }
+                    }}
+                    className={`group p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
                       isDragOver
                         ? 'bg-[#EEF5EE] text-[#1C4824] border-2 border-[#3B6845] ring-2 ring-[#BAD8BF] shadow-sm scale-[1.01]'
                         : isBeingDragged
                         ? 'opacity-50 bg-[#E7F1F9] border-dashed border-[#628FB6]'
                         : isChecked
-                        ? 'bg-[#EEF5EE]/90 text-[#1C4824] border-[#8FA892] ring-1 ring-[#BAD8BF] shadow-2xs'
+                        ? 'bg-[#EEF5EE] text-[#1C4824] border-[#3B6845] ring-1 ring-[#BAD8BF] shadow-2xs'
                         : isSelected
-                        ? 'bg-[#e7f1f9] text-[#1b4369] border-[#b2d5ed] shadow-2xs font-semibold ring-1 ring-[#c2def4]'
-                        : 'bg-white hover:bg-[#faf7f2] border-[#e8e2d8] text-[#4d4133] font-medium'
+                        ? 'bg-[#e7f1f9] text-[#1b4369] border-[#9ec5e6] shadow-2xs ring-1 ring-[#c2def4]'
+                        : 'bg-white hover:bg-[#faf7f2] border-[#e8e2d8] text-[#3e3427]'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      {/* Left: Drag Handle + Multi-Select Checkbox + Tag Info */}
-                      <div className="flex items-start gap-2 min-w-0 flex-1">
-                        <div className="flex items-center gap-1 pt-0.5 shrink-0">
-                          <span
-                            className="text-[#B8AB9C] group-hover:text-[#6E5F52] cursor-grab active:cursor-grabbing"
-                            title="คลิกค้างเพื่อลากไปวางที่มิติอื่น (คอลัมน์ 1) หรือวางทับแท็กหลักอื่นเพื่อแปลงเป็นแท็กย่อย"
-                          >
-                            <GripVertical className="w-3.5 h-3.5" />
-                          </span>
+                    {/* DECK 1: Drag Handle + Checkbox + Pastel Dot + Full 2-Line Tag Name (or Inline Rename Input) */}
+                    <div className="flex items-start gap-2 min-w-0">
+                      <div className="flex items-center gap-1.5 pt-0.5 shrink-0">
+                        <span
+                          className="text-[#B8AB9C] group-hover:text-[#6E5F52] cursor-grab active:cursor-grabbing"
+                          title="คลิกค้างเพื่อลากไปวางที่มิติอื่น (คอลัมน์ 1) หรือวางทับแท็กหลักอื่นเพื่อแปลงเป็นแท็กย่อย"
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </span>
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleSelectTag(
-                                cat.id,
-                                visibleOrderIds,
-                                e.shiftKey
-                              );
-                            }}
-                            className={`w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer ${
-                              isChecked
-                                ? 'bg-[#3B6845] text-white'
-                                : 'bg-white border border-[#C7BDB0] hover:border-[#3B6845] text-transparent'
-                            }`}
-                            title="ติ๊กเลือกเพื่อย้ายหลายรายการ (กด Shift+คลิก เพื่อเลือกเป็นช่วง)"
-                          >
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleSelectTag(
+                              cat.id,
+                              visibleOrderIds,
+                              e.shiftKey
+                            );
+                          }}
+                          className={`w-4 h-4 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                            isChecked
+                              ? 'bg-[#3B6845] text-white'
+                              : 'bg-white border border-[#C7BDB0] hover:border-[#3B6845] text-transparent'
+                          }`}
+                          title="ติ๊กเลือกเพื่อแก้ไข/ย้าย/ลบหลายรายการพร้อมกัน (กด Shift+คลิก เพื่อเลือกเป็นช่วง)"
+                        >
+                          <Check className="w-3 h-3 stroke-[3]" />
+                        </button>
 
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="text-xs truncate flex items-center gap-1.5 flex-wrap">
-                            <span
-                              className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorCfg.swatchBg}`}
-                              title={`โทนสี: ${colorCfg.shortLabel}`}
-                            />
-                            <span className="font-bold">#{cat.name}</span>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
-                                isSelected
-                                  ? 'bg-[#cce2f4] text-[#123657]'
-                                  : 'bg-[#eee7dc] text-[#695d4f]'
-                              }`}
-                            >
-                              {subCount} ย่อย
-                            </span>
-                          </div>
-
-                          {/* Integrated Footage & EP Capacity Statistics */}
-                          <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono tabular-nums">
-                            <span className="px-1.5 py-0.2 rounded bg-white/90 border border-[#E2D5C4] text-[#524538]">
-                              พร้อมใช้{' '}
-                              <strong className="text-[#1C4824]">
-                                {usableCount}
-                              </strong>
-                              /{totalCount} ฟุต
-                            </span>
-                            {epCount > 0 && (
-                              <span className="px-1.5 py-0.2 rounded bg-[#EEF5EE] border border-[#BAD8BF] text-[#1C4824] font-bold">
-                                {epCount} EP
-                              </span>
-                            )}
-                          </div>
-
-                          {cat.description && (
-                            <p
-                              className={`text-[10px] truncate ${
-                                isSelected ? 'text-[#31567d]' : 'text-[#8c8072]'
-                              }`}
-                            >
-                              {cat.description}
-                            </p>
-                          )}
-                        </div>
+                        <span
+                          className={`w-3 h-3 rounded-full shrink-0 border border-black/10 ${colorCfg.swatchBg}`}
+                          title={`โทนสี: ${colorCfg.shortLabel}`}
+                        />
                       </div>
 
-                      {/* Right Actions */}
+                      {/* Tag Name or Inline Input */}
+                      <div className="min-w-0 flex-1">
+                        {isInlineEditing &&
+                        setInlineEditingName &&
+                        onCommitInlineRename &&
+                        onCancelInlineRename ? (
+                          <div
+                            className="flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={inlineEditingName}
+                              onChange={(e) =>
+                                setInlineEditingName(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  onCommitInlineRename(cat.id);
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  onCancelInlineRename();
+                                }
+                              }}
+                              autoFocus
+                              className="w-full bg-white border border-[#2C5378] rounded-md px-2 py-0.5 text-xs font-bold text-[#2D241E] focus:outline-none focus:ring-2 focus:ring-[#628FB6]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => onCommitInlineRename(cat.id)}
+                              className="p-1 rounded-md bg-[#3B6845] text-white hover:bg-[#2C5235] cursor-pointer shrink-0"
+                              title="บันทึกชื่อใหม่ (Enter)"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={onCancelInlineRename}
+                              className="p-1 rounded-md bg-[#FAF7F2] text-[#6E5F52] hover:bg-[#EFE7DC] border border-[#E2D5C4] cursor-pointer shrink-0"
+                              title="ยกเลิก (Esc)"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            onDoubleClick={(e) => {
+                              if (onStartInlineRename) {
+                                onStartInlineRename(cat, e);
+                              }
+                            }}
+                            title={`#${cat.name} (ดับเบิลคลิกเพื่อแก้ไขชื่อด่วน)`}
+                            className="text-[13px] font-extrabold leading-snug text-[#2D241E] line-clamp-2 break-words"
+                          >
+                            #{cat.name}
+                          </div>
+                        )}
+
+                        {cat.description && !isExpandedGrid && (
+                          <p
+                            className={`text-[10px] mt-0.5 line-clamp-1 ${
+                              isSelected ? 'text-[#31567d]' : 'text-[#8c8072]'
+                            }`}
+                          >
+                            {cat.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* DECK 2: Statistics + Direct Action Buttons (Rename, Edit Color/Details, Nest, Delete) */}
+                    <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-[#EFE9E0]">
+                      {/* Left: Unboxed / Clean Tabular Metrics */}
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono tabular-nums text-[#635749]">
+                        <span
+                          className={
+                            totalCount > 0
+                              ? 'font-bold text-[#1C4824]'
+                              : 'text-[#8C7B6C]'
+                          }
+                        >
+                          {totalCount} คลิป
+                        </span>
+                        {!isExpandedGrid && totalCount > 0 && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span>พร้อม {usableCount}</span>
+                          </>
+                        )}
+                        {subCount > 0 && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="text-[#2B4C6B] font-semibold">
+                              {subCount} ย่อย
+                            </span>
+                          </>
+                        )}
+                        {epCount > 0 && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="text-[#1C4824] font-bold">
+                              {epCount} EP
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Right: Direct Card Actions (Always visible & accessible!) */}
                       <div className="flex items-center gap-1 shrink-0">
                         {canNestSelectedHere && (
                           <button
@@ -723,57 +729,63 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
                                 targetParentTagId: cat.id,
                               });
                             }}
-                            className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-[#EEF5EE] hover:bg-[#3B6845] text-[#1C4824] hover:text-white border border-[#BAD8BF] transition-colors flex items-center gap-0.5 cursor-pointer"
+                            className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-[#EEF5EE] hover:bg-[#3B6845] text-[#1C4824] hover:text-white border border-[#BAD8BF] transition-colors flex items-center gap-0.5 cursor-pointer"
                             title={`แปลง/ย้าย ${selectedTagIds.length} แท็กที่เลือกให้มาเป็นแท็กย่อย (Tier 2) ใต้ #${cat.name}`}
                           >
-                            <CornerDownRight className="w-3 h-3" />
-                            <span>ใส่เป็นย่อย ({selectedTagIds.length})</span>
+                            <CornerDownRight className="w-2.5 h-2.5" />
+                            <span>ใส่ย่อย</span>
+                          </button>
+                        )}
+
+                        {onStartInlineRename && !isInlineEditing && (
+                          <button
+                            type="button"
+                            onClick={(e) => onStartInlineRename(cat, e)}
+                            className="p-1 rounded-md text-[#7D6E61] hover:text-[#1B4369] hover:bg-[#E7F1F9] transition-colors cursor-pointer"
+                            title="เปลี่ยนชื่อแท็กด่วนบนการ์ด (หรือดับเบิลคลิกที่ชื่อ)"
+                          >
+                            <PencilLine className="w-3.5 h-3.5" />
                           </button>
                         )}
 
                         <button
                           type="button"
                           onClick={(e) => onOpenEditMainCat(cat, e)}
-                          className={`p-1 rounded-md transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'text-[#2b5177] hover:text-[#142d45] hover:bg-[#d0e4f5]'
-                              : 'text-[#8c8072] hover:text-[#3d3429] hover:bg-[#eee7dc]'
-                          }`}
-                          title="แก้ไขแท็กนี้และโทนสี"
+                          className="p-1 rounded-md text-[#7D6E61] hover:text-[#1B4369] hover:bg-[#E7F1F9] transition-colors cursor-pointer"
+                          title="แก้ไขโทนสีพาสเทลและรายละเอียดแท็ก"
                         >
-                          <Edit2 className="w-3 h-3" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
+
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onRequestDeleteTag(cat.id);
                           }}
-                          className={`p-1 rounded-md transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'text-[#8a3c31] hover:text-[#612117] hover:bg-[#f8deda]'
-                              : 'text-[#8c8072] hover:text-[#8a3c31] hover:bg-[#faeae8]'
-                          }`}
-                          title="ลบแท็กนี้ (รวมถึงคุณลักษณะด้านใน)"
+                          className="p-1 rounded-md text-[#8C7B6C] hover:text-[#8A3C31] hover:bg-[#FDF2F0] transition-colors cursor-pointer"
+                          title="ลบแท็กนี้"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                        <ChevronRight
-                          className={`w-4 h-4 transition-transform ${
-                            isSelected
-                              ? 'text-[#1e4770] translate-x-0.5'
-                              : 'text-[#c7bdb0]'
-                          }`}
-                        />
+
+                        {!isExpandedGrid && (
+                          <ChevronRight
+                            className={`w-3.5 h-3.5 transition-transform ${
+                              isSelected
+                                ? 'text-[#1e4770] translate-x-0.5'
+                                : 'text-[#c7bdb0]'
+                            }`}
+                          />
+                        )}
                       </div>
                     </div>
 
                     {isDragOver && (
                       <div className="px-2 py-1 rounded-lg bg-[#3B6845] text-white text-[10px] font-bold flex items-center justify-center gap-1">
                         <ArrowDownToDot className="w-3 h-3" />
-                        <span>
-                          ปล่อยเพื่อแปลง {draggingTagIds.length || 1} แท็กเป็นแท็กย่อยใต้ &ldquo;#
-                          {cat.name}&rdquo;
+                        <span className="truncate">
+                          ปล่อยเพื่อแปลงเป็นแท็กย่อยใต้ &ldquo;#{cat.name}&rdquo;
                         </span>
                       </div>
                     )}

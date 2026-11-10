@@ -14,12 +14,11 @@ import {
   ClipboardPaste,
   Trash2,
   Film,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useCMS } from '../../../context/CMSContext';
 import { firestoreService } from '../../../firebase/firestoreService';
 import { Episode } from '../../../types/episode.types';
-import { formatThaiDate } from '../../../utils/fileNameGenerator';
-import { BaseModal } from '../../ui/BaseModal';
 import {
   parseAndMatchYouTubeDateData,
   SAMPLE_YOUTUBE_AI_DATE_DATA,
@@ -33,10 +32,16 @@ interface SyncCompletionSummary {
   recalculatedFootagesCount: number;
 }
 
-export const YouTubeDateSyncModal: React.FC = () => {
+export interface YouTubeDateSyncTabContentProps {
+  onClose: () => void;
+  onSwitchToSheetTab?: () => void;
+  onGoToMasterEpisodes?: () => void;
+}
+
+export const YouTubeDateSyncTabContent: React.FC<
+  YouTubeDateSyncTabContentProps
+> = ({ onClose, onSwitchToSheetTab, onGoToMasterEpisodes }) => {
   const {
-    isYouTubeDateSyncModalOpen,
-    setIsYouTubeDateSyncModalOpen,
     episodes,
     computedFootageMap,
     batchUpsertEpisodes,
@@ -155,7 +160,6 @@ export const YouTubeDateSyncModal: React.FC = () => {
       ...prev,
       [rowIndex]: selectedEpId ? selectedEpId : null,
     }));
-    // Automatically ensure row is selected if user manually picked an episode
     if (selectedEpId) {
       setExcludedRowIndices((prev) => {
         const next = new Set(prev);
@@ -173,7 +177,6 @@ export const YouTubeDateSyncModal: React.FC = () => {
 
     try {
       await firestoreService.withBatchWriteLock(async () => {
-        // If multiple rows match the same episode, latest row wins
         const updatedEpisodeMap = new Map<string, Episode>();
         const earliestDateByFootageId: Record<string, string> = {};
         const allRecalculatedFootageIds = new Set<string>();
@@ -228,50 +231,20 @@ export const YouTubeDateSyncModal: React.FC = () => {
         });
       });
     } catch (err) {
-      console.error('YouTubeDateSyncModal execute error:', err);
+      console.error('YouTubeDateSyncTabContent execute error:', err);
     } finally {
       setIsSyncing(false);
       setSyncStatusText('');
     }
   };
 
-  const handleClose = () => {
-    if (isSyncing) return;
-    setIsYouTubeDateSyncModalOpen(false);
-    setCompletionSummary(null);
-  };
-
   return (
-    <BaseModal
-      isOpen={isYouTubeDateSyncModalOpen}
-      onClose={handleClose}
-      maxWidthClass="max-w-6xl"
-      heightClass="max-h-[92vh]"
-      icon={<CalendarClock className="w-5 h-5 text-[#3B6845]" />}
-      title="ซิงก์วันที่และเวลาเผยแพร่จริงจาก YouTube (Paste & Sync Workspace)"
-      subtitle="วางตาราง วันที่เผยแพร่ + ชื่อคลิป ที่ได้จาก AI ของ YouTube เพื่ออัปเดตวันออกอากาศจริงของ EP และคำนวณวันพัก (Cooldown) ของฟุตเทจย่อยใหม่ทั้งหมด"
-      headerRight={
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsPasteExpanded((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAF5EC] hover:bg-[#F2E8D8] text-[#5C4D3C] border border-[#E2D5C4] transition-colors cursor-pointer"
-          >
-            <ClipboardPaste className="w-3.5 h-3.5 text-[#3B6845]" />
-            <span>{isPasteExpanded ? 'ย่อช่องวางข้อความ' : 'เปิดช่องวางข้อความ'}</span>
-            {isPasteExpanded ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
-          </button>
-        </div>
-      }
-    >
-      <div className="p-4 sm:p-5 space-y-4 bg-[#FDFBF7]">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#FAF8F5]">
+      {/* Scrollable Workspace Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 sm:p-5 space-y-4">
         {/* Completion Banner */}
         {completionSummary && (
-          <div className="p-4 rounded-2xl bg-[#EEF7EE] border border-[#A8D5AE] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="p-4 rounded-2xl bg-[#EEF7EE] border border-[#A8D5AE] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-[#2E7D32] shrink-0 mt-0.5" />
               <div>
@@ -287,33 +260,55 @@ export const YouTubeDateSyncModal: React.FC = () => {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setCompletionSummary(null)}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#E2EFE2] text-[#1C4824] border border-[#A8D5AE] transition-colors cursor-pointer shrink-0"
-            >
-              รับทราบ
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {onGoToMasterEpisodes && (
+                <button
+                  type="button"
+                  onClick={onGoToMasterEpisodes}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#3B6845] hover:bg-[#2C5235] text-white transition-colors cursor-pointer"
+                >
+                  <Film className="w-3.5 h-3.5" />
+                  <span>เปิดดูคลังคลิปหลัก (EP) ➔</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setCompletionSummary(null)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#E2EFE2] text-[#1C4824] border border-[#A8D5AE] transition-colors cursor-pointer"
+              >
+                รับทราบ
+              </button>
+            </div>
           </div>
         )}
 
         {/* 1. Collapsible Paste Area */}
         {isPasteExpanded && (
-          <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E5DAC9] space-y-2.5">
+          <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5DAC9] space-y-2.5 shadow-2xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <label className="text-xs font-extrabold text-[#2D2926] flex items-center gap-1.5">
-                  <ClipboardPaste className="w-4 h-4 text-[#3B6845]" />
+                  <CalendarClock className="w-4 h-4 text-[#3B6845]" />
                   <span>
-                    พื้นที่วางข้อมูล 2 คอลัมน์ (รูปแบบ: DD/MM/YYYY HH:mm [Tab หรือ เว้นวรรค] ชื่อคลิป)
+                    ขั้นที่ 2: วางข้อมูล 2 คอลัมน์ (รูปแบบ: DD/MM/YYYY HH:mm [Tab หรือ เว้นวรรค] ชื่อคลิปหลัก EP)
                   </span>
                 </label>
                 <p className="text-[11px] text-[#786D61] mt-0.5">
-                  ระบบจะตัด #แฮชแท็ก ท้ายชื่อคลิป แยกเลข EP และแปลงเวลาเป็นรอบเช้า (06:00) / รอบเย็น (18:00) ให้อัตโนมัติ
+                  ระบบจะตัด #แฮชแท็ก ท้ายชื่อคลิป แยกเลข EP เพื่อจับคู่กับคลังคลิปหลัก และแปลงเวลาเป็นรอบเช้า (06:00) / รอบเย็น (18:00) ให้อัตโนมัติ
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {onSwitchToSheetTab && (
+                  <button
+                    type="button"
+                    onClick={onSwitchToSheetTab}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-[#3B6845]" />
+                    <span>← ย้อนกลับไปขั้นที่ 1 (ซิงก์ Sheet)</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleLoadSampleData}
@@ -343,13 +338,13 @@ export const YouTubeDateSyncModal: React.FC = () => {
               }}
               rows={5}
               placeholder={`วันที่เผยแพร่\tชื่อคลิป\n29/09/2026 06:06\t5 อันดับคลิปน้ำท่วมสุดฮา! EP.2#ตลก #มีม #ฮาๆ\n29/09/2026 18:05\t5 อันดับแก๊งน้ำตาลตกสุดฮา! EP.1 #ตลก #funny #ฮาๆ`}
-              className="w-full p-3 rounded-xl bg-white border border-[#DED2C1] text-xs font-mono text-[#2D2926] focus:outline-none focus:border-[#3B6845] scrollbar-thin leading-relaxed"
+              className="w-full p-3 rounded-xl bg-[#FAF8F5] border border-[#DED2C1] text-xs font-mono text-[#2D2926] focus:outline-none focus:bg-white focus:border-[#3B6845] scrollbar-thin leading-relaxed"
             />
           </div>
         )}
 
         {/* 2. Summary KPI Strip & Filter Tabs */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E8DFD3]">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E8DFD3] shadow-2xs">
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
@@ -393,22 +388,39 @@ export const YouTubeDateSyncModal: React.FC = () => {
             </span>
           </div>
 
-          {/* Search input */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-[#8C7E70] absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อคลิป หรือ วันที่..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#E2D5C4] text-xs text-[#2D2926] focus:outline-none focus:bg-white focus:border-[#3B6845]"
-            />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* Toggle Paste Box Button */}
+            <button
+              type="button"
+              onClick={() => setIsPasteExpanded((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAF5EC] hover:bg-[#F2E8D8] text-[#5C4D3C] border border-[#E2D5C4] transition-colors cursor-pointer shrink-0"
+            >
+              <ClipboardPaste className="w-3.5 h-3.5 text-[#3B6845]" />
+              <span>{isPasteExpanded ? 'ย่อช่องวางข้อความ' : 'เปิดช่องวางข้อความ'}</span>
+              {isPasteExpanded ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+
+            {/* Search input */}
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-[#8C7E70] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาชื่อคลิป หรือ วันที่..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#E2D5C4] text-xs text-[#2D2926] focus:outline-none focus:bg-white focus:border-[#3B6845]"
+              />
+            </div>
           </div>
         </div>
 
         {/* 3. Interactive Preview Table */}
-        <div className="bg-white rounded-2xl border border-[#E8DFD3] overflow-hidden">
-          <div className="max-h-[46vh] overflow-y-auto overflow-x-auto scrollbar-thin">
+        <div className="bg-white rounded-2xl border border-[#E8DFD3] overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#FAF7F2] text-[11px] font-bold text-[#6E5F52] border-b border-[#E8DFD3] sticky top-0 z-10">
                 <tr>
@@ -545,7 +557,7 @@ export const YouTubeDateSyncModal: React.FC = () => {
                             {row.matchConfidence === 'UNMATCHED' && (
                               <span className="text-amber-700 flex items-center gap-1">
                                 <AlertCircle className="w-3 h-3" />
-                                <span>ไม่พบชื่อ EP นี้ในคลัง (ข้ามรายการนี้ หรือเลือก EP เองด้านบน)</span>
+                                <span>ไม่พบชื่อ EP นี้ในคลัง (หากยังไม่ได้สร้าง EP ให้ทำขั้นที่ 1 ก่อน)</span>
                               </span>
                             )}
                           </div>
@@ -584,9 +596,20 @@ export const YouTubeDateSyncModal: React.FC = () => {
             </table>
           </div>
         </div>
+      </div>
 
-        {/* 4. Bottom Action Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      {/* 4. Sticky Bottom Action Bar (Matches BaseModal Footer Aesthetic) */}
+      <div className="px-4 sm:px-6 py-3 bg-[#F6F1E9] border-t border-[#E6DDD0] shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={isSyncing}
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer disabled:opacity-50"
+          >
+            ปิดหน้าต่าง
+          </button>
+
           <label className="inline-flex items-center gap-2 text-xs text-[#4A4138] cursor-pointer select-none">
             <input
               type="checkbox"
@@ -595,31 +618,31 @@ export const YouTubeDateSyncModal: React.FC = () => {
               className="w-4 h-4 rounded text-[#3B6845] focus:ring-[#8FA892] border-slate-300 cursor-pointer"
             />
             <span>
-              ปรับวันนำเข้าคลัง (<strong>createdAt</strong>) ของฟุตเทจย่อยใน EP ให้ตรงกับวันเผยแพร่จริงด้วย (แก้ปัญหาดึงจาก Drive วันเดียวกัน)
+              ปรับวันนำเข้าคลัง (<strong>createdAt</strong>) ของฟุตเทจย่อยใน EP ให้ตรงกับวันเผยแพร่จริงด้วย
             </span>
           </label>
+        </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            {isSyncing && (
-              <span className="text-xs font-bold text-[#2E7D32] animate-pulse">
-                {syncStatusText}
-              </span>
-            )}
-            <button
-              type="button"
-              disabled={isSyncing || selectedMatchedRows.length === 0}
-              onClick={handleExecuteDateSync}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold bg-[#3B6845] hover:bg-[#2D5236] text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>
-                ยืนยันอัปเดตวันที่ & คำนวณวันพักฟุตเทจใหม่ (
-                {selectedMatchedRows.length} ตอน) ➔
-              </span>
-            </button>
-          </div>
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {isSyncing && (
+            <span className="text-xs font-bold text-[#2E7D32] animate-pulse">
+              {syncStatusText}
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={isSyncing || selectedMatchedRows.length === 0}
+            onClick={handleExecuteDateSync}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-[#3B6845] hover:bg-[#2D5236] text-white shadow-xs transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>
+              ยืนยันอัปเดตวันที่ & คำนวณวันพักฟุตเทจใหม่ (
+              {selectedMatchedRows.length} ตอน) ➔
+            </span>
+          </button>
         </div>
       </div>
-    </BaseModal>
+    </div>
   );
 };

@@ -54,7 +54,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     tier2SearchQuery,
     setTier2SearchQuery,
 
-    // Multi-select, Drag-and-Drop & Bulk Move
+    // Multi-select, Drag-and-Drop & Bulk Move / Edit / Delete
     selectedTagIds,
     draggingTagIds,
     isBatchMovingTags,
@@ -65,9 +65,18 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     handleStartDragTag,
     handleEndDragTag,
     handleExecuteBatchMove,
+    handleExecuteBatchMetadataUpdate,
     lastTagReorgUndoRecord,
     undoLastTagReorg,
     dismissTagReorgUndoRecord,
+
+    // Inline Rename on Card
+    inlineEditingTagId,
+    inlineEditingName,
+    setInlineEditingName,
+    handleStartInlineRename,
+    handleCommitInlineRename,
+    handleCancelInlineRename,
 
     // Tier 0 Group form state & handlers
     isEditingGroup,
@@ -118,9 +127,12 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     setShowDeleteGroupConfirm,
     showDeleteTagConfirm,
     setShowDeleteTagConfirm,
+    showBatchDeleteConfirm,
+    setShowBatchDeleteConfirm,
     handleConfirmWipe,
     handleConfirmDeleteGroup,
     handleConfirmDeleteTag,
+    handleConfirmBatchDelete,
   } = useThreeTierCategoryState();
 
   const [activeStudioTab, setActiveStudioTab] =
@@ -293,7 +305,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                         expandedFocusColumn === 'TIER_1'
                           ? 'flex-1 min-w-0 h-full min-h-0 overflow-hidden'
                           : expandedFocusColumn === 'TIER_2'
-                          ? 'md:w-56 lg:w-64 shrink-0 h-44 md:h-full min-h-0 overflow-hidden'
+                          ? 'md:w-64 lg:w-72 shrink-0 h-44 md:h-full min-h-0 overflow-hidden'
                           : 'h-full min-h-0 overflow-hidden'
                       }
                     >
@@ -316,6 +328,12 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                         onStartDragTag={handleStartDragTag}
                         onEndDragTag={handleEndDragTag}
                         onExecuteBatchMove={handleExecuteBatchMove}
+                        inlineEditingTagId={inlineEditingTagId}
+                        inlineEditingName={inlineEditingName}
+                        setInlineEditingName={setInlineEditingName}
+                        onStartInlineRename={handleStartInlineRename}
+                        onCommitInlineRename={handleCommitInlineRename}
+                        onCancelInlineRename={handleCancelInlineRename}
                         isEditingMainCat={isEditingMainCat}
                         setIsEditingMainCat={setIsEditingMainCat}
                         editingMainCatId={editingMainCatId}
@@ -348,7 +366,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                         expandedFocusColumn === 'TIER_2'
                           ? 'flex-1 min-w-0 h-full min-h-0 overflow-hidden'
                           : expandedFocusColumn === 'TIER_1'
-                          ? 'md:w-56 lg:w-64 shrink-0 h-44 md:h-full min-h-0 overflow-hidden'
+                          ? 'md:w-64 lg:w-72 shrink-0 h-44 md:h-full min-h-0 overflow-hidden'
                           : 'h-full min-h-0 overflow-hidden'
                       }
                     >
@@ -369,6 +387,12 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                         onStartDragTag={handleStartDragTag}
                         onEndDragTag={handleEndDragTag}
                         onExecuteBatchMove={handleExecuteBatchMove}
+                        inlineEditingTagId={inlineEditingTagId}
+                        inlineEditingName={inlineEditingName}
+                        setInlineEditingName={setInlineEditingName}
+                        onStartInlineRename={handleStartInlineRename}
+                        onCommitInlineRename={handleCommitInlineRename}
+                        onCancelInlineRename={handleCancelInlineRename}
                         isEditingSubCat={isEditingSubCat}
                         setIsEditingSubCat={setIsEditingSubCat}
                         editingSubCatId={editingSubCatId}
@@ -395,7 +419,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Docked Bulk Move & Convert Action Bar + Undo Toast */}
+                  {/* Docked Bulk Move, Edit Color/Type & Delete Action Bar + Undo Toast */}
                   <ThreeTierBatchMoveBar
                     categoryGroups={categoryGroups}
                     tags={tags}
@@ -404,6 +428,10 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     batchMoveProgressText={batchMoveProgressText}
                     lastTagReorgUndoRecord={lastTagReorgUndoRecord}
                     onExecuteBatchMove={handleExecuteBatchMove}
+                    onExecuteBatchMetadataUpdate={
+                      handleExecuteBatchMetadataUpdate
+                    }
+                    onRequestBatchDelete={() => setShowBatchDeleteConfirm(true)}
                     onClearSelectedTags={handleClearSelectedTags}
                     onUndoLastTagReorg={undoLastTagReorg}
                     onDismissTagReorgUndoRecord={dismissTagReorgUndoRecord}
@@ -442,6 +470,10 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
         showDeleteTagConfirm={showDeleteTagConfirm}
         setShowDeleteTagConfirm={setShowDeleteTagConfirm}
         onConfirmDeleteTag={handleConfirmDeleteTag}
+        showBatchDeleteConfirm={showBatchDeleteConfirm}
+        setShowBatchDeleteConfirm={setShowBatchDeleteConfirm}
+        onConfirmBatchDelete={handleConfirmBatchDelete}
+        selectedTagIds={selectedTagIds}
         categoryGroups={categoryGroups}
         tags={tags}
         computedFootage={computedFootage}

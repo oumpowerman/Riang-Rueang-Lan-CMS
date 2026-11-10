@@ -595,6 +595,68 @@ export function useCMSCategoryActions({
     };
   };
 
+  const batchUpdateTagsMetadata = async (
+    tagIds: string[],
+    updates: { color?: string; entityType?: EntitySubtype },
+    onChunkProgress?: (progress: import('../../firebase/firestoreService').BatchChunkProgress) => void
+  ): Promise<{ updatedCount: number; summaryText: string }> => {
+    const cleanIds = Array.from(
+      new Set(tagIds.filter((id) => Boolean(id) && !isStagingTagId(id)))
+    );
+    if (cleanIds.length === 0 || (!updates.color && !updates.entityType)) {
+      return { updatedCount: 0, summaryText: '' };
+    }
+
+    const updateSet = new Set(cleanIds);
+    const previousTags: CategoryTag[] = [];
+    const changedTags: CategoryTag[] = [];
+
+    const nextTags = tags.map((t) => {
+      if (!updateSet.has(t.id)) return t;
+      previousTags.push(t);
+      const updated: CategoryTag = {
+        ...t,
+        ...(updates.color ? { color: updates.color } : {}),
+        ...(updates.entityType ? { entityType: updates.entityType } : {}),
+      };
+      changedTags.push(updated);
+      return updated;
+    });
+
+    if (changedTags.length === 0) {
+      return { updatedCount: 0, summaryText: '' };
+    }
+
+    setTags(nextTags);
+    cmsRepository.saveTags(nextTags);
+
+    const summaryParts: string[] = [];
+    if (updates.color) summaryParts.push(`โทนสี (${updates.color})`);
+    if (updates.entityType) summaryParts.push(`ประเภท (${updates.entityType})`);
+    const summaryText = `อัปเดต ${ summaryParts.join(' & ') } จำนวน ${changedTags.length} แท็ก`;
+
+    setLastTagReorgUndoRecord({
+      id: `UNDO-META-${Date.now()}`,
+      summaryText,
+      previousTags,
+      previousFootages: [],
+      timestamp: Date.now(),
+    });
+
+    try {
+      await firestoreService.withBatchWriteLock(async () => {
+        await firestoreService.batchSaveCategories(changedTags, onChunkProgress);
+      });
+    } catch (err) {
+      console.warn('Firestore batchUpdateTagsMetadata error:', err);
+    }
+
+    return {
+      updatedCount: changedTags.length,
+      summaryText,
+    };
+  };
+
   const undoLastTagReorg = async (): Promise<void> => {
     if (!lastTagReorgUndoRecord) return;
     const record = lastTagReorgUndoRecord;
@@ -641,6 +703,7 @@ export function useCMSCategoryActions({
     createSubcategory,
     batchAddTags,
     batchMoveOrReparentTags,
+    batchUpdateTagsMetadata,
     lastTagReorgUndoRecord,
     undoLastTagReorg,
     dismissTagReorgUndoRecord,

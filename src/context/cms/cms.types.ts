@@ -223,6 +223,14 @@ export interface CMSContextType {
     updatedClipsCount: number;
     summaryText: string;
   }>;
+  batchUpdateTagsMetadata: (
+    tagIds: string[],
+    updates: { color?: string; entityType?: EntitySubtype },
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<{
+    updatedCount: number;
+    summaryText: string;
+  }>;
   lastTagReorgUndoRecord: TagReorgUndoRecord | null;
   undoLastTagReorg: () => Promise<void>;
   dismissTagReorgUndoRecord: () => void;

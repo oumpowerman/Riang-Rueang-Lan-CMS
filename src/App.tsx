@@ -28,7 +28,6 @@ import { E2EPipelineBoard } from './components/workflow/E2EPipelineBoard';
 import { AuthModal } from './components/auth/AuthModal';
 import { SupabaseContentSyncModal } from './components/supabase/SupabaseContentSyncModal';
 import { SupabaseConfigModal } from './components/supabase/SupabaseConfigModal';
-import { YouTubeDateSyncModal } from './components/episodes/youtubeDateSync/YouTubeDateSyncModal';
 import { CMSProvider, useCMS } from './context/CMSContext';
 import { AuthProvider } from './context/AuthContext';
 
@@ -93,7 +92,6 @@ const MainWorkspace: React.FC = () => {
       <GoogleDriveBatchImportModal />
       <SheetTagImportModal />
       <BatchAssignCategoryModal />
-      <YouTubeDateSyncModal />
       <SupabaseContentSyncModal
         isOpen={isSupabaseSyncModalOpen}
         onClose={() => setIsSupabaseSyncModalOpen(false)}

@@ -21,6 +21,8 @@ export const useThreeTierCategoryState = () => {
     wipeAllCategories,
     restoreDefaultCategories,
     batchMoveOrReparentTags,
+    batchUpdateTagsMetadata,
+    batchDeleteTags,
     lastTagReorgUndoRecord,
     undoLastTagReorg,
     dismissTagReorgUndoRecord,
@@ -63,10 +65,15 @@ export const useThreeTierCategoryState = () => {
   const [subCatFormType, setSubCatFormType] = useState<EntitySubtype>('PERSON');
   const [subCatFormDesc, setSubCatFormDesc] = useState('');
 
+  // Inline Rename State (Double-click or quick rename on card)
+  const [inlineEditingTagId, setInlineEditingTagId] = useState<string | null>(null);
+  const [inlineEditingName, setInlineEditingName] = useState<string>('');
+
   // Confirmation Modals
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [showDeleteGroupConfirm, setShowDeleteGroupConfirm] = useState<string | null>(null);
   const [showDeleteTagConfirm, setShowDeleteTagConfirm] = useState<string | null>(null);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
   // Active Group
   const activeGroup = useMemo(() => {
@@ -383,6 +390,77 @@ export const useThreeTierCategoryState = () => {
     }
   };
 
+  // Inline Rename Handlers
+  const handleStartInlineRename = (tag: CategoryTag, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setInlineEditingTagId(tag.id);
+    setInlineEditingName(tag.name);
+  };
+
+  const handleCommitInlineRename = (tagId: string) => {
+    const trimmed = inlineEditingName.trim().replace(/^#+/, '').trim();
+    if (trimmed) {
+      const target = tags.find((t) => t.id === tagId);
+      if (target && target.name !== trimmed) {
+        updateTag(tagId, { name: trimmed });
+      }
+    }
+    setInlineEditingTagId(null);
+    setInlineEditingName('');
+  };
+
+  const handleCancelInlineRename = () => {
+    setInlineEditingTagId(null);
+    setInlineEditingName('');
+  };
+
+  // Execute Bulk Metadata Update (Color / EntityType)
+  const handleExecuteBatchMetadataUpdate = async (
+    tagIds: string[],
+    updates: { color?: string; entityType?: EntitySubtype }
+  ) => {
+    if (tagIds.length === 0 || isBatchMovingTags) return;
+    setIsBatchMovingTags(true);
+    setBatchMoveProgressText(`กำลังอัปเดต ${tagIds.length} แท็ก...`);
+    try {
+      await batchUpdateTagsMetadata(tagIds, updates, (prog) => {
+        setBatchMoveProgressText(
+          `กำลังบันทึกขึ้น Cloud ก้อนที่ ${prog.completedChunks}/${prog.totalChunks} (${prog.completedOps}/${prog.totalOps})...`
+        );
+      });
+    } finally {
+      setIsBatchMovingTags(false);
+      setBatchMoveProgressText(null);
+    }
+  };
+
+  // Execute Bulk Delete of Selected Tags
+  const handleConfirmBatchDelete = async () => {
+    if (selectedTagIds.length === 0 || isBatchMovingTags) {
+      setShowBatchDeleteConfirm(false);
+      return;
+    }
+    const idsToDelete = [...selectedTagIds];
+    setShowBatchDeleteConfirm(false);
+    setIsBatchMovingTags(true);
+    setBatchMoveProgressText(`กำลังลบ ${idsToDelete.length} แท็กออกจากคลังและ Cloud...`);
+    try {
+      await batchDeleteTags(idsToDelete, (prog) => {
+        setBatchMoveProgressText(
+          `กำลังลบจาก Cloud ก้อนที่ ${prog.completedChunks}/${prog.totalChunks} (${prog.completedOps}/${prog.totalOps})...`
+        );
+      });
+      setSelectedTagIds([]);
+      setDraggingTagIds([]);
+      if (selectedMainCatId && idsToDelete.includes(selectedMainCatId)) {
+        setSelectedMainCatId('');
+      }
+    } finally {
+      setIsBatchMovingTags(false);
+      setBatchMoveProgressText(null);
+    }
+  };
+
   return {
     isThreeTierManagerOpen,
     setIsThreeTierManagerOpen,
@@ -410,7 +488,7 @@ export const useThreeTierCategoryState = () => {
     tier2SearchQuery,
     setTier2SearchQuery,
 
-    // Multi-select, Drag-and-Drop & Bulk Move
+    // Multi-select, Drag-and-Drop & Bulk Move / Edit / Delete
     selectedTagIds,
     setSelectedTagIds,
     draggingTagIds,
@@ -422,9 +500,18 @@ export const useThreeTierCategoryState = () => {
     handleStartDragTag,
     handleEndDragTag,
     handleExecuteBatchMove,
+    handleExecuteBatchMetadataUpdate,
     lastTagReorgUndoRecord,
     undoLastTagReorg,
     dismissTagReorgUndoRecord,
+
+    // Inline Rename on Card
+    inlineEditingTagId,
+    inlineEditingName,
+    setInlineEditingName,
+    handleStartInlineRename,
+    handleCommitInlineRename,
+    handleCancelInlineRename,
 
     // Tier 0 Group form state & handlers
     isEditingGroup,
@@ -477,8 +564,11 @@ export const useThreeTierCategoryState = () => {
     setShowDeleteGroupConfirm,
     showDeleteTagConfirm,
     setShowDeleteTagConfirm,
+    showBatchDeleteConfirm,
+    setShowBatchDeleteConfirm,
     handleConfirmWipe,
     handleConfirmDeleteGroup,
     handleConfirmDeleteTag,
+    handleConfirmBatchDelete,
   };
 };
