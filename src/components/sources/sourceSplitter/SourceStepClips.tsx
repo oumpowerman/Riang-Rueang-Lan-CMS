@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Clock, FileText, MessageSquareText, Scissors, Check, Copy, ArrowLeft } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Clock,
+  FileText,
+  MessageSquareText,
+  Scissors,
+  Check,
+  Copy,
+  ArrowLeft,
+  HardDrive,
+} from 'lucide-react';
 import { SplitClipDraft } from '../../../context/CMSContext';
 import { generateStandardFileName } from '../../../utils/fileNameGenerator';
 
@@ -40,7 +51,7 @@ export const SourceStepClips: React.FC<SourceStepClipsProps> = ({
         <div>
           <h3 className="text-sm sm:text-base font-bold text-stone-900">2. รายการช็อตฮาที่หั่น</h3>
           <p className="text-xs text-stone-500 mt-0.5">
-            ระบุช่วงเวลา Timestamp และชื่อมุก ระบบจะคำนวณรหัส FT ให้อัตโนมัติ
+            ระบุช่วงเวลา Timestamp และชื่อมุก พร้อมแนบไฟล์ Drive สำหรับดาวน์โหลด
           </p>
         </div>
 
@@ -120,7 +131,7 @@ export const SourceStepClips: React.FC<SourceStepClipsProps> = ({
                       value={clip.timestampRange}
                       onChange={(e) => onUpdateClip(idx, { timestampRange: e.target.value })}
                       placeholder="05:10 - 05:50"
-                      className="w-full px-2.5 py-1.5 text-xs font-mono tabular-nums bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                      className="w-full px-2.5 py-1.5 text-xs font-mono tabular-nums bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600 text-stone-900"
                     />
                   </div>
 
@@ -135,7 +146,7 @@ export const SourceStepClips: React.FC<SourceStepClipsProps> = ({
                       value={clip.title}
                       onChange={(e) => onUpdateClip(idx, { title: e.target.value })}
                       placeholder="เช่น จังหวะไมค์ดับ, วิ่งชนกรรมการ..."
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600 text-stone-900"
                     />
                   </div>
 
@@ -149,8 +160,25 @@ export const SourceStepClips: React.FC<SourceStepClipsProps> = ({
                       value={clip.mascotNotes}
                       onChange={(e) => onUpdateClip(idx, { mascotNotes: e.target.value })}
                       placeholder="ประโยคตบมุก/โน้ต..."
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600 text-stone-900"
                     />
+                  </div>
+
+                  {/* Per-Clip Drive Link Field */}
+                  <div className="sm:col-span-12 pt-1.5 border-t border-stone-200/60">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                      <label className="text-[11px] font-semibold text-stone-600 flex items-center gap-1 shrink-0">
+                        <HardDrive className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>ลิงก์ไฟล์ Drive ของช็อตนี้ (ถ้ามี):</span>
+                      </label>
+                      <input
+                        type="url"
+                        value={clip.driveFileUrl || ''}
+                        onChange={(e) => onUpdateClip(idx, { driveFileUrl: e.target.value })}
+                        placeholder="https://drive.google.com/file/d/... (เว้นว่างไว้ก่อนได้)"
+                        className="flex-1 px-2.5 py-1 text-xs font-mono bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-indigo-600 text-stone-900 placeholder:text-stone-400"
+                      />
+                    </div>
                   </div>
                 </div>
               </motion.div>

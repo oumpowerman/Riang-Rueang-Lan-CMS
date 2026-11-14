@@ -15,8 +15,11 @@ import {
   EntitySubtype,
   SystemSettings,
   TagGroupType,
+  TierSubCategoriesConfig,
 } from '../../types/tag.types';
 import { MixRecipeId } from '../../utils/collisionDetector';
+import { DuplicateMergePlan } from '../../utils/duplicateClusterScanner';
+import { MergeDuplicateFootagesResult } from './useCMSDuplicateMerge';
 
 export type ActiveNavTab =
   | 'DASHBOARD'
@@ -86,6 +89,12 @@ export interface TagReorgUndoRecord {
 }
 
 export type BatchTagMoveDestination =
+  | {
+      mode: 'MOVE_TO_TIER_SUBCATEGORY';
+      targetTier: CategoryTier;
+      targetSubCategory: string;
+      entityType?: EntitySubtype;
+    }
   | {
       mode: 'MOVE_TO_GROUP';
       targetGroupId: string;
@@ -181,6 +190,7 @@ export interface CMSContextType {
   tagMap: Record<string, CategoryTag>;
   mainCategories: CategoryTag[];
   subcategories: CategoryTag[];
+  tierSubCategories: TierSubCategoriesConfig;
   getSubcategoriesByParent: (parentId: string) => CategoryTag[];
   sources: RawSource[];
   sourceMap: Record<string, RawSource>;
@@ -192,7 +202,7 @@ export interface CMSContextType {
   untaggedFootages: ComputedFootage[];
   missingDriveFootages: ComputedFootage[];
 
-  // Actions: Tags & Settings
+  // Actions: Tags, Sub-categories & Settings
   createTag: (
     name: string,
     groupType?: TagGroupType,
@@ -201,7 +211,8 @@ export interface CMSContextType {
     tier?: CategoryTier,
     parentId?: string | null,
     entityType?: EntitySubtype,
-    groupId?: string
+    groupId?: string,
+    subCategory?: string
   ) => CategoryTag;
   createSubcategory: (
     parentId: string,
@@ -210,6 +221,13 @@ export interface CMSContextType {
     color?: string,
     description?: string
   ) => CategoryTag;
+  addTierSubCategory: (tier: CategoryTier, subCategoryName: string) => void;
+  renameTierSubCategory: (
+    tier: CategoryTier,
+    oldSubCategoryName: string,
+    newSubCategoryName: string
+  ) => Promise<void>;
+  deleteTierSubCategory: (tier: CategoryTier, subCategoryName: string) => Promise<void>;
   batchAddTags: (
     newTags: CategoryTag[],
     onChunkProgress?: (progress: BatchChunkProgress) => void
@@ -225,7 +243,7 @@ export interface CMSContextType {
   }>;
   batchUpdateTagsMetadata: (
     tagIds: string[],
-    updates: { color?: string; entityType?: EntitySubtype },
+    updates: { color?: string; entityType?: EntitySubtype; tier?: CategoryTier; subCategory?: string },
     onChunkProgress?: (progress: BatchChunkProgress) => void
   ) => Promise<{
     updatedCount: number;
@@ -242,6 +260,16 @@ export interface CMSContextType {
   ) => Promise<{
     deletedCount: number;
     updatedFootagesCount: number;
+  }>;
+  reorganizeTagsToDataDictionary: (
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<{
+    addedStandardTagsCount: number;
+    updatedTagsCount: number;
+    mergedAliasTagsCount: number;
+    migratedFootagesCount: number;
+    migratedSourcesCount: number;
+    mergedExamples: string[];
   }>;
   updateSettings: (updates: Partial<SystemSettings>) => void;
 
@@ -265,6 +293,7 @@ export interface CMSContextType {
       channelOrCreator: string;
       totalDuration?: string;
       tags: string[];
+      driveFolderUrl?: string;
       notes: string;
     },
     clips: SplitClipDraft[]
@@ -281,6 +310,7 @@ export interface CMSContextType {
         channelOrCreator: string;
         totalDuration?: string;
         tags: string[];
+        driveFolderUrl?: string;
         notes: string;
       };
       clips: SplitClipDraft[];
@@ -312,16 +342,24 @@ export interface CMSContextType {
   batchSyncFootageTagsByMap: (
     tagsByFootageId: Record<string, string[]>,
     mode?: 'REPLACE' | 'APPEND',
-    onChunkProgress?: (progress: BatchChunkProgress) => void
+    onChunkProgress?: (progress: BatchChunkProgress) => void,
+    mascotNotesByFootageId?: Record<string, string>
   ) => Promise<void>;
   batchSyncFootageCreatedAtByMap: (
     createdAtByFootageId: Record<string, string>,
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<number>;
+  batchCleanExistingFootageTitles: (
     onChunkProgress?: (progress: BatchChunkProgress) => void
   ) => Promise<number>;
   batchDeleteFootage: (
     footageIds: string[],
     onChunkProgress?: (progress: BatchChunkProgress) => void
   ) => Promise<void>;
+  mergeDuplicateFootages: (
+    plans: DuplicateMergePlan[],
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<MergeDuplicateFootagesResult>;
   lastQuickSortUndoRecord: QuickSortUndoRecord | null;
   quickAssignCategoryToFootage: (footageIds: string[], targetTagId: string) => void;
   undoLastQuickSort: () => void;

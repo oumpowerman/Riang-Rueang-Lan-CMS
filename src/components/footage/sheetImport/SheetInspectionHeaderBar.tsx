@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   CalendarClock,
   ClipboardPaste,
+  Eraser,
   FileSpreadsheet,
   Layers,
   Maximize2,
@@ -12,7 +13,6 @@ import {
   Settings2,
   Sparkles,
   Tag,
-  Eraser,
 } from 'lucide-react';
 import {
   SheetSyncSummaryStats,
@@ -158,7 +158,7 @@ export const SheetHeaderRightControls: React.FC<
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Primary 2-Step Workflow Switcher (Step 1: Sheet Tag/EP Sync vs Step 2: YouTube Date Sync) */}
+      {/* Unified Mode Switcher: 10-Col Master Sheet (Primary) vs Quick Date-Only Patch */}
       <div className="flex items-center gap-1 p-1 rounded-xl bg-[#EFE7DC] border border-[#E2D5C4]">
         <button
           type="button"
@@ -178,7 +178,7 @@ export const SheetHeaderRightControls: React.FC<
           )}
           <FileSpreadsheet className="w-3.5 h-3.5 relative z-10" />
           <span className="relative z-10">
-            ขั้นที่ 1: ซิงก์แท็ก & EP (Sheet)
+            ซิงก์ชีทหลัก 10 คอลัมน์ (A–J)
           </span>
         </button>
 
@@ -190,6 +190,7 @@ export const SheetHeaderRightControls: React.FC<
               ? 'text-[#FDFBF7]'
               : 'text-[#524538] hover:text-[#3D332A]'
           }`}
+          title="โหมดอัปเดตเฉพาะวันที่เผยแพร่จากตาราง 2 คอลัมน์ (วันที่ + ชื่อคลิป)"
         >
           {activeMainSyncTab === 'YOUTUBE_DATE_SYNC' && (
             <motion.span
@@ -200,12 +201,12 @@ export const SheetHeaderRightControls: React.FC<
           )}
           <CalendarClock className="w-3.5 h-3.5 relative z-10" />
           <span className="relative z-10">
-            ขั้นที่ 2: ซิงก์วันที่จริง YouTube
+            อัปเดตเฉพาะวันที่ (2 คอลัมน์)
           </span>
         </button>
       </div>
 
-      {/* Sub-Tab Switcher for Step 1 (Only when Sheet Sync is active and data is loaded) */}
+      {/* Sub-Tab Switcher when 10-Col Master Sheet data is loaded */}
       {activeMainSyncTab === 'SHEET_SYNC' && hasData && (
         <div className="flex items-center gap-1 p-1 rounded-xl bg-[#FAF7F2] border border-[#E2D5C4]">
           <button
@@ -219,7 +220,7 @@ export const SheetHeaderRightControls: React.FC<
           >
             <Tag className="w-3.5 h-3.5" />
             <span>
-              ฟุตเทจ & แท็ก ({stats.totalRows.toLocaleString()})
+              ฟุตเทจ & แท็ก 3 ชั้น ({stats.totalRows.toLocaleString()})
             </span>
           </button>
 
@@ -235,7 +236,7 @@ export const SheetHeaderRightControls: React.FC<
             >
               <Layers className="w-3.5 h-3.5" />
               <span>
-                จัดอันดับ EP ({stats.episodeGroupsCount.toLocaleString()})
+                จัดอันดับ EP & วันที่ ({stats.episodeGroupsCount.toLocaleString()})
               </span>
               {stats.incompleteEpisodesCount > 0 && (
                 <span
@@ -253,7 +254,7 @@ export const SheetHeaderRightControls: React.FC<
         </div>
       )}
 
-      {/* Icon-Only Action Buttons with Animated Tooltips */}
+      {/* Icon-Only Action Buttons */}
       <div className="flex items-center gap-1.5">
         {activeMainSyncTab === 'SHEET_SYNC' && (
           <>
@@ -263,10 +264,10 @@ export const SheetHeaderRightControls: React.FC<
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={onLoadSampleData}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FEF8ED] hover:bg-[#FAEED6] text-[#734B17] border border-[#EDD7AF] transition-colors cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FEF6E8] hover:bg-[#FAEBD0] text-[#734B17] border border-[#EAD5AE] transition-colors cursor-pointer whitespace-nowrap"
               >
                 <Sparkles className="w-3.5 h-3.5 text-[#8A5A22]" />
-                <span>วางตัวอย่าง 4 คอลัมน์</span>
+                <span>วางตัวอย่าง 10 คอลัมน์</span>
               </motion.button>
             ) : (
               <>
@@ -301,7 +302,7 @@ export const SheetHeaderRightControls: React.FC<
               </>
             )}
 
-            {/* Sync Settings Popover Icon Button */}
+            {/* Sync Settings Popover */}
             <div className="relative" ref={popoverRef}>
               <IconTooltipButton
                 icon={<Settings2 className="w-4 h-4" />}
@@ -321,7 +322,7 @@ export const SheetHeaderRightControls: React.FC<
                     className="absolute right-0 mt-2 w-80 sm:w-96 p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3] shadow-xl z-50 space-y-2.5 text-left"
                   >
                     <div className="text-xs font-extrabold text-[#3D332A] border-b border-[#F2EBE0] pb-2 flex items-center justify-between">
-                      <span>ตั้งค่าเงื่อนไขการซิงค์ข้อมูลจากชีท</span>
+                      <span>ตั้งค่าเงื่อนไขซิงก์ตารางหลัก 10 คอลัมน์</span>
                       <span className="font-mono text-[11px] text-[#3B6845]">
                         เปิดใช้งาน {activeSettingsCount}/3 ข้อ
                       </span>
@@ -338,10 +339,10 @@ export const SheetHeaderRightControls: React.FC<
                       />
                       <div className="text-xs">
                         <span className="font-extrabold text-[#3D332A] block">
-                          1. จัดอันดับสร้าง/อัปเดต EP อัตโนมัติ (คอลัมน์ D)
+                          1. จัดอันดับสร้าง/อัปเดต EP + ซิงก์วันที่ (Col B, H–J)
                         </span>
                         <span className="text-[#7D6E61] leading-snug block mt-0.5">
-                          รวมฟุตเทจชื่อ EP เดียวกันเป็นคลิปหลัก 5 อันดับ หากมี EP ซ้ำจะอัปเดตแทนการสร้างซ้ำ
+                          รวม 5 แถวที่มีชื่อคลิปหลักเดียวกันเป็น 1 EP พร้อมชื่ออันดับ คำสร้อย ลิงก์ และวันที่เผยแพร่
                         </span>
                       </div>
                     </label>
@@ -357,10 +358,10 @@ export const SheetHeaderRightControls: React.FC<
                       />
                       <div className="text-xs">
                         <span className="font-extrabold text-[#3D332A] block">
-                          2. สร้างฟุตเทจใหม่อัตโนมัติหากยังไม่มีในคลัง
+                          2. สร้างฟุตเทจใหม่อัตโนมัติหากยังไม่มีในคลัง (Col A)
                         </span>
                         <span className="text-[#7D6E61] leading-snug block mt-0.5">
-                          เหมาะสำหรับตั้งฐานข้อมูลใหม่ หากฟุตซ้ำในหลาย EP ระบบจะใช้รหัสฟุตตัวเดิมไม่สร้างซ้ำ
+                          หากฟุตซ้ำในหลาย EP ระบบจะใช้รหัสฟุตตัวเดิมไม่สร้างซ้ำ
                         </span>
                       </div>
                     </label>
@@ -376,11 +377,11 @@ export const SheetHeaderRightControls: React.FC<
                       />
                       <div className="text-xs">
                         <span className="font-extrabold text-[#3D332A] block">
-                          3. ติดแท็กชื่อซีรีส์จากคอลัมน์ D ให้ฟุตเทจด้วย
+                          3. ติดแท็กชื่อซีรีส์จาก Col B ให้ฟุตเทจด้วย
                         </span>
                         <span className="text-[#7D6E61] leading-snug block mt-0.5">
-                          เช่น <code className="text-[#254B2D] font-bold">คนไทยคนตลก EP.1</code> จะติดแท็ก{' '}
-                          <code className="text-[#254B2D] font-bold">#คนไทยคนตลก</code> ให้คลิปย่อยด้วย
+                          เช่น <code className="text-[#254B2D] font-bold">5 อันดับพี่เสกสุดฮา EP.1</code> จะติดแท็ก{' '}
+                          <code className="text-[#254B2D] font-bold">#พี่เสกสุดฮา</code> ให้คลิปย่อยด้วย
                         </span>
                       </div>
                     </label>
@@ -391,7 +392,6 @@ export const SheetHeaderRightControls: React.FC<
           </>
         )}
 
-        {/* Junk Tag Cleanup Modal Trigger */}
         {onOpenJunkTagCleanup && (
           <IconTooltipButton
             icon={<Eraser className="w-4 h-4 text-[#8A4D1F]" />}
@@ -400,7 +400,6 @@ export const SheetHeaderRightControls: React.FC<
           />
         )}
 
-        {/* Fullscreen 100% Icon Button */}
         <IconTooltipButton
           icon={
             isFullScreen ? (

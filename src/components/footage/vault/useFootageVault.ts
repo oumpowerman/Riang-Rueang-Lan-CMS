@@ -8,6 +8,7 @@ import {
   isStagingTagId,
 } from '../../../services/seedData';
 import { CooldownStatus, IngestionFlow } from '../../../types/footage.types';
+import { scanDuplicateFootageClusters } from '../../../utils/duplicateClusterScanner';
 import { hasRealDriveLink } from '../../../utils/fileNameGenerator';
 import {
   FootageActionFilter,
@@ -22,12 +23,15 @@ import {
   VaultViewMode,
 } from './vault.types';
 
+export type TagFilterMatchMode = 'AND' | 'OR';
+
 export const useFootageVault = () => {
   const {
     computedFootage,
     categoryGroups,
     tags,
     tagMap,
+    tierSubCategories,
     categoryMatrix,
     untaggedFootages,
     missingDriveFootages,
@@ -53,8 +57,14 @@ export const useFootageVault = () => {
     setIsStatusRuleModalOpen,
     setTraceabilityFootageId,
     launchEpisodeBuilderForCategory,
+    launchEpisodeBuilderWithCustomClips,
     settings,
   } = useCMS();
+
+  const duplicateScan = useMemo(
+    () => scanDuplicateFootageClusters(computedFootage),
+    [computedFootage]
+  );
 
   // Filter, Sort & View States
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,6 +73,9 @@ export const useFootageVault = () => {
   const [actionFilter, setActionFilter] = useState<FootageActionFilter>('ALL');
   const [sortBy, setSortBy] = useState<FootageLibrarySortBy>('REST_DAYS_DESC');
   const [viewMode, setViewMode] = useState<VaultViewMode>('GRID');
+
+  // Multi-Tag Match Mode: Default to 'AND' (ต้องมีครบทุกแท็กที่กดเลือก) with toggle to 'OR'
+  const [tagMatchMode, setTagMatchMode] = useState<TagFilterMatchMode>('AND');
 
   // 3-Tier Explorer State
   const [isCategoryInventoryExpanded, setIsCategoryInventoryExpanded] = useState(true);
@@ -86,9 +99,9 @@ export const useFootageVault = () => {
     sortBy,
     selectedTagFilter,
     selectedGroupId,
+    tagMatchMode,
   ]);
 
-  // Helper to check if a Tier 1 Main Category belongs to a CategoryGroup
   const doesMainTagBelongToGroup = (mainTagId: string, groupId: string): boolean => {
     const mainTag = tagMap[mainTagId];
     if (!mainTag) return false;
@@ -97,9 +110,9 @@ export const useFootageVault = () => {
     return mainTag.groupType === groupShort || mainTag.groupType === groupId;
   };
 
-  // Tier 1 Main Categories with aggregated counts (including child subcategories)
+  // Overview of all tags for legacy/staging studio compatibility
   const mainCategoriesOverview = useMemo<MainCategoryOverviewItem[]>(() => {
-    const mainTags = tags.filter((t) => t.tier === 1 || (!t.parentId && !t.tier));
+    const mainTags = tags.filter((t) => !isStagingTagId(t.id) || t.id === STAGING_TAG_ID);
 
     return mainTags
       .map((mainTag) => {
@@ -130,7 +143,6 @@ export const useFootageVault = () => {
           totalCount: footagesInFamily.length,
           usableCount: usableInFamily.length,
           newCount: newInFamily.length,
-          // Staging area clips do not count toward 5-footage-per-1-EP quota
           producibleEpisodes: isStaging ? 0 : Math.floor(usableInFamily.length / 5),
         };
       })
@@ -141,7 +153,6 @@ export const useFootageVault = () => {
       });
   }, [tags, computedFootage]);
 
-  // Level 1: Category Groups (Clusters) with aggregated counts across their Main Categories & Subcategories
   const categoryGroupsOverview = useMemo<CategoryGroupOverviewItem[]>(() => {
     return categoryGroups.map((group) => {
       const isStagingGrp = isStagingGroupId(group.id);
@@ -182,44 +193,26 @@ export const useFootageVault = () => {
     });
   }, [categoryGroups, mainCategoriesOverview, computedFootage, tagMap]);
 
-  // Determine currently active Main Category for Drill-Down (Level 2)
   const activeMainCategory = useMemo<MainCategoryOverviewItem | null>(() => {
     if (selectedTagFilter.length === 0) return null;
     const firstSelected = tagMap[selectedTagFilter[0]];
     if (!firstSelected) return null;
-    const mainId = firstSelected.parentId || firstSelected.id;
-    return mainCategoriesOverview.find((m) => m.mainTag.id === mainId) || null;
+    return mainCategoriesOverview.find((m) => m.mainTag.id === firstSelected.id) || null;
   }, [selectedTagFilter, tagMap, mainCategoriesOverview]);
 
-  // Determine currently active Subcategory (Level 3) if a Tier 2 tag is selected
   const activeSubcategory = useMemo(() => {
-    if (selectedTagFilter.length === 0) return null;
-    const firstSelected = tagMap[selectedTagFilter[0]];
-    if (!firstSelected || !firstSelected.parentId) return null;
-    return firstSelected;
+    if (selectedTagFilter.length <= 1) return null;
+    return tagMap[selectedTagFilter[selectedTagFilter.length - 1]] || null;
   }, [selectedTagFilter, tagMap]);
 
-  // Sync selectedGroupId automatically if user clicked a tag from a FootageCard or external link
-  useEffect(() => {
-    if (activeMainCategory) {
-      const matchingGroup = categoryGroups.find((g) =>
-        doesMainTagBelongToGroup(activeMainCategory.mainTag.id, g.id)
-      );
-      if (matchingGroup && selectedGroupId !== matchingGroup.id) {
-        setSelectedGroupId(matchingGroup.id);
-      }
-    }
-  }, [activeMainCategory, categoryGroups]);
-
-  // Active Group object (Level 1)
   const activeGroupOverview = useMemo<CategoryGroupOverviewItem | null>(() => {
     if (!selectedGroupId) return null;
     return categoryGroupsOverview.find((g) => g.group.id === selectedGroupId) || null;
   }, [selectedGroupId, categoryGroupsOverview]);
 
-  // Contextual Scoped Footage (Syncs Top 4 KPI Status Cards with Selected Card Below)
+  // Contextual Scoped Footage supporting Multi-Tag AND / OR Intersection Filtering!
   const categoryScopedFootage = useMemo(() => {
-    // 0. If Staging Area is selected via Main Category or Group
+    // 0. If Staging Area is selected
     if (
       selectedTagFilter.some((tid) => isStagingTagId(tid)) ||
       isStagingGroupId(selectedGroupId)
@@ -227,23 +220,28 @@ export const useFootageVault = () => {
       return computedFootage.filter((ft) => isFootageInStaging(ft.tags));
     }
 
-    // 1. If a Main Category or Subcategory is selected (Level 2 or Level 3)
-    if (selectedTagFilter.length > 0) {
-      const expandedAllowedTags = new Set<string>();
-      selectedTagFilter.forEach((tid) => {
-        expandedAllowedTags.add(tid);
-        tags
-          .filter((t) => t.parentId === tid)
-          .forEach((child) => expandedAllowedTags.add(child.id));
-      });
-      return computedFootage.filter(
-        (ft) =>
-          !isFootageInStaging(ft.tags) &&
-          ft.tags.some((tid) => expandedAllowedTags.has(tid))
-      );
+    // 1. If one or more independent tags are selected across Tier 1, Tier 2, Tier 3
+    const realSelectedIds = selectedTagFilter.filter(
+      (tid) => Boolean(tid) && !isStagingTagId(tid)
+    );
+    if (realSelectedIds.length > 0) {
+      if (tagMatchMode === 'AND') {
+        return computedFootage.filter(
+          (ft) =>
+            !isFootageInStaging(ft.tags) &&
+            realSelectedIds.every((tid) => ft.tags.includes(tid))
+        );
+      } else {
+        const allowedSet = new Set(realSelectedIds);
+        return computedFootage.filter(
+          (ft) =>
+            !isFootageInStaging(ft.tags) &&
+            ft.tags.some((tid) => allowedSet.has(tid))
+        );
+      }
     }
 
-    // 2. If a Category Group is selected (Level 1)
+    // 2. If a Category Group is selected
     if (activeGroupOverview) {
       return computedFootage.filter(
         (ft) =>
@@ -254,9 +252,15 @@ export const useFootageVault = () => {
 
     // 3. Default: All footage in the vault
     return computedFootage;
-  }, [computedFootage, selectedTagFilter, selectedGroupId, tags, activeGroupOverview]);
+  }, [
+    computedFootage,
+    selectedTagFilter,
+    selectedGroupId,
+    tagMatchMode,
+    activeGroupOverview,
+  ]);
 
-  // Executive KPI Metrics (Dynamically reflects the selected Group / Main Category / Subcategory)
+  // Executive KPI Metrics (Dynamically reflects the selected Tag Combination)
   const vaultMetrics = useMemo<VaultMetricsSummary>(() => {
     const total = categoryScopedFootage.length;
     const newUntouched = categoryScopedFootage.filter(
@@ -282,47 +286,52 @@ export const useFootageVault = () => {
 
   // Human-readable label describing what the 4 KPI cards at the top currently represent
   const activeScopeDescription = useMemo<ActiveScopeDescription>(() => {
-    if (activeSubcategory && activeMainCategory) {
+    const realSelected = selectedTagFilter
+      .filter((tid) => !isStagingTagId(tid))
+      .map((tid) => tagMap[tid])
+      .filter(Boolean);
+
+    if (realSelected.length > 1) {
+      const joiner = tagMatchMode === 'AND' ? ' + ' : ' หรือ ';
+      const names = realSelected.map((t) => `#${t.name}`).join(joiner);
       return {
-        key: `SUB_${activeSubcategory.id}`,
-        level: 'หมวดย่อย',
-        label: `${getEntityIcon(activeSubcategory)} ${activeSubcategory.name}`,
-        trail: `${
-          activeGroupOverview
-            ? `${activeGroupOverview.group.icon} ${activeGroupOverview.group.name} ➔ `
-            : ''
-        }#${activeMainCategory.mainTag.name} ➔ ${activeSubcategory.name}`,
+        key: `COMBO_${tagMatchMode}_${realSelected.map((t) => t.id).join('_')}`,
+        level: tagMatchMode === 'AND' ? 'ผสมแท็ก (AND)' : 'ผสมแท็ก (OR)',
+        label: names,
+        trail: `กรองผสม ${realSelected.length} แท็ก (${
+          tagMatchMode === 'AND' ? 'ต้องมีครบทุกแท็ก' : 'มีอย่างน้อย 1 แท็ก'
+        }): ${names}`,
       };
     }
-    if (activeMainCategory) {
+
+    if (realSelected.length === 1) {
+      const single = realSelected[0];
       return {
-        key: `MAIN_${activeMainCategory.mainTag.id}`,
-        level: 'หมวดหลัก',
-        label: `#${activeMainCategory.mainTag.name}`,
-        trail: `${
-          activeGroupOverview
-            ? `${activeGroupOverview.group.icon} ${activeGroupOverview.group.name} ➔ `
-            : ''
-        }#${activeMainCategory.mainTag.name}`,
+        key: `TAG_${single.id}`,
+        level: `Tier ${single.tier || 1}`,
+        label: `${getEntityIcon(single)} #${single.name}`,
+        trail: `Tier ${single.tier || 1} (${single.subCategory || 'ทั่วไป'}) ➔ #${single.name}`,
       };
     }
-    if (activeGroupOverview) {
+
+    if (selectedTagFilter.some((tid) => isStagingTagId(tid)) || isStagingGroupId(selectedGroupId)) {
       return {
-        key: `GRP_${activeGroupOverview.group.id}`,
-        level: 'กลุ่มหมวด',
-        label: `${activeGroupOverview.group.icon} ${activeGroupOverview.group.name}`,
-        trail: `${activeGroupOverview.group.icon} ${activeGroupOverview.group.name}`,
+        key: 'STAGING_VAULT',
+        level: 'พื้นที่พัก',
+        label: 'คลิปยังไม่ติดแท็ก',
+        trail: 'พื้นที่พักรอจัดหมวดหมู่ (Staging Area)',
       };
     }
+
     return {
       key: 'ALL_VAULT',
       level: 'ทั้งคลัง',
       label: 'ทั้งหมด',
       trail: 'ทุกหมวดหมู่',
     };
-  }, [activeSubcategory, activeMainCategory, activeGroupOverview]);
+  }, [selectedTagFilter, selectedGroupId, tagMap, tagMatchMode]);
 
-  // Handlers for 3-Tier Progressive Selection
+  // Handlers for 3-Tier Multi-Tag Selection
   const handleSelectGroup = (groupId: string) => {
     if (selectedGroupId === groupId && selectedTagFilter.length === 0) {
       setSelectedGroupId(null);
@@ -333,24 +342,28 @@ export const useFootageVault = () => {
     }
   };
 
-  const handleSelectMainCategory = (mainTagId: string) => {
-    if (
-      activeMainCategory?.mainTag.id === mainTagId &&
-      selectedTagFilter.length === 1 &&
-      selectedTagFilter[0] === mainTagId
-    ) {
-      setSelectedTagFilter([]);
-    } else {
-      setSelectedTagFilter([mainTagId]);
+  // Clicking a tag in the 3-Tier Explorer toggles it in `selectedTagFilter` so users can combine multiple tags freely!
+  const handleToggleFacetTag = (tagId: string) => {
+    if (isStagingTagId(tagId)) {
+      handleToggleStagingFilter();
+      return;
     }
+    setSelectedGroupId(null);
+    setSelectedTagFilter((prev) => {
+      const cleanPrev = prev.filter((id) => !isStagingTagId(id));
+      if (cleanPrev.includes(tagId)) {
+        return cleanPrev.filter((id) => id !== tagId);
+      }
+      return [...cleanPrev, tagId];
+    });
   };
 
-  const handleSelectSubcategory = (subTagId: string, mainTagId: string) => {
-    if (selectedTagFilter.includes(subTagId)) {
-      setSelectedTagFilter([mainTagId]);
-    } else {
-      setSelectedTagFilter([subTagId]);
-    }
+  const handleSelectMainCategory = (mainTagId: string) => {
+    handleToggleFacetTag(mainTagId);
+  };
+
+  const handleSelectSubcategory = (subTagId: string) => {
+    handleToggleFacetTag(subTagId);
   };
 
   const handleClearHierarchySelection = () => {
@@ -359,9 +372,7 @@ export const useFootageVault = () => {
   };
 
   const handleToggleTag = (tagId: string) => {
-    setSelectedTagFilter((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [tagId]
-    );
+    handleToggleFacetTag(tagId);
   };
 
   const handleResetFilters = () => {
@@ -399,7 +410,31 @@ export const useFootageVault = () => {
     }
   };
 
-  // Precompute sets of category IDs for actionable readiness filters (excluding Staging Area)
+  // Launch Episode Builder directly from the currently filtered usable clips!
+  const handleLaunchEpisodeFromCurrentFilter = () => {
+    const usableClips = categoryScopedFootage.filter(
+      (ft) =>
+        ft.cooldownStatus === 'NEW_UNTOUCHED' || ft.cooldownStatus === 'READY_FRESH'
+    );
+    const realSelected = selectedTagFilter.filter((tid) => !isStagingTagId(tid));
+    const primaryTagId = realSelected[0] || '';
+
+    if (usableClips.length >= 5) {
+      const pickedIds = usableClips.slice(0, 5).map((f) => f.id);
+      const comboTitle =
+        realSelected.length > 0
+          ? `5 อันดับ ${realSelected
+              .map((id) => tagMap[id]?.name)
+              .filter(Boolean)
+              .join(' x ')}`
+          : undefined;
+      launchEpisodeBuilderWithCustomClips(pickedIds, primaryTagId, comboTitle);
+    } else if (primaryTagId) {
+      launchEpisodeBuilderForCategory(primaryTagId, 'FORMULA_2_NEW_3_FRESH');
+    }
+  };
+
+  // Precompute sets of category IDs for actionable readiness filters
   const ready5CategoryIds = useMemo(
     () =>
       new Set(
@@ -453,6 +488,8 @@ export const useFootageVault = () => {
         if (!isFootageInStaging(ft.tags)) return false;
       } else if (actionFilter === 'MISSING_DRIVE_ONLY') {
         if (hasRealDriveLink(ft.driveFileUrl)) return false;
+      } else if (actionFilter === 'DUPLICATES_ONLY') {
+        if (duplicateScan.itemClusterIndexById[ft.id] === undefined) return false;
       } else if (actionFilter === 'CATEGORY_READY_5') {
         if (isFootageInStaging(ft.tags)) return false;
         const isUsable =
@@ -485,6 +522,11 @@ export const useFootageVault = () => {
     });
 
     return [...filtered].sort((a, b) => {
+      if (actionFilter === 'DUPLICATES_ONLY') {
+        const idxA = duplicateScan.itemClusterIndexById[a.id] ?? Number.MAX_SAFE_INTEGER;
+        const idxB = duplicateScan.itemClusterIndexById[b.id] ?? Number.MAX_SAFE_INTEGER;
+        if (idxA !== idxB) return idxA - idxB;
+      }
       if (sortBy === 'REST_DAYS_DESC') {
         const daysA = a.daysSinceLastUsed === null ? 9999 : a.daysSinceLastUsed;
         const daysB = b.daysSinceLastUsed === null ? 9999 : b.daysSinceLastUsed;
@@ -513,6 +555,7 @@ export const useFootageVault = () => {
     ready5CategoryIds,
     allNew5CategoryIds,
     smartMixCategoryIds,
+    duplicateScan,
   ]);
 
   const paginatedFootage = useMemo(() => {
@@ -522,7 +565,6 @@ export const useFootageVault = () => {
 
   const hasHierarchySelection = Boolean(selectedGroupId || selectedTagFilter.length > 0);
 
-  // Unique transition key so switching between e.g. "น้าค่อม" and "แน็ก ชาลี" triggers choreographed staggered spring transitions
   const resultsTransitionKey = useMemo(() => {
     return `${activeScopeDescription.key}__${statusFilter}__${flowFilter}__${actionFilter}__${sortBy}__p${currentPage}`;
   }, [
@@ -534,9 +576,6 @@ export const useFootageVault = () => {
     currentPage,
   ]);
 
-  // ============================================================================
-  // Smart Drag & Drop, Shift+Click Range Selection & Bulk Selection Handlers
-  // ============================================================================
   const isDraggingClips = activeDragFootageIds.length > 0;
 
   const handleStartDragFootage = (footageId: string): string[] => {
@@ -634,9 +673,11 @@ export const useFootageVault = () => {
     computedFootage,
     tags,
     tagMap,
+    tierSubCategories,
     categoryMatrix,
     untaggedFootages,
     missingDriveFootages,
+    duplicateScan,
     settings,
     mainCategoriesOverview,
     categoryGroupsOverview,
@@ -664,6 +705,8 @@ export const useFootageVault = () => {
     setSortBy,
     viewMode,
     setViewMode,
+    tagMatchMode,
+    setTagMatchMode,
     isCategoryInventoryExpanded,
     setIsCategoryInventoryExpanded,
     selectedGroupId,
@@ -698,11 +741,13 @@ export const useFootageVault = () => {
     isStagingFilterActive,
     handleToggleStagingFilter,
     handleSelectGroup,
+    handleToggleFacetTag,
     handleSelectMainCategory,
     handleSelectSubcategory,
     handleClearHierarchySelection,
     handleToggleTag,
     handleResetFilters,
+    handleLaunchEpisodeFromCurrentFilter,
     setIsDirectFootageModalOpen,
     setIsGoogleDriveBatchModalOpen,
     isSheetTagImportModalOpen,

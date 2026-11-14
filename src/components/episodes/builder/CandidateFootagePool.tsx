@@ -175,7 +175,7 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
             <button
               type="button"
               onClick={onCollapseToStrip}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#554d44] bg-[#faf7f2] hover:bg-[#eae1d4] border border-[#e8dfd3] rounded-xl transition-colors cursor-pointer"
+              className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#554d44] bg-[#faf7f2] hover:bg-[#eae1d4] border border-[#e8dfd3] rounded-xl transition-colors cursor-pointer"
               title="ย่อคลังคลิปกลับไปแสดงสูตรด่วนเต็มจอ"
             >
               <span>พับเก็บ</span>
@@ -239,12 +239,12 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
               {
                 id: 'ONLY_NEW',
                 icon: Sparkles,
-                label: `ฟุตใหม่ (${liveCategoryStock.remainingNew})`,
+                label: `ใหม่ (${liveCategoryStock.remainingNew})`,
               },
               {
                 id: 'ONLY_FRESH',
                 icon: CheckCircle2,
-                label: `ฟุตเก่าสด (${liveCategoryStock.remainingFresh})`,
+                label: `สด (${liveCategoryStock.remainingFresh})`,
               },
               {
                 id: 'ALL',
@@ -273,10 +273,12 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
           })}
         </div>
 
-        {/* Subcategory Quick Filter Chips (Solves 200+ clips clutter!) */}
+        {/* Co-occurring Tier 2 / Tier 3 Quick Filter Chips */}
         {currentSubcategories.length > 0 && onChangePoolSubcategoryFilterId && (
           <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#eee6da]">
-            <span className="text-[11px] font-bold text-[#787066] mr-0.5">หมวดย่อย:</span>
+            <span className="text-[11px] font-bold text-[#787066] mr-0.5">
+              กรองแท็กร่วม (Tier 2/3):
+            </span>
             <button
               type="button"
               onClick={() => onChangePoolSubcategoryFilterId(null)}
@@ -463,7 +465,7 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
                 {/* Bottom Row: Tags + 1-Click [+ ว่าง] or Direct [1][2][3][4][5] Buttons */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-[#eee6da]">
                   <div className="flex flex-wrap items-center gap-1">
-                    {ft.tags.map((tid) => (
+                    {Array.from(new Set(ft.tags || [])).map((tid) => (
                       <TagPill key={tid} tag={tagMap[tid]} />
                     ))}
                   </div>

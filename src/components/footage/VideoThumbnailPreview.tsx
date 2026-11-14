@@ -1,20 +1,83 @@
 import React, { useState } from 'react';
-import { Film, Play, Youtube } from 'lucide-react';
+import { Film, Globe, Play, Youtube } from 'lucide-react';
 import { Footage } from '../../types/footage.types';
 import {
   formatClipDurationBadge,
   getFootageVideoPreviewInfo,
+  VideoPreviewProvider,
 } from '../../utils/videoPreviewUtils';
 import { GoogleDriveIcon } from '../ui/GoogleDriveIcon';
 
 interface VideoThumbnailPreviewProps {
   footage: Pick<
     Footage,
-    'id' | 'title' | 'driveFileUrl' | 'originalUrl' | 'thumbnailUrl' | 'timestampRange' | 'durationSec'
+    | 'id'
+    | 'title'
+    | 'driveFileUrl'
+    | 'originalUrl'
+    | 'thumbnailUrl'
+    | 'timestampRange'
+    | 'durationSec'
   >;
   onClick?: (e: React.MouseEvent) => void;
   size?: 'xs' | 'sm' | 'md';
 }
+
+const renderProviderBadgeIcon = (
+  provider: VideoPreviewProvider,
+  mode: 'badge' | 'fallback',
+  size: 'xs' | 'sm' | 'md'
+) => {
+  const iconSizeClass =
+    mode === 'badge'
+      ? 'w-2.5 h-2.5'
+      : size === 'xs'
+      ? 'w-3.5 h-3.5'
+      : size === 'sm'
+      ? 'w-4 h-4'
+      : 'w-5 h-5';
+
+  switch (provider) {
+    case 'DRIVE':
+      return <GoogleDriveIcon className={iconSizeClass} />;
+    case 'YOUTUBE':
+      return <Youtube className={`${iconSizeClass} text-[#c95b48]`} />;
+    case 'TIKTOK':
+      return (
+        <span
+          className={`font-mono font-extrabold leading-none ${
+            mode === 'badge' ? 'text-[8px]' : 'text-[10px]'
+          } text-slate-900`}
+        >
+          TT
+        </span>
+      );
+    case 'FACEBOOK':
+      return (
+        <span
+          className={`font-sans font-extrabold leading-none ${
+            mode === 'badge' ? 'text-[8px]' : 'text-[10px]'
+          } text-[#1877F2]`}
+        >
+          FB
+        </span>
+      );
+    case 'INSTAGRAM':
+      return (
+        <span
+          className={`font-sans font-extrabold leading-none ${
+            mode === 'badge' ? 'text-[8px]' : 'text-[10px]'
+          } text-[#E1306C]`}
+        >
+          IG
+        </span>
+      );
+    case 'SOCIAL':
+      return <Globe className={`${iconSizeClass} text-indigo-600`} />;
+    default:
+      return <Film className={`${iconSizeClass} text-[#8c8275]`} />;
+  }
+};
 
 export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
   footage,
@@ -36,7 +99,11 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
   }, [preview.thumbnailUrl]);
 
   const handleImageError = () => {
-    if (!triedFallback && preview.fallbackThumbnailUrl && imgSrc !== preview.fallbackThumbnailUrl) {
+    if (
+      !triedFallback &&
+      preview.fallbackThumbnailUrl &&
+      imgSrc !== preview.fallbackThumbnailUrl
+    ) {
       setTriedFallback(true);
       setImgSrc(preview.fallbackThumbnailUrl);
     } else {
@@ -59,7 +126,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
       onClick={onClick}
       title={
         preview.provider !== 'NONE'
-          ? 'คลิกเพื่อเปิดดูวิดีโอตัวอย่าง (Quick Player)'
+          ? `คลิกเพื่อเปิดดูวิดีโอตัวอย่าง (${preview.providerLabel})`
           : 'ดูรายละเอียดวิดีโอตัวอย่าง'
       }
       className={`group/thumb relative ${sizeClasses} overflow-hidden shrink-0 border border-[#e2d8cb] bg-gradient-to-br from-[#faf7f2] via-[#fdfbf7] to-[#edf4ed]/90 hover:border-[#3b6845] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#3b6845]/40 shadow-2xs`}
@@ -75,37 +142,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-0.5 text-[#8c8275]">
-          {preview.provider === 'DRIVE' ? (
-            <GoogleDriveIcon
-              className={
-                size === 'xs'
-                  ? 'w-3.5 h-3.5 opacity-80'
-                  : size === 'sm'
-                  ? 'w-4 h-4 opacity-80'
-                  : 'w-5 h-5 opacity-85'
-              }
-            />
-          ) : preview.provider === 'YOUTUBE' ? (
-            <Youtube
-              className={
-                size === 'xs'
-                  ? 'w-3.5 h-3.5 text-[#c95b48]'
-                  : size === 'sm'
-                  ? 'w-4 h-4 text-[#c95b48]'
-                  : 'w-5 h-5 text-[#c95b48]'
-              }
-            />
-          ) : (
-            <Film
-              className={
-                size === 'xs'
-                  ? 'w-3.5 h-3.5 text-[#8c8275]'
-                  : size === 'sm'
-                  ? 'w-4 h-4 text-[#8c8275]'
-                  : 'w-5 h-5 text-[#8c8275]'
-              }
-            />
-          )}
+          {renderProviderBadgeIcon(preview.provider, 'fallback', size)}
         </div>
       )}
 
@@ -132,20 +169,20 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
         </span>
       </div>
 
-      {/* Top-left mini provider indicator when image is loaded */}
-      {canShowImage && preview.provider !== 'NONE' && size !== 'xs' && (
-        <span className="absolute top-1 left-1 p-0.5 rounded bg-[#fdfbf7]/95 border border-[#e8dfd3] shadow-2xs backdrop-blur-xs">
-          {preview.provider === 'DRIVE' ? (
-            <GoogleDriveIcon className="w-2.5 h-2.5" />
-          ) : (
-            <Youtube className="w-2.5 h-2.5 text-[#c95b48]" />
-          )}
+      {/* Top-left mini provider indicator when provider is available */}
+      {preview.provider !== 'NONE' && (
+        <span
+          className={`absolute top-0.5 left-0.5 ${
+            size === 'xs' ? 'px-0.5 py-0.2' : 'p-0.5'
+          } rounded bg-[#fdfbf7]/95 border border-[#e8dfd3] shadow-2xs backdrop-blur-xs flex items-center justify-center`}
+        >
+          {renderProviderBadgeIcon(preview.provider, 'badge', size)}
         </span>
       )}
 
       {/* Bottom-right duration / timestamp pill in light pastel earth tone */}
-      {durationBadge && size === 'md' && (
-        <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded bg-[#fdfbf7]/95 text-[#2d2926] border border-[#e2d8cb] font-mono text-[9px] font-bold leading-tight tabular-nums shadow-2xs">
+      {durationBadge && size !== 'xs' && (
+        <span className="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded bg-[#fdfbf7]/95 text-[#2d2926] border border-[#e2d8cb] font-mono text-[9px] font-bold leading-tight tabular-nums shadow-2xs">
           {durationBadge}
         </span>
       )}

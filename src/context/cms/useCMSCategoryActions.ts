@@ -12,12 +12,21 @@ import {
   CategoryGroup,
   CategoryTag,
   CategoryTier,
+  DEFAULT_TIER_SUBCATEGORIES,
+  DEFAULT_UNCLASSIFIED_SUBCATEGORY,
   EntitySubtype,
   SystemSettings,
   TagGroupType,
+  TierSubCategoriesConfig,
 } from '../../types/tag.types';
 import { getReferenceTodayDate } from '../../utils/cooldownCalculator';
 import { generateNextId } from '../../utils/fileNameGenerator';
+import { computeDictionaryTagReorganization } from '../../utils/reorganizeTagsToDictionary';
+import {
+  DATA_DICTIONARY_SUBCATEGORIES,
+  resolveTagByDataDictionary,
+  stripForbiddenHumorSuffixes,
+} from '../../utils/tagDictionaryRules';
 
 interface UseCMSCategoryActionsParams {
   categoryGroups: CategoryGroup[];
@@ -34,6 +43,18 @@ interface UseCMSCategoryActionsParams {
   setSettings: React.Dispatch<React.SetStateAction<SystemSettings>>;
 }
 
+function getTierKey(tier: CategoryTier): keyof TierSubCategoriesConfig {
+  if (tier === 2) return 'tier2';
+  if (tier === 3) return 'tier3';
+  return 'tier1';
+}
+
+function getDefaultSubCategoryForTier(tier: CategoryTier): string {
+  if (tier === 2) return DEFAULT_TIER_SUBCATEGORIES.tier2[0];
+  if (tier === 3) return DEFAULT_TIER_SUBCATEGORIES.tier3[0];
+  return DEFAULT_TIER_SUBCATEGORIES.tier1[0];
+}
+
 export function useCMSCategoryActions({
   categoryGroups,
   setCategoryGroups,
@@ -48,7 +69,7 @@ export function useCMSCategoryActions({
   settings,
   setSettings,
 }: UseCMSCategoryActionsParams) {
-  // Category Group CRUD (Tier 0)
+  // Category Group CRUD (Legacy compatibility)
   const createCategoryGroup = (
     name: string,
     icon = '📁',
@@ -111,47 +132,202 @@ export function useCMSCategoryActions({
     const fresh = cmsRepository.restoreDefaultCategories();
     setCategoryGroups(fresh.categoryGroups);
     setTags(fresh.tags);
+    updateSettings({
+      tierSubCategories: DATA_DICTIONARY_SUBCATEGORIES,
+    });
     firestoreService
       .restoreCategoriesToCloud(fresh.categoryGroups, fresh.tags)
       .catch((err) => console.warn('Firestore restoreCategoriesToCloud error:', err));
   };
 
-  // Tag & Subcategory CRUD
+  const updateSettings = (updates: Partial<SystemSettings>) => {
+    const nextSettings = { ...settings, ...updates };
+    setSettings(nextSettings);
+    cmsRepository.saveSettings(nextSettings);
+    firestoreService
+      .saveSettings(nextSettings)
+      .catch((err) => console.warn('Firestore updateSettings error:', err));
+  };
+
+  // Sub-category Management per Tier (Tier 1, Tier 2, Tier 3)
+  const addTierSubCategory = (tier: CategoryTier, subCategoryName: string) => {
+    const trimmed = subCategoryName.trim();
+    if (!trimmed) return;
+    const currentConfig = settings.tierSubCategories || DEFAULT_TIER_SUBCATEGORIES;
+    const key = getTierKey(tier);
+    const list = currentConfig[key] || [];
+    if (list.includes(trimmed)) return;
+    updateSettings({
+      tierSubCategories: {
+        ...currentConfig,
+        [key]: [...list, trimmed],
+      },
+    });
+  };
+
+  const renameTierSubCategory = async (
+    tier: CategoryTier,
+    oldSubCategoryName: string,
+    newSubCategoryName: string
+  ) => {
+    const oldTrimmed = oldSubCategoryName.trim();
+    const newTrimmed = newSubCategoryName.trim();
+    if (!oldTrimmed || !newTrimmed || oldTrimmed === newTrimmed) return;
+
+    const currentConfig = settings.tierSubCategories || DEFAULT_TIER_SUBCATEGORIES;
+    const key = getTierKey(tier);
+    const list = currentConfig[key] || [];
+    const nextList = list.includes(oldTrimmed)
+      ? list.map((item) => (item === oldTrimmed ? newTrimmed : item))
+      : [...list, newTrimmed];
+
+    updateSettings({
+      tierSubCategories: {
+        ...currentConfig,
+        [key]: Array.from(new Set(nextList)),
+      },
+    });
+
+    const changedTags: CategoryTag[] = [];
+    const nextTags = tags.map((t) => {
+      if (isStagingTagId(t.id)) return t;
+      const tSub = (t.subCategory || DEFAULT_UNCLASSIFIED_SUBCATEGORY).trim();
+      if (t.tier === tier && tSub === oldTrimmed) {
+        const updated: CategoryTag = {
+          ...t,
+          subCategory: newTrimmed,
+        };
+        changedTags.push(updated);
+        return updated;
+      }
+      return t;
+    });
+
+    if (changedTags.length > 0) {
+      setTags(nextTags);
+      cmsRepository.saveTags(nextTags);
+      try {
+        await firestoreService.batchSaveCategories(changedTags);
+      } catch (err) {
+        console.warn('Firestore renameTierSubCategory error:', err);
+      }
+    }
+  };
+
+  const deleteTierSubCategory = async (tier: CategoryTier, subCategoryName: string) => {
+    const trimmed = subCategoryName.trim();
+    if (!trimmed || trimmed === DEFAULT_UNCLASSIFIED_SUBCATEGORY) return;
+
+    const currentConfig = settings.tierSubCategories || DEFAULT_TIER_SUBCATEGORIES;
+    const key = getTierKey(tier);
+    const list = (currentConfig[key] || []).filter((item) => item !== trimmed);
+    const fallbackSub =
+      tier === 1
+        ? DEFAULT_UNCLASSIFIED_SUBCATEGORY
+        : list[0] || getDefaultSubCategoryForTier(tier);
+
+    updateSettings({
+      tierSubCategories: {
+        ...currentConfig,
+        [key]: list.length > 0 ? list : [fallbackSub],
+      },
+    });
+
+    const changedTags: CategoryTag[] = [];
+    const nextTags = tags.map((t) => {
+      if (isStagingTagId(t.id)) return t;
+      const tSub = (t.subCategory || DEFAULT_UNCLASSIFIED_SUBCATEGORY).trim();
+      if (t.tier === tier && tSub === trimmed) {
+        const updated: CategoryTag = {
+          ...t,
+          tier: tier === 1 ? 1 : tier,
+          subCategory: fallbackSub,
+        };
+        changedTags.push(updated);
+        return updated;
+      }
+      return t;
+    });
+
+    if (changedTags.length > 0) {
+      setTags(nextTags);
+      cmsRepository.saveTags(nextTags);
+      try {
+        await firestoreService.batchSaveCategories(changedTags);
+      } catch (err) {
+        console.warn('Firestore deleteTierSubCategory error:', err);
+      }
+    }
+  };
+
+  // Tag CRUD (Supports Tier 1, Tier 2, Tier 3 + subCategory + Data Dictionary Rule Enforcement)
   const createTag = (
     name: string,
     groupType: TagGroupType = 'THEME',
     color = 'blue',
     description = '',
     tier: CategoryTier = 1,
-    parentId: string | null = null,
+    _parentId: string | null = null,
     entityType?: EntitySubtype,
-    groupId?: string
+    groupId?: string,
+    subCategory?: string
   ): CategoryTag => {
     cmsRepository.setCategoriesWiped(false);
-    const trimmed = name.trim();
+    const preferredTier: CategoryTier =
+      tier === 1 || tier === 2 || tier === 3 ? tier : 1;
+
+    // Enforce Rule 2 (strip ฮา / ฮาๆ / สุดฮา) and Dictionary Synonym Resolution
+    const resolvedList = resolveTagByDataDictionary(
+      name,
+      preferredTier,
+      subCategory
+    );
+    const primaryResolved = resolvedList[0];
+    const finalName =
+      primaryResolved?.name ||
+      stripForbiddenHumorSuffixes(name).cleanedName ||
+      name.trim().replace(/^#+/, '').trim();
+
     const existing = tags.find(
       (t) =>
-        t.name.toLowerCase() === trimmed.toLowerCase() &&
-        (parentId ? t.parentId === parentId : !t.parentId || t.tier === 1)
+        t.name.toLowerCase() === finalName.toLowerCase() &&
+        !isStagingTagId(t.id)
     );
     if (existing) return existing;
 
-    const resolvedTier: CategoryTier = tier === 2 || !!parentId ? 2 : 1;
-    const parentCat = parentId ? tagMap[parentId] : undefined;
-    const resolvedGroupId =
-      groupId || parentCat?.groupId || `GRP-${groupType || 'GENERAL'}`;
+    const resolvedTier: CategoryTier = primaryResolved?.dictionarySpecId
+      ? primaryResolved.tier
+      : preferredTier;
+    const resolvedSubCategory = primaryResolved?.dictionarySpecId
+      ? primaryResolved.subCategory
+      : (subCategory && subCategory.trim()) ||
+        getDefaultSubCategoryForTier(resolvedTier);
+    const resolvedColor = primaryResolved?.dictionarySpecId
+      ? primaryResolved.color
+      : color;
+    const resolvedDescription =
+      description.trim() || primaryResolved?.description || '';
+    const resolvedGroupId = groupId || `GRP-${groupType || 'GENERAL'}`;
+    const defaultEntity: EntitySubtype =
+      entityType ||
+      primaryResolved?.entityType ||
+      (resolvedTier === 3 ? 'PERSON' : resolvedTier === 2 ? 'ACTION' : 'TOPIC');
+
+    // Ensure the subCategory is registered in settings
+    addTierSubCategory(resolvedTier, resolvedSubCategory);
 
     const newTag: CategoryTag = {
       id: generateNextId('TAG', tags.map((t) => t.id)),
-      name: trimmed,
-      color,
+      name: finalName,
+      color: resolvedColor,
       groupType,
       groupId: resolvedGroupId,
-      description,
+      description: resolvedDescription,
       createdAt: getReferenceTodayDate(),
       tier: resolvedTier,
-      parentId: resolvedTier === 2 ? parentId : null,
-      ...(resolvedTier === 2 ? { entityType: entityType || 'PERSON' } : {}),
+      subCategory: resolvedSubCategory,
+      parentId: null,
+      entityType: defaultEntity,
     };
     const next = [...tags, newTag];
     setTags(next);
@@ -170,15 +346,21 @@ export function useCMSCategoryActions({
     description = ''
   ): CategoryTag => {
     const parent = tagMap[parentId];
+    const targetTier: CategoryTier = entityType === 'PERSON' ? 3 : 2;
+    const targetSub =
+      targetTier === 3
+        ? DEFAULT_TIER_SUBCATEGORIES.tier3[0]
+        : DEFAULT_TIER_SUBCATEGORIES.tier2[0];
     return createTag(
       name,
       parent ? parent.groupType : 'PERSON',
       color || (parent ? parent.color : 'amber'),
-      description || `หมวดหมู่ย่อยใต้ ${parent ? parent.name : ''}`,
-      2,
-      parentId,
+      description,
+      targetTier,
+      null,
       entityType,
-      parent?.groupId
+      parent?.groupId,
+      targetSub
     );
   };
 
@@ -186,28 +368,30 @@ export function useCMSCategoryActions({
     const target = tags.find((t) => t.id === id);
     if (!target) return;
 
+    const sanitizedName =
+      updates.name !== undefined
+        ? stripForbiddenHumorSuffixes(updates.name).cleanedName ||
+          updates.name.trim().replace(/^#+/, '').trim()
+        : target.name;
+
     const resolvedTier: CategoryTier =
-      updates.tier ?? target.tier ?? (updates.parentId || target.parentId ? 2 : 1);
-    const resolvedParentId =
-      resolvedTier === 2
-        ? updates.parentId !== undefined
-          ? updates.parentId
-          : target.parentId || null
-        : null;
-    const parentCat = resolvedParentId
-      ? tags.find((p) => p.id === resolvedParentId)
-      : undefined;
+      updates.tier === 1 || updates.tier === 2 || updates.tier === 3
+        ? updates.tier
+        : target.tier || 1;
+    const resolvedSubCategory =
+      updates.subCategory !== undefined
+        ? updates.subCategory.trim() || getDefaultSubCategoryForTier(resolvedTier)
+        : target.subCategory || getDefaultSubCategoryForTier(resolvedTier);
     const resolvedGroupId =
-      updates.groupId ||
-      target.groupId ||
-      parentCat?.groupId ||
-      `GRP-${target.groupType || 'GENERAL'}`;
+      updates.groupId || target.groupId || `GRP-${target.groupType || 'GENERAL'}`;
 
     const updated: CategoryTag = {
       ...target,
       ...updates,
+      name: sanitizedName,
       tier: resolvedTier,
-      parentId: resolvedParentId,
+      subCategory: resolvedSubCategory,
+      parentId: null,
       groupId: resolvedGroupId,
     };
 
@@ -215,11 +399,6 @@ export function useCMSCategoryActions({
     setTags(next);
     cmsRepository.saveTags(next);
 
-    if (parentCat) {
-      firestoreService
-        .saveCategory(parentCat)
-        .catch((err) => console.warn('Firestore save parent category error:', err));
-    }
     firestoreService
       .saveCategory(updated)
       .catch((err) => console.warn('Firestore updateTag error:', err));
@@ -228,14 +407,9 @@ export function useCMSCategoryActions({
   const deleteTag = (id: string) => {
     if (isStagingTagId(id)) return;
     const removedIds: string[] = [id];
-    tags.forEach((t) => {
-      if (t.parentId === id && !removedIds.includes(t.id)) {
-        removedIds.push(t.id);
-      }
-    });
 
     cmsRepository.markTagIdsDeleted(removedIds);
-    const nextTags = tags.filter((t) => t.id !== id && t.parentId !== id);
+    const nextTags = tags.filter((t) => t.id !== id);
     setTags(nextTags);
     cmsRepository.saveTags(nextTags);
 
@@ -289,14 +463,7 @@ export function useCMSCategoryActions({
     const rawIds = Array.from(new Set(tagIds.filter((id) => Boolean(id) && !isStagingTagId(id))));
     if (rawIds.length === 0) return { deletedCount: 0, updatedFootagesCount: 0 };
 
-    // Include any children subcategories if a parent tag is in the list
     const allRemovedIds = new Set<string>(rawIds);
-    tags.forEach((t) => {
-      if (t.parentId && allRemovedIds.has(t.parentId)) {
-        allRemovedIds.add(t.id);
-      }
-    });
-
     const removedList = Array.from(allRemovedIds);
     cmsRepository.markTagIdsDeleted(removedList);
 
@@ -358,15 +525,6 @@ export function useCMSCategoryActions({
     };
   };
 
-  const updateSettings = (updates: Partial<SystemSettings>) => {
-    const nextSettings = { ...settings, ...updates };
-    setSettings(nextSettings);
-    cmsRepository.saveSettings(nextSettings);
-    firestoreService
-      .saveSettings(nextSettings)
-      .catch((err) => console.warn('Firestore updateSettings error:', err));
-  };
-
   const [lastTagReorgUndoRecord, setLastTagReorgUndoRecord] =
     React.useState<import('./cms.types').TagReorgUndoRecord | null>(null);
 
@@ -406,46 +564,35 @@ export function useCMSCategoryActions({
       return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
     }
 
-    if (destination.mode === 'MOVE_TO_GROUP') {
-      const targetGroup = categoryGroups.find(
-        (g) => g.id === destination.targetGroupId
-      );
-      if (!targetGroup || isStagingGroupId(targetGroup.id)) {
-        return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
-      }
+    if (destination.mode === 'MOVE_TO_TIER_SUBCATEGORY') {
+      const targetTier: CategoryTier = destination.targetTier;
+      const targetSubCategory =
+        destination.targetSubCategory.trim() || getDefaultSubCategoryForTier(targetTier);
+      addTierSubCategory(targetTier, targetSubCategory);
 
       const moveSet = new Set(cleanIds);
-      const targetGroupType: TagGroupType =
-        (targetGroup.id.replace('GRP-', '') as TagGroupType) || 'GENERAL';
-
       const previousTags: CategoryTag[] = [];
       const changedTags: CategoryTag[] = [];
 
+      const defaultColorForTier =
+        targetTier === 1 ? 'blue' : targetTier === 2 ? 'amber' : 'emerald';
+      const defaultEntityForTier: EntitySubtype =
+        destination.entityType ||
+        (targetTier === 3 ? 'PERSON' : targetTier === 2 ? 'ACTION' : 'TOPIC');
+
       const nextTags = tags.map((t) => {
-        if (moveSet.has(t.id)) {
-          previousTags.push(t);
-          const updated: CategoryTag = {
-            ...t,
-            tier: 1,
-            parentId: null,
-            groupId: targetGroup.id,
-            groupType: targetGroupType,
-          };
-          changedTags.push(updated);
-          return updated;
-        }
-        // Also move any existing Tier 2 children of the moved Tier 1 tags into the new groupId
-        if (t.tier === 2 && t.parentId && moveSet.has(t.parentId)) {
-          previousTags.push(t);
-          const updatedChild: CategoryTag = {
-            ...t,
-            groupId: targetGroup.id,
-            groupType: targetGroupType,
-          };
-          changedTags.push(updatedChild);
-          return updatedChild;
-        }
-        return t;
+        if (!moveSet.has(t.id)) return t;
+        previousTags.push(t);
+        const updated: CategoryTag = {
+          ...t,
+          tier: targetTier,
+          subCategory: targetSubCategory,
+          parentId: null,
+          color: t.color || defaultColorForTier,
+          entityType: destination.entityType || t.entityType || defaultEntityForTier,
+        };
+        changedTags.push(updated);
+        return updated;
       });
 
       if (changedTags.length === 0) {
@@ -455,7 +602,14 @@ export function useCMSCategoryActions({
       setTags(nextTags);
       cmsRepository.saveTags(nextTags);
 
-      const summaryText = `ย้าย ${moveSet.size} แท็ก ➔ มิติ "${targetGroup.name}" (แท็กหลัก)`;
+      const tierLabel =
+        targetTier === 1
+          ? 'Tier 1 (มิติปลายทาง/หมวดกว้าง)'
+          : targetTier === 2
+          ? 'Tier 2 (บริบท/สไตล์คลิป)'
+          : 'Tier 3 (บุคคลเจาะจง/รายการ)';
+      const summaryText = `ย้าย ${changedTags.length} แท็ก ➔ ${tierLabel} · หมวดย่อย "${targetSubCategory}"`;
+
       setLastTagReorgUndoRecord({
         id: `UNDO-TAG-${Date.now()}`,
         summaryText,
@@ -469,141 +623,66 @@ export function useCMSCategoryActions({
           await firestoreService.batchSaveCategories(changedTags, onChunkProgress);
         });
       } catch (err) {
-        console.warn('Firestore batchMoveOrReparentTags (MOVE_TO_GROUP) error:', err);
+        console.warn('Firestore batchMoveOrReparentTags (MOVE_TO_TIER_SUBCATEGORY) error:', err);
       }
 
       return {
-        movedCount: moveSet.size,
+        movedCount: changedTags.length,
         updatedClipsCount: 0,
         summaryText,
       };
     }
 
-    // Mode: MOVE_TO_PARENT_TAG (Convert/Move tags to Tier 2 Subcategories under targetParentTagId)
-    const parentTag = tags.find(
-      (t) =>
-        t.id === destination.targetParentTagId &&
-        !isStagingTagId(t.id) &&
-        (t.tier === 1 || !t.parentId)
-    );
-    if (!parentTag) {
-      return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
-    }
-
-    const validMoveIds = cleanIds.filter((id) => id !== parentTag.id);
-    if (validMoveIds.length === 0) {
-      return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
-    }
-
-    const moveSet = new Set(validMoveIds);
-    const parentGroupId =
-      parentTag.groupId || `GRP-${parentTag.groupType || 'GENERAL'}`;
-    const parentGroupType: TagGroupType = parentTag.groupType || 'GENERAL';
-
-    const previousTags: CategoryTag[] = [];
-    const changedTags: CategoryTag[] = [];
-    const allSubtagIdsUnderParent = new Set<string>();
-
-    const nextTags = tags.map((t) => {
-      if (moveSet.has(t.id)) {
-        previousTags.push(t);
-        const updated: CategoryTag = {
-          ...t,
-          tier: 2,
-          parentId: parentTag.id,
-          groupId: parentGroupId,
-          groupType: parentGroupType,
-          entityType: destination.entityType || t.entityType || 'TOPIC',
-          color: t.color || parentTag.color || 'blue',
-        };
-        changedTags.push(updated);
-        allSubtagIdsUnderParent.add(updated.id);
-        return updated;
-      }
-      // If a moved Tier 1 tag previously had its own Tier 2 children, re-parent those children to parentTag as well
-      if (t.tier === 2 && t.parentId && moveSet.has(t.parentId)) {
-        previousTags.push(t);
-        const updatedChild: CategoryTag = {
-          ...t,
-          tier: 2,
-          parentId: parentTag.id,
-          groupId: parentGroupId,
-          groupType: parentGroupType,
-        };
-        changedTags.push(updatedChild);
-        allSubtagIdsUnderParent.add(updatedChild.id);
-        return updatedChild;
-      }
-      return t;
-    });
-
-    // Ensure all Footage items carrying any of the moved subtags also include parentTag.id
-    const previousFootages: Footage[] = [];
-    const updatedFootages: Footage[] = [];
-
-    const nextFootage = footage.map((ft) => {
-      const hasMovedSubtag = ft.tags.some((tid) =>
-        allSubtagIdsUnderParent.has(tid)
+    if (destination.mode === 'MOVE_TO_GROUP') {
+      const targetGroup = categoryGroups.find(
+        (g) => g.id === destination.targetGroupId
       );
-      if (!hasMovedSubtag || ft.tags.includes(parentTag.id)) {
-        return ft;
+      if (!targetGroup || isStagingGroupId(targetGroup.id)) {
+        return { movedCount: 0, updatedClipsCount: 0, summaryText: '' };
       }
-      previousFootages.push(ft);
-      const updatedFt: Footage = {
-        ...ft,
-        tags: normalizeFootageTags([...ft.tags, parentTag.id]),
-      };
-      updatedFootages.push(updatedFt);
-      return updatedFt;
-    });
-
-    setTags(nextTags);
-    cmsRepository.saveTags(nextTags);
-
-    if (updatedFootages.length > 0) {
-      setFootage(nextFootage);
-      cmsRepository.saveFootage(nextFootage);
+      return batchMoveOrReparentTags(
+        cleanIds,
+        {
+          mode: 'MOVE_TO_TIER_SUBCATEGORY',
+          targetTier: 1,
+          targetSubCategory: targetGroup.name,
+        },
+        onChunkProgress
+      );
     }
 
-    const summaryText = `ย้าย ${moveSet.size} แท็ก ➔ เป็นแท็กย่อยใต้ "#${parentTag.name}"${
-      updatedFootages.length > 0 ? ` (เชื่อมโยง ${updatedFootages.length} คลิป)` : ''
-    }`;
-
-    setLastTagReorgUndoRecord({
-      id: `UNDO-TAG-${Date.now()}`,
-      summaryText,
-      previousTags,
-      previousFootages,
-      timestamp: Date.now(),
-    });
-
-    try {
-      await firestoreService.withBatchWriteLock(async () => {
-        await firestoreService.batchSaveCategories(changedTags, onChunkProgress);
-        if (updatedFootages.length > 0) {
-          await firestoreService.batchSaveFootages(updatedFootages, onChunkProgress);
-        }
-      });
-    } catch (err) {
-      console.warn('Firestore batchMoveOrReparentTags (MOVE_TO_PARENT_TAG) error:', err);
-    }
-
-    return {
-      movedCount: moveSet.size,
-      updatedClipsCount: updatedFootages.length,
-      summaryText,
-    };
+    // Legacy fallback for MOVE_TO_PARENT_TAG
+    const parentTag = tags.find((t) => t.id === destination.targetParentTagId);
+    const fallbackSub = parentTag ? parentTag.name : DEFAULT_TIER_SUBCATEGORIES.tier2[0];
+    return batchMoveOrReparentTags(
+      cleanIds,
+      {
+        mode: 'MOVE_TO_TIER_SUBCATEGORY',
+        targetTier: 2,
+        targetSubCategory: fallbackSub,
+        entityType: destination.entityType,
+      },
+      onChunkProgress
+    );
   };
 
   const batchUpdateTagsMetadata = async (
     tagIds: string[],
-    updates: { color?: string; entityType?: EntitySubtype },
+    updates: {
+      color?: string;
+      entityType?: EntitySubtype;
+      tier?: CategoryTier;
+      subCategory?: string;
+    },
     onChunkProgress?: (progress: import('../../firebase/firestoreService').BatchChunkProgress) => void
   ): Promise<{ updatedCount: number; summaryText: string }> => {
     const cleanIds = Array.from(
       new Set(tagIds.filter((id) => Boolean(id) && !isStagingTagId(id)))
     );
-    if (cleanIds.length === 0 || (!updates.color && !updates.entityType)) {
+    if (
+      cleanIds.length === 0 ||
+      (!updates.color && !updates.entityType && !updates.tier && !updates.subCategory)
+    ) {
       return { updatedCount: 0, summaryText: '' };
     }
 
@@ -618,6 +697,8 @@ export function useCMSCategoryActions({
         ...t,
         ...(updates.color ? { color: updates.color } : {}),
         ...(updates.entityType ? { entityType: updates.entityType } : {}),
+        ...(updates.tier ? { tier: updates.tier } : {}),
+        ...(updates.subCategory ? { subCategory: updates.subCategory } : {}),
       };
       changedTags.push(updated);
       return updated;
@@ -633,7 +714,9 @@ export function useCMSCategoryActions({
     const summaryParts: string[] = [];
     if (updates.color) summaryParts.push(`โทนสี (${updates.color})`);
     if (updates.entityType) summaryParts.push(`ประเภท (${updates.entityType})`);
-    const summaryText = `อัปเดต ${ summaryParts.join(' & ') } จำนวน ${changedTags.length} แท็ก`;
+    if (updates.tier) summaryParts.push(`Tier ${updates.tier}`);
+    if (updates.subCategory) summaryParts.push(`หมวดย่อย (${updates.subCategory})`);
+    const summaryText = `อัปเดต ${summaryParts.join(' & ')} จำนวน ${changedTags.length} แท็ก`;
 
     setLastTagReorgUndoRecord({
       id: `UNDO-META-${Date.now()}`,
@@ -693,6 +776,70 @@ export function useCMSCategoryActions({
     setLastTagReorgUndoRecord(null);
   };
 
+  const reorganizeTagsToDataDictionary = async (
+    onChunkProgress?: (
+      progress: import('../../firebase/firestoreService').BatchChunkProgress
+    ) => void
+  ) => {
+    cmsRepository.setCategoriesWiped(false);
+    const reorg = computeDictionaryTagReorganization({
+      tags,
+      footage,
+      sources,
+      currentTierSubCategories: settings.tierSubCategories,
+    });
+
+    setTags(reorg.nextTags);
+    cmsRepository.saveTags(reorg.nextTags);
+
+    if (reorg.tagIdsToDelete.length > 0) {
+      cmsRepository.markTagIdsDeleted(reorg.tagIdsToDelete);
+      const deletedSet = new Set(reorg.tagIdsToDelete);
+      setSelectedTagFilter((prev) => prev.filter((id) => !deletedSet.has(id)));
+    }
+
+    if (reorg.changedFootages.length > 0) {
+      setFootage(reorg.nextFootage);
+      cmsRepository.saveFootage(reorg.nextFootage);
+    }
+
+    if (reorg.changedSources.length > 0) {
+      setSources(reorg.nextSources);
+      cmsRepository.saveSources(reorg.nextSources);
+    }
+
+    updateSettings({
+      tierSubCategories: reorg.nextTierSubCategories,
+    });
+
+    try {
+      await firestoreService.withBatchWriteLock(async () => {
+        if (reorg.tagsToSave.length > 0) {
+          await firestoreService.batchSaveCategories(
+            reorg.tagsToSave,
+            onChunkProgress
+          );
+        }
+        if (reorg.tagIdsToDelete.length > 0) {
+          await firestoreService.batchDeleteCategories(
+            reorg.tagIdsToDelete,
+            onChunkProgress
+          );
+        }
+        if (reorg.changedFootages.length > 0) {
+          await firestoreService.batchSaveFootages(reorg.changedFootages);
+        }
+        if (reorg.changedSources.length > 0) {
+          await firestoreService.batchSaveSources(reorg.changedSources);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore reorganizeTagsToDataDictionary error:', err);
+    }
+
+    return reorg.stats;
+  };
+
   return {
     createCategoryGroup,
     updateCategoryGroup,
@@ -701,6 +848,9 @@ export function useCMSCategoryActions({
     restoreDefaultCategories,
     createTag,
     createSubcategory,
+    addTierSubCategory,
+    renameTierSubCategory,
+    deleteTierSubCategory,
     batchAddTags,
     batchMoveOrReparentTags,
     batchUpdateTagsMetadata,
@@ -710,6 +860,7 @@ export function useCMSCategoryActions({
     updateTag,
     deleteTag,
     batchDeleteTags,
+    reorganizeTagsToDataDictionary,
     updateSettings,
   };
 }

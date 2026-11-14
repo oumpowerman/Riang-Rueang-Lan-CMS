@@ -8,6 +8,11 @@ import {
 import { useCMS } from '../../context/CMSContext';
 import { STAGING_TAG_ID, isFootageInStaging } from '../../services/seedData';
 import { ComputedFootage } from '../../types/footage.types';
+import {
+  DuplicateMatchReason,
+  getDuplicateReasonLabel,
+} from '../../utils/duplicateClusterScanner';
+import { extractDefaultRankFields } from '../../utils/episodeScriptGenerator';
 import { hasRealDriveLink } from '../../utils/fileNameGenerator';
 import { GoogleDriveIcon } from '../ui/GoogleDriveIcon';
 import { StatusBadge } from '../ui/StatusBadge';
@@ -16,6 +21,7 @@ import { VideoThumbnailPreview } from './VideoThumbnailPreview';
 
 interface FootageCardProps {
   footage: ComputedFootage;
+  duplicateReasons?: DuplicateMatchReason[];
   onSelectForTraceability: (footageId: string) => void;
   onQuickTagClick?: (tagId: string) => void;
   onSelectWithRange?: (footageId: string, shiftKey?: boolean) => void;
@@ -25,6 +31,7 @@ interface FootageCardProps {
 
 export const FootageCard: React.FC<FootageCardProps> = ({
   footage,
+  duplicateReasons,
   onSelectForTraceability,
   onQuickTagClick,
   onSelectWithRange,
@@ -44,6 +51,7 @@ export const FootageCard: React.FC<FootageCardProps> = ({
   const inStaging = isFootageInStaging(footage.tags);
   const isSelected = selectedFootageIdsForBatch.includes(footage.id);
   const isBeingDragged = activeDragFootageIds.includes(footage.id);
+  const { punchlineNote } = extractDefaultRankFields(footage);
 
   const handleToggleSelect = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -181,10 +189,27 @@ export const FootageCard: React.FC<FootageCardProps> = ({
             />
           </div>
 
-          {/* Clip Title */}
+          {/* Clip Title & Catchphrase Preview */}
           <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-indigo-950 transition-colors">
             {footage.title}
           </h3>
+          {duplicateReasons && duplicateReasons.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              {duplicateReasons.map((reason) => (
+                <span
+                  key={reason}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#FEF3E6] border border-[#F2CEAE] text-[#8A4A18] text-[10px] font-bold"
+                >
+                  ซ้ำ: {getDuplicateReasonLabel(reason)}
+                </span>
+              ))}
+            </div>
+          )}
+          {punchlineNote && (
+            <p className="text-xs font-medium text-[#2B5435] truncate">
+              คำสร้อย: &ldquo;{punchlineNote}&rdquo;
+            </p>
+          )}
         </div>
       </div>
 
@@ -200,7 +225,7 @@ export const FootageCard: React.FC<FootageCardProps> = ({
               onClick={onQuickTagClick ? () => onQuickTagClick(STAGING_TAG_ID) : undefined}
             />
           ) : (
-            footage.tags.map((tid) => (
+            Array.from(new Set(footage.tags || [])).map((tid) => (
               <TagPill
                 key={tid}
                 tag={tagMap[tid]}

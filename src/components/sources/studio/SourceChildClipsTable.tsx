@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CheckSquare,
+  Edit2,
   Film,
+  Plus,
   Rocket,
   Sparkles,
   Square,
@@ -15,6 +17,7 @@ import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 import { PaginationBar } from '../../ui/PaginationBar';
 import { StatusBadge } from '../../ui/StatusBadge';
+import { QuickDriveLinkPopover } from './QuickDriveLinkPopover';
 
 interface SourceChildClipsTableProps {
   source: RawSource;
@@ -53,7 +56,17 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
   onChildPageChange,
   onChildPageSizeChange,
 }) => {
-  const { setPreviewFootageId } = useCMS();
+  const { setPreviewFootageId, updateFootage } = useCMS();
+  const [popoverFootage, setPopoverFootage] = useState<{
+    id: string;
+    title: string;
+    driveFileUrl: string;
+  } | null>(null);
+
+  const handleSaveDriveUrl = (newUrl: string) => {
+    if (!popoverFootage) return;
+    updateFootage(popoverFootage.id, { driveFileUrl: newUrl });
+  };
 
   const paginatedChildFootages = childFootages.slice(
     (currentChildPage - 1) * childPageSize,
@@ -178,19 +191,48 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
                     onClick={(e) => e.stopPropagation()}
                   >
                     {hasDrive ? (
-                      <a
-                        href={ft.driveFileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#fdfbf7] text-[#4d4740] hover:bg-[#f4eee4] border border-[#e2d8cb] font-semibold text-[11px]"
-                      >
-                        <GoogleDriveIcon className="w-3 h-3" />
-                        <span>Drive</span>
-                      </a>
+                      <div className="inline-flex items-center gap-1">
+                        <a
+                          href={ft.driveFileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#fdfbf7] text-[#4d4740] hover:bg-[#f4eee4] border border-[#e2d8cb] font-semibold text-[11px]"
+                          title="เปิดไฟล์ Google Drive"
+                        >
+                          <GoogleDriveIcon className="w-3 h-3" />
+                          <span>Drive</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPopoverFootage({
+                              id: ft.id,
+                              title: ft.title,
+                              driveFileUrl: ft.driveFileUrl,
+                            })
+                          }
+                          className="p-1 text-stone-400 hover:text-indigo-600 rounded hover:bg-stone-100 transition-colors cursor-pointer"
+                          title="แก้ไขลิงก์ Drive"
+                        >
+                          <Edit2 className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#f4eee4] text-[#787066] text-[11px]">
-                        รอลิงก์
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPopoverFootage({
+                            id: ft.id,
+                            title: ft.title,
+                            driveFileUrl: '',
+                          })
+                        }
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100/90 text-amber-900 border border-amber-300/80 font-bold text-[11px] transition-all cursor-pointer shadow-2xs hover:scale-102"
+                        title="คลิกเพื่อวางลิงก์ Google Drive ด่วน"
+                      >
+                        <Plus className="w-3 h-3 text-amber-700" />
+                        <span>รอลิงก์</span>
+                      </button>
                     )}
                   </td>
                   <td className="py-2 px-3 font-mono tabular-nums text-[#554d44]">
@@ -222,6 +264,17 @@ export const SourceChildClipsTable: React.FC<SourceChildClipsTableProps> = ({
           pageSizeOptions={[4, 6, 10]}
           itemLabel="คลิปย่อย"
           compact
+        />
+      )}
+
+      {popoverFootage && (
+        <QuickDriveLinkPopover
+          footageId={popoverFootage.id}
+          footageTitle={popoverFootage.title}
+          currentUrl={popoverFootage.driveFileUrl}
+          isOpen={Boolean(popoverFootage)}
+          onClose={() => setPopoverFootage(null)}
+          onSave={handleSaveDriveUrl}
         />
       )}
     </div>

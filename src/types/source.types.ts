@@ -8,6 +8,7 @@ export interface RawSource {
   channelOrCreator: string;
   totalDuration?: string;
   tags: string[]; // Array of Tag IDs
+  driveFolderUrl?: string; // Optional Google Drive folder or master live recording URL
   notes: string;
   createdAt: string;
   splitFootageIds: string[]; // Array of FT-XXXX IDs cut from this source

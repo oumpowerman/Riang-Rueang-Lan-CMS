@@ -102,6 +102,9 @@ export const useGoogleDriveBatchImport = () => {
     handleRemoveSavedFolder,
     handleSelectSavedFolder,
     handleSaveCurrentFolderPreset,
+    handleResetFolderSyncHistory,
+    handleAdjustSyncLookbackDays,
+    handleSetCustomSyncTimestamp,
   } = useSavedDriveFolders({
     isModalOpen: isGoogleDriveBatchModalOpen,
     settings,
@@ -728,6 +731,9 @@ export const useGoogleDriveBatchImport = () => {
     setSyncMode,
     folderSyncRecord,
     isLoadingSyncRecord,
+    handleResetFolderSyncHistory,
+    handleAdjustSyncLookbackDays,
+    handleSetCustomSyncTimestamp,
 
     // Category Strategy & Subfolder Staging
     categoryStrategy,

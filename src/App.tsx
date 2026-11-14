@@ -3,13 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { EpisodeBuilderView } from './components/episodes/EpisodeBuilderView';
 import { EpisodeDetailModal } from './components/episodes/EpisodeDetailModal';
 import { MasterEpisodeArchiveView } from './components/episodes/MasterEpisodeArchiveView';
-import { DirectFootageModal } from './components/footage/DirectFootageModal';
+import {
+  DirectFootageModal,
+  type SharedFootageInitialData,
+} from './components/footage/DirectFootageModal';
 import { GoogleDriveBatchImportModal } from './components/footage/GoogleDriveBatchImportModal';
 import { SheetTagImportModal } from './components/footage/SheetTagImportModal';
 import { BatchAssignCategoryModal } from './components/footage/BatchAssignCategoryModal';
@@ -28,18 +31,48 @@ import { E2EPipelineBoard } from './components/workflow/E2EPipelineBoard';
 import { AuthModal } from './components/auth/AuthModal';
 import { SupabaseContentSyncModal } from './components/supabase/SupabaseContentSyncModal';
 import { SupabaseConfigModal } from './components/supabase/SupabaseConfigModal';
+import { OfflineIndicator } from './components/pwa/OfflineIndicator';
+import { parseSharedInput } from './utils/platformDetector';
 import { CMSProvider, useCMS } from './context/CMSContext';
 import { AuthProvider } from './context/AuthContext';
 
 const MainWorkspace: React.FC = () => {
   const {
     activeTab,
+    setActiveTab,
+    setIsDirectFootageModalOpen,
     isSupabaseSyncModalOpen,
     setIsSupabaseSyncModalOpen,
     isSupabaseConfigModalOpen,
     setIsSupabaseConfigModalOpen,
   } = useCMS();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [sharedInitialData, setSharedInitialData] =
+    useState<SharedFootageInitialData | null>(null);
+
+  // Intercept Web Share Target launches (?share-target=1&title=...&text=...&url=...)
+  // and open the unified DirectFootageModal directly
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isShareTarget = params.get('share-target') === '1';
+    const rawUrl = params.get('url');
+    const rawText = params.get('text');
+    const rawTitle = params.get('title');
+
+    if (isShareTarget || rawUrl || rawText) {
+      const parsed = parseSharedInput(rawUrl, rawText, rawTitle);
+      setSharedInitialData({
+        url: parsed.url,
+        suggestedTitle: parsed.suggestedTitle,
+      });
+      setActiveTab('FOOTAGE_LIBRARY');
+      setIsDirectFootageModalOpen(true);
+
+      // Clean up the query parameters from the URL bar without reloading
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, [setActiveTab, setIsDirectFootageModalOpen]);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-slate-100/80 text-slate-900">
@@ -54,6 +87,9 @@ const MainWorkspace: React.FC = () => {
 
       {/* Main Viewport Container */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Offline Mode Banner */}
+        <OfflineIndicator />
+
         {/* Single-Screen Responsive Navbar */}
         <Navbar onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
 
@@ -81,7 +117,10 @@ const MainWorkspace: React.FC = () => {
       </div>
 
       {/* Global Interactive Modals */}
-      <DirectFootageModal />
+      <DirectFootageModal
+        sharedInitialData={sharedInitialData}
+        onClearSharedInitialData={() => setSharedInitialData(null)}
+      />
       <SourceSplitterModal />
       <FootageTraceabilityModal />
       <VideoPreviewModal />

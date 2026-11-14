@@ -2,15 +2,18 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertCircle,
+  Calendar,
   Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Film,
   Inbox,
+  MessageSquareQuote,
   Plus,
   RefreshCw,
   Search,
+  Trophy,
   X,
 } from 'lucide-react';
 import {
@@ -18,6 +21,7 @@ import {
   ParsedSheetRow,
   SheetSyncSummaryStats,
   TableRowDensity,
+  TagTierAssignment,
 } from './sheetImport.types';
 
 interface SheetFootageRowsTableProps {
@@ -33,6 +37,22 @@ interface SheetFootageRowsTableProps {
   autoCreateMissingFootage: boolean;
   rowDensity: TableRowDensity;
 }
+
+const getTierBadgeStyle = (tier: 1 | 2 | 3, isNew: boolean) => {
+  if (tier === 1) {
+    return isNew
+      ? 'bg-[#EEF5FB] text-[#1E40AF] border-[#93C5FD] ring-1 ring-[#BFDBFE]'
+      : 'bg-[#EEF5FB] text-[#1E3A8A] border-[#C6DDF2]';
+  }
+  if (tier === 2) {
+    return isNew
+      ? 'bg-[#FEF6E8] text-[#8A4D1F] border-[#F6AD55] ring-1 ring-[#FBD38D]'
+      : 'bg-[#FEF6E8] text-[#734B17] border-[#EAD5AE]';
+  }
+  return isNew
+    ? 'bg-[#EDF6F0] text-[#1C4824] border-[#86EFAC] ring-1 ring-[#BBF7D0]'
+    : 'bg-[#EDF6F0] text-[#254B2D] border-[#BAD8BF]';
+};
 
 export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
   parsedRows,
@@ -53,7 +73,6 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
     new Set()
   );
 
-  // Filter rows by status mode + live search query
   const filteredRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
@@ -77,15 +96,23 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
       const matchFtId =
         row.matchedFootage?.id.toLowerCase().includes(q) || false;
       const matchEp = row.episodeTitle.toLowerCase().includes(q);
+      const matchRank = row.rankTitle.toLowerCase().includes(q);
+      const matchPunchline = row.punchlineNote.toLowerCase().includes(q);
       const matchTag = row.finalTagNames.some((t) =>
         t.toLowerCase().includes(q)
       );
 
-      return matchTitle || matchFtId || matchEp || matchTag;
+      return (
+        matchTitle ||
+        matchFtId ||
+        matchEp ||
+        matchRank ||
+        matchPunchline ||
+        matchTag
+      );
     });
   }, [parsedRows, filterMode, searchQuery]);
 
-  // Reset to page 1 when filter or search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [filterMode, searchQuery, pageSize]);
@@ -187,45 +214,68 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className="flex-1 min-h-0 flex flex-col bg-white overflow-hidden"
     >
-      {/* Unified Single-Bar Filter & KPI Toolbar (Flushed directly under Modal Header) */}
+      {/* Unified Single-Bar Filter & KPI Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 px-4 sm:px-5 py-2 bg-[#FAF8F5] border-b border-[#E8DFD3] shrink-0">
-        {/* Status & KPI Filter Buttons with Sliding Pill Indicator */}
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl text-xs">
-          {filterButtons
-            .filter((btn) => btn.show !== false)
-            .map((btn) => {
-              const isActive = filterMode === btn.mode;
-              return (
-                <button
-                  key={btn.mode}
-                  type="button"
-                  onClick={() => onChangeFilterMode(btn.mode)}
-                  className={`relative px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                    isActive
-                      ? btn.activeTextClass
-                      : 'text-[#6E5F52] hover:text-[#3D332A]'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.span
-                      layoutId="sheetFootageFilterPill"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 420,
-                        damping: 32,
-                      }}
-                      className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-                    />
-                  )}
-                  <span className="relative z-10 inline-flex items-center gap-1">
-                    <span>{btn.label}</span>
-                    <span className="font-mono">
-                      ({btn.count.toLocaleString()})
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl text-xs">
+            {filterButtons
+              .filter((btn) => btn.show !== false)
+              .map((btn) => {
+                const isActive = filterMode === btn.mode;
+                return (
+                  <button
+                    key={btn.mode}
+                    type="button"
+                    onClick={() => onChangeFilterMode(btn.mode)}
+                    className={`relative px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                      isActive
+                        ? btn.activeTextClass
+                        : 'text-[#6E5F52] hover:text-[#3D332A]'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="sheetFootageFilterPill"
+                        transition={{
+                          type: 'spring',
+                          stiffness: 420,
+                          damping: 32,
+                        }}
+                        className="absolute inset-0 rounded-lg bg-white shadow-2xs"
+                      />
+                    )}
+                    <span className="relative z-10 inline-flex items-center gap-1">
+                      <span>{btn.label}</span>
+                      <span className="font-mono">
+                        ({btn.count.toLocaleString()})
+                      </span>
                     </span>
-                  </span>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+          </div>
+
+          {/* 3-Tier New Tag Summary Legend */}
+          {stats.newTagsCount > 0 && (
+            <div className="hidden xl:flex items-center gap-1 text-[11px] pl-1">
+              <span className="text-[#7D6E61] font-semibold">แท็กใหม่:</span>
+              {stats.newTier1TagsCount > 0 && (
+                <span className="px-2 py-0.5 rounded-md font-bold bg-[#EEF5FB] text-[#1E40AF] border border-[#C6DDF2]">
+                  T1 +{stats.newTier1TagsCount}
+                </span>
+              )}
+              {stats.newTier2TagsCount > 0 && (
+                <span className="px-2 py-0.5 rounded-md font-bold bg-[#FEF6E8] text-[#8A4D1F] border border-[#EAD5AE]">
+                  T2 +{stats.newTier2TagsCount}
+                </span>
+              )}
+              {stats.newTier3TagsCount > 0 && (
+                <span className="px-2 py-0.5 rounded-md font-bold bg-[#EDF6F0] text-[#1C4824] border border-[#BAD8BF]">
+                  T3 +{stats.newTier3TagsCount}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Live Search Input + Selection Summary */}
@@ -236,7 +286,7 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => onChangeSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อคลิป, FT-xxxx, #แท็ก หรือชื่อ EP..."
+              placeholder="ค้นหาชื่อฟุต, ชื่ออันดับ, คำสร้อย, #แท็ก หรือชื่อ EP..."
               className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#8FA892]"
             />
             {searchQuery && (
@@ -262,8 +312,8 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
         </div>
       </div>
 
-      {/* Full-Bleed Scrollable Data Table with Framer Motion Filter Transition */}
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+      {/* Full-Bleed Scrollable Data Table */}
+      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">
         <table className="w-full text-left border-collapse text-xs">
           <thead className="bg-[#FDFBF7] text-[#6E5F52] sticky top-0 border-b border-[#E8DFD3] font-bold z-10 shadow-2xs">
             <tr>
@@ -276,11 +326,11 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                   title="เลือก/ยกเลิกทั้งหมดในผลลัพธ์ที่กรอง"
                 />
               </th>
-              <th className="py-2 px-2.5 w-12 text-right font-mono">#</th>
-              <th className="py-2 px-3">คอลัมน์ A: ชื่อฟุตเทจ</th>
-              <th className="py-2 px-3">สถานะในคลัง</th>
-              <th className="py-2 px-3">คอลัมน์ B: แท็กที่จะผสาน</th>
-              <th className="py-2 px-3">คอลัมน์ C–D: จัดเข้าคลิปหลัก (EP)</th>
+              <th className="py-2 px-2 w-11 text-right font-mono">#</th>
+              <th className="py-2 px-3">Col A: ชื่อฟุตเทจ & คลัง</th>
+              <th className="py-2 px-3">Col C–D: ชื่ออันดับ & คำสร้อย</th>
+              <th className="py-2 px-3">Col E–G: แท็ก 3 ชั้น (Tier 1 / 2 / 3)</th>
+              <th className="py-2 px-3">Col B, H–J: คลิปหลัก (EP) & วันลง</th>
             </tr>
           </thead>
 
@@ -304,13 +354,33 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                   const isMatched = row.matchedFootage !== null;
                   const isSelected = !excludedRowIndices.has(row.rowIndex);
                   const isTagsExpanded = expandedTagRows.has(row.rowIndex);
-                  const visibleTagLimit = isTagsExpanded ? 999 : 3;
-                  const visibleTags = row.finalTagNames.slice(
-                    0,
-                    visibleTagLimit
-                  );
+
+                  // Combine existing footage tags + resolved sheet tags with tier styling
+                  const combinedTagItems: TagTierAssignment[] = [];
+                  const seenLower = new Set<string>();
+
+                  row.resolvedTags.forEach((rt) => {
+                    seenLower.add(rt.name.toLowerCase());
+                    combinedTagItems.push(rt);
+                  });
+
+                  row.existingTags.forEach((et) => {
+                    const l = et.name.toLowerCase();
+                    if (!seenLower.has(l)) {
+                      seenLower.add(l);
+                      combinedTagItems.push({
+                        name: et.name,
+                        tier: et.tier || 1,
+                        isNew: false,
+                        existingTag: et,
+                      });
+                    }
+                  });
+
+                  const visibleTagLimit = isTagsExpanded ? 999 : 4;
+                  const visibleTags = combinedTagItems.slice(0, visibleTagLimit);
                   const hiddenTagCount =
-                    row.finalTagNames.length - visibleTags.length;
+                    combinedTagItems.length - visibleTags.length;
 
                   return (
                     <tr
@@ -338,88 +408,107 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                         {row.rowIndex}
                       </td>
 
-                      <td className={`${cellPadClass} max-w-sm`}>
-                        <div
-                          className="font-extrabold text-[#3D332A] truncate"
-                          title={`ชื่อฟุตเทจเต็ม: ${row.title}${
-                            row.matchedFootage
-                              ? ` (ตรงกับ ${row.matchedFootage.id} · ${row.matchedFootage.standardFileName})`
-                              : ''
-                          }`}
-                        >
-                          {row.title}
+                      {/* Col A: Footage Title + Vault Match Status */}
+                      <td className={`${cellPadClass} max-w-xs`}>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className="font-extrabold text-[#3D332A] truncate"
+                            title={row.title}
+                          >
+                            {row.title}
+                          </span>
+                          {isMatched ? (
+                            <span
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]"
+                              title={`ไฟล์ในคลัง: ${row.matchedFootage?.standardFileName}`}
+                            >
+                              <Check className="w-2.5 h-2.5 text-[#3B6845]" />
+                              <span>{row.matchedFootage?.id}</span>
+                            </span>
+                          ) : autoCreateMissingFootage ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
+                              <Plus className="w-2.5 h-2.5" />
+                              <span>สร้างฟุตใหม่</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#FDF4EB] text-[#8A4D1F] border border-[#EBD1BE]">
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              <span>ไม่พบ (ข้าม)</span>
+                            </span>
+                          )}
+                          {row.isInStaging && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
+                              <Inbox className="w-2.5 h-2.5 text-[#8A5A22]" />
+                              <span>พัก➔จัดหมวด</span>
+                            </span>
+                          )}
                         </div>
                         {row.occurrenceCountInSheet > 1 && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#734B17] mt-0.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#734B17] mt-0.5">
                             <RefreshCw className="w-2.5 h-2.5" />
                             <span>
                               ซ้ำในชีท {row.occurrenceCountInSheet} ครั้ง
-                              (แชร์ฟุตเดียวกัน)
                             </span>
                           </span>
                         )}
                       </td>
 
-                      <td className={`${cellPadClass} whitespace-nowrap`}>
-                        {isMatched ? (
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]"
-                              title={`ไฟล์ในคลัง: ${row.matchedFootage?.standardFileName}`}
-                            >
-                              <Check className="w-3 h-3 text-[#3B6845]" />
-                              <span>{row.matchedFootage?.id}</span>
-                            </span>
-                            {row.isInStaging && (
-                              <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]"
-                                title="คลิปนี้ยังไม่มีหมวดหมู่ ระบบจะติดแท็กและนำออกจากพื้นที่พักทันที"
-                              >
-                                <Inbox className="w-3 h-3 text-[#8A5A22]" />
-                                <span>พัก➔จัดหมวด</span>
-                              </span>
+                      {/* Col C & Col D: ชื่ออันดับ & คำสร้อย */}
+                      <td className={`${cellPadClass} max-w-[220px]`}>
+                        {row.rankTitle || row.punchlineNote ? (
+                          <div className="space-y-0.5">
+                            {row.rankTitle && (
+                              <div className="flex items-center gap-1 text-[#3D332A] font-bold truncate">
+                                <Trophy className="w-3 h-3 text-[#8A5A22] shrink-0" />
+                                <span className="truncate" title={row.rankTitle}>
+                                  {row.rankTitle}
+                                </span>
+                              </div>
+                            )}
+                            {row.punchlineNote && (
+                              <div className="flex items-center gap-1 text-[11px] text-[#6E5F52] truncate">
+                                <MessageSquareQuote className="w-3 h-3 text-[#3B6845] shrink-0" />
+                                <span
+                                  className="truncate italic"
+                                  title={row.punchlineNote}
+                                >
+                                  "{row.punchlineNote}"
+                                </span>
+                              </div>
                             )}
                           </div>
-                        ) : autoCreateMissingFootage ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
-                            <Plus className="w-3 h-3 text-[#734B17]" />
-                            <span>สร้างฟุตใหม่</span>
-                          </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-[#FDF4EB] text-[#8A4D1F] border border-[#EBD1BE]">
-                            <AlertCircle className="w-3 h-3 text-[#8A4D1F]" />
-                            <span>ไม่พบในคลัง (ข้าม)</span>
-                          </span>
+                          <span className="text-[#B5A798] font-mono">—</span>
                         )}
                       </td>
 
+                      {/* Col E, F, G: 3-Tier Tags */}
                       <td className={cellPadClass}>
                         <div className="flex items-center gap-1 flex-wrap">
-                          {visibleTags.map((name) => {
-                            const isNew = row.tagsToCreate.includes(name);
-                            return (
-                              <span
-                                key={name}
-                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-bold border ${
-                                  isNew
-                                    ? 'bg-[#FEF8ED] text-[#734B17] border-[#EDD7AF]'
-                                    : 'bg-[#EEF5EE] text-[#254B2D] border-[#BAD8BF]'
-                                }`}
-                                title={
-                                  isNew
-                                    ? `แท็กใหม่ #${name} (จะสร้างอัตโนมัติ)`
-                                    : `แท็กที่มีในระบบ #${name}`
-                                }
-                              >
-                                <span>#{name}</span>
-                                {isNew && (
-                                  <span className="text-[10px] text-[#8A4D1F]">
-                                    (ใหม่)
-                                  </span>
-                                )}
+                          {visibleTags.map((tagItem) => (
+                            <span
+                              key={`${tagItem.tier}-${tagItem.name}`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold border ${getTierBadgeStyle(
+                                tagItem.tier,
+                                tagItem.isNew
+                              )}`}
+                              title={`Tier ${tagItem.tier}: #${tagItem.name} ${
+                                tagItem.isNew
+                                  ? `(สร้างใหม่เข้า Tier ${tagItem.tier})`
+                                  : `(มีในคลัง Tier ${tagItem.tier})`
+                              }`}
+                            >
+                              <span className="font-mono text-[10px] opacity-75">
+                                T{tagItem.tier}
                               </span>
-                            );
-                          })}
+                              <span>#{tagItem.name}</span>
+                              {tagItem.isNew && (
+                                <span className="text-[10px] underline">
+                                  ใหม่
+                                </span>
+                              )}
+                            </span>
+                          ))}
 
                           {hiddenTagCount > 0 && (
                             <button
@@ -428,15 +517,12 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                                 toggleExpandTagsForRow(row.rowIndex)
                               }
                               className="px-1.5 py-0.5 rounded text-xs font-mono font-bold bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer"
-                              title={`คลิกเพื่อดูแท็กทั้งหมด (${row.finalTagNames
-                                .map((t) => `#${t}`)
-                                .join(' ')})`}
                             >
                               +{hiddenTagCount} แท็ก
                             </button>
                           )}
 
-                          {isTagsExpanded && row.finalTagNames.length > 3 && (
+                          {isTagsExpanded && combinedTagItems.length > 4 && (
                             <button
                               type="button"
                               onClick={() =>
@@ -450,16 +536,28 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                         </div>
                       </td>
 
+                      {/* Col B, H, I, J: Episode Title + Link + Date/Time */}
                       <td className={cellPadClass}>
                         {row.episodeTitle ? (
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-[#FAF7F2] text-[#3D332A] border border-[#E2D5C4]"
-                              title={`จัดอยู่ในคลิปหลัก: ${row.episodeTitle}`}
+                              title={row.rawEpisodeColB || row.episodeTitle}
                             >
                               <Film className="w-3 h-3 text-[#3B6845]" />
                               <span>{row.episodeTitle}</span>
                             </span>
+
+                            {row.publishDate && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]">
+                                <Calendar className="w-2.5 h-2.5 text-[#3B6845]" />
+                                <span>
+                                  {row.publishDate}
+                                  {row.publishTime ? ` ${row.publishTime}` : ''}
+                                </span>
+                              </span>
+                            )}
+
                             {row.episodeUrl && (
                               <a
                                 href={row.episodeUrl}

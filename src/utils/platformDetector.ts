@@ -6,6 +6,7 @@ export type DetectedPlatform =
   | 'YOUTUBE'
   | 'INSTAGRAM'
   | 'TWITTER'
+  | 'TWITCH'
   | 'GOOGLE_DRIVE'
   | 'GENERIC_WEB';
 
@@ -112,3 +113,61 @@ export function detectPlatformFromUrl(url?: string | null): PlatformMeta | null 
     return null;
   }
 }
+
+/**
+ * Extracts the first HTTP/HTTPS URL and cleans up any remaining caption/title text
+ * shared by YouTube, TikTok, Instagram, or Facebook mobile apps.
+ */
+export function parseSharedInput(
+  rawUrl?: string | null,
+  rawText?: string | null,
+  rawTitle?: string | null
+): { url: string; suggestedTitle: string } {
+  const combined = [rawUrl || '', rawText || ''].join(' ').trim();
+  const urlMatch = combined.match(/https?:\/\/[^\s"'<>]+/i);
+  const extractedUrl = urlMatch ? urlMatch[0].trim() : (rawUrl || '').trim();
+
+  const textWithoutUrl = (rawText || '')
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const cleanTitle = (rawTitle || '')
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let suggestedTitle = '';
+  if (
+    cleanTitle &&
+    !['youtube', 'instagram', 'tiktok', 'facebook', 'x', 'twitter'].includes(
+      cleanTitle.toLowerCase()
+    )
+  ) {
+    suggestedTitle = cleanTitle;
+  } else if (textWithoutUrl) {
+    suggestedTitle = textWithoutUrl;
+  }
+
+  return {
+    url: extractedUrl,
+    suggestedTitle: suggestedTitle.slice(0, 120),
+  };
+}
+
+/**
+ * Generates a fallback Thai clip title based on the detected platform and current date
+ * when the user clicks Quick Save in Step 1 without typing a custom title.
+ */
+export function getDefaultClipTitle(url?: string | null): string {
+  const platform = detectPlatformFromUrl(url);
+  const dateLabel = new Date().toLocaleDateString('th-TH', {
+    day: 'numeric',
+    month: 'short',
+  });
+  if (platform) {
+    return `คลิปจาก ${platform.name} (${dateLabel})`;
+  }
+  return `คลิปฟุตเทจใหม่ (${dateLabel})`;
+}
+

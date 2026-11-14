@@ -356,10 +356,17 @@ export function generateSmartMixByRecipe(
   allFootage: ComputedFootage[],
   recipeId: MixRecipeId,
   preferredTagIds: string[],
-  allowCrossCategoryFallback = false
+  allowCrossCategoryFallback = false,
+  tagMatchMode: 'AND' | 'OR' = 'OR'
 ): ComputedFootage[] {
-  const matchesTags = (ft: ComputedFootage) =>
-    preferredTagIds.length === 0 || preferredTagIds.some((tid) => ft.tags.includes(tid));
+  const cleanTagIds = preferredTagIds.filter(Boolean);
+  const matchesTags = (ft: ComputedFootage) => {
+    if (cleanTagIds.length === 0) return true;
+    if (tagMatchMode === 'AND') {
+      return cleanTagIds.every((tid) => ft.tags.includes(tid));
+    }
+    return cleanTagIds.some((tid) => ft.tags.includes(tid));
+  };
 
   const tagMatchedNew = allFootage.filter(
     (ft) => ft.cooldownStatus === 'NEW_UNTOUCHED' && matchesTags(ft)
@@ -371,7 +378,21 @@ export function generateSmartMixByRecipe(
   );
   const allFresh = allFootage.filter((ft) => ft.cooldownStatus === 'READY_FRESH');
 
-  const tagMatchedUsable = [...tagMatchedNew, ...tagMatchedFresh];
+  const primaryTagId = cleanTagIds[0];
+  const primaryMatchedUsable = primaryTagId
+    ? allFootage.filter(
+        (ft) =>
+          (ft.cooldownStatus === 'NEW_UNTOUCHED' ||
+            ft.cooldownStatus === 'READY_FRESH') &&
+          ft.tags.includes(primaryTagId)
+      )
+    : [];
+
+  const tagMatchedUsable = [
+    ...tagMatchedNew,
+    ...tagMatchedFresh,
+    ...(tagMatchMode === 'AND' && cleanTagIds.length > 1 ? primaryMatchedUsable : []),
+  ];
 
   const tagMatchedRetro60 = allFootage.filter(
     (ft) =>

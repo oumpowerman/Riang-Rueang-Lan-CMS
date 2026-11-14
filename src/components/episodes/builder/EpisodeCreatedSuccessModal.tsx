@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, Copy, Check, ArrowRight, RotateCw, Archive, Sparkles, Video, Calendar, Clock } from 'lucide-react';
+import {
+  Copy,
+  Check,
+  ArrowRight,
+  RotateCw,
+  Archive,
+  Sparkles,
+  Calendar,
+  Clock,
+} from 'lucide-react';
 import { Episode } from '../../../types/episode.types';
 import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryTag } from '../../../types/tag.types';
+import { resolveSlotScriptValues } from '../../../utils/episodeScriptGenerator';
 import { Modal } from '../../ui/Modal';
+import { EpisodeScriptExporterPanel } from '../detail/EpisodeScriptExporterPanel';
 
 interface EpisodeCreatedSuccessModalProps {
   episode: Episode | null;
@@ -16,7 +27,9 @@ interface EpisodeCreatedSuccessModalProps {
   tagMap: Record<string, CategoryTag>;
 }
 
-export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProps> = ({
+export const EpisodeCreatedSuccessModal: React.FC<
+  EpisodeCreatedSuccessModalProps
+> = ({
   episode,
   isOpen,
   onClose,
@@ -39,13 +52,18 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
     setTimeout(() => setCopiedFileName(false), 1600);
   };
 
+  // Sort rankings 5 -> 1 for preview consistency with exported scripts
+  const sortedRankings5To1 = [...episode.rankings].sort(
+    (a, b) => b.rank - a.rank
+  );
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="สร้างตอน 5 อันดับสำเร็จแล้ว!"
-      subtitle={`บันทึกเข้าสู่ระบบเรียบร้อย พร้อมสำหรับขั้นตอนต่อไป`}
-      maxWidthClass="max-w-2xl"
+      subtitle="บันทึกเข้าสู่ระบบเรียบร้อย พร้อมส่งออกสคริปต์สำหรับทีมตัดต่อและเจนเสียงทันที"
+      maxWidthClass="max-w-3xl"
     >
       <div className="space-y-4">
         {/* Banner Hero Card in Warm Pastel Sage */}
@@ -57,7 +75,9 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
               </span>
               <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{mainTag?.name || 'หมวดหมู่'} · EP.{categoryEpNo}</span>
+                <span>
+                  {mainTag?.name || 'หมวดหมู่'} · EP.{categoryEpNo}
+                </span>
               </span>
             </div>
 
@@ -68,7 +88,11 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-stone-400" />
-                <span>{episode.publishSlot === 'MORNING_0600' ? 'เช้า 06:00' : 'เย็น 18:00'}</span>
+                <span>
+                  {episode.publishSlot === 'MORNING_0600'
+                    ? 'เช้า 06:00'
+                    : 'เย็น 18:00'}
+                </span>
               </span>
             </div>
           </div>
@@ -83,7 +107,10 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
               ชื่อไฟล์มาตรฐานสำหรับส่งให้ทีมตัดต่อ (Google Drive):
             </label>
             <div className="flex items-center gap-2 p-2 px-3 bg-white border border-stone-200 rounded-xl">
-              <span className="font-mono text-xs text-stone-800 font-semibold truncate flex-1" title={fileName}>
+              <span
+                className="font-mono text-xs text-stone-800 font-semibold truncate flex-1"
+                title={fileName}
+              >
                 {fileName}
               </span>
               <button
@@ -107,6 +134,14 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
           </div>
         </div>
 
+        {/* 2-Template Script Exporter Panel (Editor Script & Voiceover TTS Script) */}
+        <EpisodeScriptExporterPanel
+          episode={episode}
+          computedFootageMap={computedFootageMap}
+          tagMap={tagMap}
+          compact
+        />
+
         {/* 5-Rank Footage Breakdown Preview */}
         <div className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2.5">
           <h4 className="text-xs font-bold text-stone-700 flex items-center justify-between">
@@ -115,12 +150,18 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
           </h4>
 
           <div className="space-y-1.5">
-            {episode.rankings.map((slot) => {
-              const ft = slot.footageId ? computedFootageMap[slot.footageId] : null;
+            {sortedRankings5To1.map((slot) => {
+              const ft = slot.footageId
+                ? computedFootageMap[slot.footageId]
+                : null;
+              const { rankTitle, punchlineNote } = resolveSlotScriptValues(
+                slot,
+                ft
+              );
               return (
                 <div
                   key={slot.rank}
-                  className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-stone-50/70 border border-stone-200/80 text-xs"
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-stone-50/70 border border-stone-200/80 text-xs"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-mono font-bold text-[11px] flex items-center justify-center shrink-0">
@@ -129,9 +170,14 @@ export const EpisodeCreatedSuccessModal: React.FC<EpisodeCreatedSuccessModalProp
                     <span className="font-mono font-bold text-stone-900 shrink-0">
                       {slot.footageId || '-'}
                     </span>
-                    <span className="truncate text-stone-700">
-                      {ft?.title || 'ไม่มีชื่อคลิป'}
+                    <span className="font-semibold text-stone-800 truncate">
+                      {rankTitle || ft?.title || 'ไม่มีชื่อคลิป'}
                     </span>
+                    {punchlineNote && (
+                      <span className="text-stone-500 truncate">
+                        · &ldquo;{punchlineNote}&rdquo;
+                      </span>
+                    )}
                   </div>
 
                   {slot.snapshotNote && (

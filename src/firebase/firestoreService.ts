@@ -134,7 +134,8 @@ function sanitizeForFirestore<T>(data: T): T {
 }
 
 function normalizeCategoryTag(raw: CategoryTag): CategoryTag {
-  const tier: 1 | 2 = raw.tier === 2 || !!raw.parentId ? 2 : 1;
+  const tier: 1 | 2 | 3 =
+    raw.tier === 3 ? 3 : raw.tier === 2 || Boolean(raw.parentId) ? 2 : 1;
   return {
     ...raw,
     tier,
@@ -566,13 +567,20 @@ export const firestoreService = {
   // CLEAR ALL CLIPS (PRODUCTION CLEAN SLATE)
   // ==========================================
   async clearAllClipsFromCloud(): Promise<void> {
-    const [sourcesSnap, footagesSnap, episodesSnap] = await Promise.all([
-      getDocs(collection(db, 'sources')),
-      getDocs(collection(db, 'footages')),
-      getDocs(collection(db, 'episodes')),
-    ]);
+    const [sourcesSnap, footagesSnap, episodesSnap, driveSyncSnap] =
+      await Promise.all([
+        getDocs(collection(db, 'sources')),
+        getDocs(collection(db, 'footages')),
+        getDocs(collection(db, 'episodes')),
+        getDocs(collection(db, 'drive_sync_records')),
+      ]);
 
-    if (sourcesSnap.empty && footagesSnap.empty && episodesSnap.empty) {
+    if (
+      sourcesSnap.empty &&
+      footagesSnap.empty &&
+      episodesSnap.empty &&
+      driveSyncSnap.empty
+    ) {
       return;
     }
 
@@ -586,10 +594,13 @@ export const firestoreService = {
     episodesSnap.forEach((docSnap) => {
       ops.push({ type: 'delete', ref: docSnap.ref });
     });
+    driveSyncSnap.forEach((docSnap) => {
+      ops.push({ type: 'delete', ref: docSnap.ref });
+    });
 
     await commitOperationsInChunks(ops);
     console.info(
-      `Cleared ${sourcesSnap.size} sources, ${footagesSnap.size} footages, and ${episodesSnap.size} episodes from Firestore while keeping categories and settings intact.`
+      `Cleared ${sourcesSnap.size} sources, ${footagesSnap.size} footages, ${episodesSnap.size} episodes, and ${driveSyncSnap.size} drive sync records from Firestore while keeping categories and settings intact.`
     );
   },
 
@@ -671,6 +682,14 @@ export const firestoreService = {
     } catch (err) {
       console.error('Failed to save DriveSyncRecord:', record.folderId, err);
       throw err;
+    }
+  },
+
+  async deleteDriveSyncRecord(folderId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'drive_sync_records', folderId));
+    } catch (err) {
+      console.warn('Failed to delete DriveSyncRecord:', folderId, err);
     }
   },
 

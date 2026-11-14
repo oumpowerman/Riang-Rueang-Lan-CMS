@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link2, Clock, User, Clipboard, ArrowRight, FileText, Check } from 'lucide-react';
+import { Link2, Clock, User, Clipboard, ArrowRight, FileText, Check, HardDrive } from 'lucide-react';
 import { SourcePlatform } from '../../../types/source.types';
 import { detectPlatformFromUrl } from '../../../utils/platformDetector';
 import { PlatformIcon } from '../../footage/directModal/PlatformIcons';
@@ -10,6 +10,8 @@ interface SourceStepInfoProps {
   setTitle: (val: string) => void;
   originalUrl: string;
   setOriginalUrl: (val: string) => void;
+  driveFolderUrl: string;
+  setDriveFolderUrl: (val: string) => void;
   platform: SourcePlatform;
   setPlatform: (val: SourcePlatform) => void;
   channelOrCreator: string;
@@ -27,6 +29,8 @@ export const SourceStepInfo: React.FC<SourceStepInfoProps> = ({
   setTitle,
   originalUrl,
   setOriginalUrl,
+  driveFolderUrl,
+  setDriveFolderUrl,
   platform,
   setPlatform,
   channelOrCreator,
@@ -66,6 +70,17 @@ export const SourceStepInfo: React.FC<SourceStepInfoProps> = ({
       }
     } catch {
       // Fallback
+    }
+  };
+
+  const handlePasteDriveUrl = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setDriveFolderUrl(text.trim());
+      }
+    } catch {
+      // ignore
     }
   };
 
@@ -169,6 +184,38 @@ export const SourceStepInfo: React.FC<SourceStepInfoProps> = ({
                 type="button"
                 onClick={handlePasteUrl}
                 className="absolute right-2 px-2.5 py-1 text-xs font-semibold text-stone-600 hover:text-emerald-800 bg-white hover:bg-stone-50 border border-stone-200 rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+              >
+                <Clipboard className="w-3 h-3" />
+                <span>วาง</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Google Drive Folder or Master Recording URL */}
+        <div className="p-3.5 rounded-2xl border border-stone-200 bg-white space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs sm:text-sm font-bold text-stone-800 flex items-center gap-1.5">
+              <HardDrive className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>โฟลเดอร์ Google Drive หรือไฟล์เต็ม <span className="text-stone-400 font-normal">(ถ้ามี)</span></span>
+            </label>
+            <span className="text-[11px] text-stone-400">สำหรับดาวน์โหลด</span>
+          </div>
+
+          <div className="relative flex items-center">
+            <input
+              type="url"
+              disabled={isExistingSource}
+              value={driveFolderUrl}
+              onChange={(e) => setDriveFolderUrl(e.target.value)}
+              placeholder="วางลิงก์ https://drive.google.com/drive/folders/... หรือไฟล์ไดรฟ์"
+              className="w-full pl-3.5 pr-20 py-2.5 text-xs sm:text-sm font-mono bg-[#FAF8F5] focus:bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/15 transition-all text-stone-900 placeholder:text-stone-400 disabled:opacity-75"
+            />
+            {!isExistingSource && (
+              <button
+                type="button"
+                onClick={handlePasteDriveUrl}
+                className="absolute right-2 px-2.5 py-1 text-xs font-semibold text-stone-600 hover:text-indigo-800 bg-white hover:bg-stone-50 border border-stone-200 rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
               >
                 <Clipboard className="w-3 h-3" />
                 <span>วาง</span>

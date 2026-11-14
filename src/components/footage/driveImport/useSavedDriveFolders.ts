@@ -321,6 +321,93 @@ export function useSavedDriveFolders({
     [folderUrl]
   );
 
+  const handleResetFolderSyncHistory = useCallback(() => {
+    const extractedId = extractGoogleDriveFolderId(folderUrl);
+    if (!extractedId) return;
+
+    setFolderSyncRecord(null);
+    setSyncMode('FULL');
+
+    const prev = savedFoldersRef.current;
+    const nextList = prev.map((f) =>
+      f.folderId === extractedId
+        ? {
+            ...f,
+            lastSyncTimestamp: undefined,
+            totalClipsInFolder: 0,
+          }
+        : f
+    );
+
+    savedFoldersRef.current = nextList;
+    saveLocalSavedFolders(nextList);
+    setSavedFolders(nextList);
+    updateSettings({ savedDriveFolders: nextList });
+
+    firestoreService.deleteDriveSyncRecord(extractedId).catch((err) => {
+      console.warn('Could not delete drive sync record:', err);
+    });
+  }, [folderUrl, updateSettings]);
+
+  const handleSetCustomSyncTimestamp = useCallback(
+    (newTimestampIso: string) => {
+      const extractedId = extractGoogleDriveFolderId(folderUrl);
+      if (!extractedId || !newTimestampIso) return;
+
+      const parsedDate = new Date(newTimestampIso);
+      if (isNaN(parsedDate.getTime())) return;
+
+      const isoStr = parsedDate.toISOString();
+      const nowIso = new Date().toISOString();
+      const existingPreset = savedFoldersRef.current.find(
+        (f) => f.folderId === extractedId
+      );
+      const resolvedFolderName =
+        folderSyncRecord?.folderName ||
+        existingPreset?.folderName ||
+        `โฟลเดอร์ Google Drive (${extractedId.slice(0, 8)}...)`;
+
+      const updatedRecord: DriveSyncRecord = {
+        folderId: extractedId,
+        folderName: resolvedFolderName,
+        lastSyncTimestamp: isoStr,
+        lastSyncVideoCount: folderSyncRecord?.lastSyncVideoCount || 0,
+        totalClipsInFolder: folderSyncRecord?.totalClipsInFolder || 0,
+        updatedAt: nowIso,
+        updatedBy: folderSyncRecord?.updatedBy || 'manual-adjustment',
+      };
+
+      setFolderSyncRecord(updatedRecord);
+      setSyncMode('DELTA');
+
+      upsertSavedFolderPreset({
+        folderId: extractedId,
+        folderUrl,
+        folderName: resolvedFolderName,
+        lastSyncTimestamp: isoStr,
+        totalClipsInFolder: updatedRecord.totalClipsInFolder,
+      });
+
+      firestoreService.saveDriveSyncRecord(updatedRecord).catch((err) => {
+        console.warn('Failed to save adjusted DriveSyncRecord:', err);
+      });
+    },
+    [folderUrl, folderSyncRecord, upsertSavedFolderPreset]
+  );
+
+  const handleAdjustSyncLookbackDays = useCallback(
+    (daysAgo: number) => {
+      const safeDays = Math.max(0, Number(daysAgo) || 0);
+      const targetTime = new Date(
+        Date.now() - safeDays * 24 * 60 * 60 * 1000
+      );
+      // Set to start of that day (00:00:00) so all files from that day onward are included
+      targetTime.setHours(0, 0, 0, 0);
+      handleSetCustomSyncTimestamp(targetTime.toISOString());
+    },
+    [handleSetCustomSyncTimestamp]
+  );
+
   return {
     folderUrl,
     setFolderUrl,
@@ -335,5 +422,8 @@ export function useSavedDriveFolders({
     handleRemoveSavedFolder,
     handleSelectSavedFolder,
     handleSaveCurrentFolderPreset,
+    handleResetFolderSyncHistory,
+    handleAdjustSyncLookbackDays,
+    handleSetCustomSyncTimestamp,
   };
 }

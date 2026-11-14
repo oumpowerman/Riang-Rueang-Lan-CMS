@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ActiveNavTab, useCMS } from '../../context/CMSContext';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 const TAB_LABELS: Record<ActiveNavTab, { icon: LucideIcon; title: string; subtitle: string }> = {
   DASHBOARD: { icon: LayoutDashboard, title: 'ภาพรวมระบบ', subtitle: 'สถิติภาพรวม & KPIs ช่อง' },
@@ -68,21 +69,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
 
   return (
     <header className="sticky top-0 z-20 w-full max-w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-6 py-2.5 flex items-center justify-between gap-4 shrink-0">
-      {/* MOBILE HEADER (< md): Menu Trigger + Current Page Title + Ready Count + Import Action */}
-      <div className="flex md:hidden items-center justify-between w-full gap-2">
+      {/* MOBILE HEADER (< md): Menu Trigger + Current Page Title + Ready Count + PWA Install + Import Action */}
+      <div className="flex md:hidden items-center justify-between w-full gap-1.5">
         <button
           type="button"
           onClick={onOpenMobileMenu}
           aria-label="เปิดเมนูหลักและเครื่องมือจัดการ"
-          className="min-w-[40px] min-h-[40px] -ml-1 rounded-xl bg-slate-100/80 hover:bg-slate-200/70 text-slate-700 border border-slate-200/80 flex items-center justify-center gap-1.5 px-2.5 transition-colors cursor-pointer shrink-0"
+          className="min-w-[36px] min-h-[36px] -ml-1 rounded-xl bg-slate-100/80 hover:bg-slate-200/70 text-slate-700 border border-slate-200/80 flex items-center justify-center gap-1 px-2 transition-colors cursor-pointer shrink-0"
         >
           <Menu className="w-4 h-4" />
-          <span className="text-xs font-bold">เมนู</span>
+          <span className="text-xs font-bold hidden min-[380px]:inline">เมนู</span>
         </button>
 
-        <div className="flex items-center gap-2 min-w-0 flex-1 px-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 px-0.5">
           <CurrentIcon className="w-4 h-4 text-indigo-600 shrink-0" />
-          <span className="text-sm font-bold text-slate-900 truncate">
+          <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">
             {currentTab.title}
           </span>
         </div>
@@ -91,16 +92,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
           <button
             type="button"
             onClick={() => setIsStatusRuleModalOpen(true)}
-            className="text-[11px] font-mono tabular-nums px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200/80 font-semibold cursor-pointer"
+            className="inline-flex items-center gap-1 text-[11px] font-mono tabular-nums px-2 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200/80 font-semibold cursor-pointer whitespace-nowrap"
             title="จำนวนฟุตเทจพร้อมใช้ (คลิกเพื่อดูเกณฑ์สีสถานะ)"
           >
-            พร้อมใช้ <span className="font-bold text-slate-900">{readyTotal}</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            <span className="hidden min-[390px]:inline">พร้อมใช้</span>
+            <span className="font-bold text-slate-900">{readyTotal}</span>
           </button>
+
+          <PWAInstallButton compact />
 
           <button
             type="button"
             onClick={() => setIsDirectFootageModalOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
             title="นำเข้าฟุตเทจ"
           >
             <Plus className="w-3.5 h-3.5 text-white shrink-0" />
@@ -126,8 +131,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
         </div>
       </div>
 
-      {/* Right Zone: Subtle Ready Footage Counter + Dominant Primary Import CTA */}
-      <div className="hidden md:flex items-center gap-3 shrink-0">
+      {/* Right Zone: Ready Counter + PWA Install + Primary Import CTA */}
+      <div className="hidden md:flex items-center gap-2.5 shrink-0">
         {/* Neutral Ready Footage Counter */}
         <button
           type="button"
@@ -142,6 +147,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
           </span>
           <span className="text-slate-500 text-xs">ฟุต</span>
         </button>
+
+        {/* PWA Install Trigger */}
+        <PWAInstallButton />
 
         {/* Primary Focal Point: "+ นำเข้าฟุตเทจ" Dropdown Action */}
         <div className="relative" ref={importMenuRef}>
@@ -220,14 +228,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-900">
-                        เพิ่มฟุตเดี่ยวพร้อมใช้
+                        เพิ่มฟุตเดี่ยว / วางลิงก์ Social
                       </span>
                       <span className="text-xs font-mono font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded-md">
                         1:1
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5 leading-snug">
-                      บันทึกฟุตเทจเดี่ยว 1 ชิ้นพร้อมลิงก์ Google Drive เข้าคลังทันที
+                      วางลิงก์จาก Social (รอฝาก Drive) หรือลิงก์ Google Drive พร้อมกดบันทึกด่วนได้ทันที
                     </p>
                   </div>
                 </button>

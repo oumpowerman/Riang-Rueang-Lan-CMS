@@ -29,12 +29,9 @@ export const TraceabilityCoUsageTab: React.FC<TraceabilityCoUsageTabProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 px-1">
+      <div className="flex items-center justify-between gap-2 text-xs text-slate-600 px-1">
         <span className="font-bold text-slate-800">
           ฟุตเทจที่เคยอยู่ร่วม EP เดียวกัน ({coUsedEntries.length} รายการ)
-        </span>
-        <span className="text-slate-500">
-          คลิกที่การ์ดเพื่อสลับดูข้อมูลของฟุตเทจคู่ผสมได้ทันที
         </span>
       </div>
 

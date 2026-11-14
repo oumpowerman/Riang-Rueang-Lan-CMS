@@ -5,10 +5,15 @@ import { useCMS } from '../../../context/CMSContext';
 import { STAGING_TAG_ID, isFootageInStaging } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryTag, SystemSettings } from '../../../types/tag.types';
+import {
+  DuplicateMatchReason,
+  getDuplicateReasonLabel,
+} from '../../../utils/duplicateClusterScanner';
 import { PaginationBar } from '../../ui/PaginationBar';
 import { StatusBadge } from '../../ui/StatusBadge';
 import { TagPill } from '../../ui/TagPill';
 import { FootageCard } from '../FootageCard';
+import { VideoThumbnailPreview } from '../VideoThumbnailPreview';
 import { ActiveScopeDescription, VaultViewMode } from './vault.types';
 
 export interface VaultFootageResultsSectionProps {
@@ -17,6 +22,7 @@ export interface VaultFootageResultsSectionProps {
   viewMode: VaultViewMode;
   filteredCount: number;
   paginatedFootage: ComputedFootage[];
+  duplicateReasonsById?: Record<string, DuplicateMatchReason[]>;
   tagMap: Record<string, CategoryTag>;
   settings: SystemSettings;
   currentPage: number;
@@ -34,10 +40,10 @@ export interface VaultFootageResultsSectionProps {
 
 export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProps> = ({
   resultsTransitionKey,
-  activeScopeDescription,
   viewMode,
   filteredCount,
   paginatedFootage,
+  duplicateReasonsById,
   tagMap,
   settings,
   currentPage,
@@ -50,12 +56,12 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
   onStartDragFootage,
   onEndDragFootage,
   onResetFilters,
-  onOpenDirectFootageModal,
 }) => {
   const {
     selectedFootageIdsForBatch,
     setSelectedFootageIdsForBatch,
     activeDragFootageIds,
+    setPreviewFootageId,
   } = useCMS();
 
   const isAllPaginatedSelected =
@@ -154,6 +160,7 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
               >
                 <FootageCard
                   footage={ft}
+                  duplicateReasons={duplicateReasonsById?.[ft.id]}
                   onSelectForTraceability={onSelectForTraceability}
                   onQuickTagClick={onQuickTagClick}
                   onSelectWithRange={onSelectWithRange}
@@ -197,7 +204,8 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                         title="เลือกหน้านี้"
                       />
                     </th>
-                    <th className="py-2.5 px-4 w-24">รหัส</th>
+                    <th className="py-2.5 px-3 w-24">พรีวิว</th>
+                    <th className="py-2.5 px-3 w-24">รหัส</th>
                     <th className="py-2.5 px-4">ชื่อคลิป</th>
                     <th className="py-2.5 px-4">หมวดหมู่</th>
                     <th className="py-2.5 px-4 w-36">สถานะ</th>
@@ -259,20 +267,45 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                             />
                           </div>
                         </td>
-                        <td className="py-2.5 px-4 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
+                        <td
+                          className="py-2 px-3 w-24"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <VideoThumbnailPreview
+                            footage={ft}
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewFootageId(ft.id);
+                            }}
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-600 whitespace-nowrap tabular-nums">
                           {ft.id}
                         </td>
                         <td className="py-2.5 px-4">
                           <div className="font-bold text-slate-900 text-sm line-clamp-1">
                             {ft.title}
                           </div>
+                          {duplicateReasonsById?.[ft.id]?.length ? (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {duplicateReasonsById[ft.id].map((reason) => (
+                                <span
+                                  key={reason}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#FEF3E6] border border-[#F2CEAE] text-[#8A4A18] text-[10px] font-bold"
+                                >
+                                  ซ้ำ: {getDuplicateReasonLabel(reason)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="py-2.5 px-4">
                           {isFootageInStaging(ft.tags) ? (
                             <TagPill tag={tagMap[STAGING_TAG_ID]} />
                           ) : (
                             <div className="flex flex-wrap gap-1.5">
-                              {ft.tags.map((tid) => (
+                              {Array.from(new Set(ft.tags || [])).map((tid) => (
                                 <TagPill key={tid} tag={tagMap[tid]} />
                               ))}
                             </div>

@@ -7,6 +7,7 @@ interface TagSelectorInputProps {
   label?: string;
   helperText?: string;
   allowMultipleSubcategories?: boolean;
+  hideHeaderAndTray?: boolean;
 }
 
 export const TagSelectorInput: React.FC<TagSelectorInputProps> = ({
@@ -15,6 +16,7 @@ export const TagSelectorInput: React.FC<TagSelectorInputProps> = ({
   label = 'หมวดหมู่ & ดารา/หัวข้อย่อย 2 ชั้น',
   helperText = 'เลือกหมวดหลักก่อน แล้วเลือกบุคคลหรือหมวดย่อยที่ปรากฏในคลิป',
   allowMultipleSubcategories = true,
+  hideHeaderAndTray = false,
 }) => {
   return (
     <CascadeCategorySelector
@@ -23,6 +25,7 @@ export const TagSelectorInput: React.FC<TagSelectorInputProps> = ({
       label={label}
       helperText={helperText}
       allowMultipleSubcategories={allowMultipleSubcategories}
+      hideHeaderAndTray={hideHeaderAndTray}
     />
   );
 };

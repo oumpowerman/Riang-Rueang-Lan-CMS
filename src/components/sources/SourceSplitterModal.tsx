@@ -26,6 +26,7 @@ export const SourceSplitterModal: React.FC = () => {
   // Source Fields (Brand new SRC-XXXX)
   const [title, setTitle] = useState('');
   const [originalUrl, setOriginalUrl] = useState('');
+  const [driveFolderUrl, setDriveFolderUrl] = useState('');
   const [platform, setPlatform] = useState<SourcePlatform>('FACEBOOK');
   const [channelOrCreator, setChannelOrCreator] = useState('');
   const [totalDuration, setTotalDuration] = useState('01:30:00');
@@ -52,6 +53,7 @@ export const SourceSplitterModal: React.FC = () => {
     if (activeSourceForSplitting) {
       setTitle(activeSourceForSplitting.title);
       setOriginalUrl(activeSourceForSplitting.originalUrl);
+      setDriveFolderUrl(activeSourceForSplitting.driveFolderUrl || '');
       setPlatform(activeSourceForSplitting.platform);
       setChannelOrCreator(activeSourceForSplitting.channelOrCreator || '');
       setTotalDuration(activeSourceForSplitting.totalDuration || '01:30:00');
@@ -70,6 +72,7 @@ export const SourceSplitterModal: React.FC = () => {
     } else {
       setTitle('');
       setOriginalUrl('');
+      setDriveFolderUrl('');
       setPlatform('FACEBOOK');
       setChannelOrCreator('');
       setTotalDuration('01:30:00');
@@ -159,6 +162,7 @@ export const SourceSplitterModal: React.FC = () => {
           channelOrCreator: channelOrCreator.trim(),
           totalDuration: totalDuration.trim(),
           tags: sourceTags.length > 0 ? sourceTags : ['TAG-0001'],
+          driveFolderUrl: driveFolderUrl.trim(),
           notes: '',
         },
         validClips
@@ -245,6 +249,8 @@ export const SourceSplitterModal: React.FC = () => {
                   setTitle={setTitle}
                   originalUrl={originalUrl}
                   setOriginalUrl={setOriginalUrl}
+                  driveFolderUrl={driveFolderUrl}
+                  setDriveFolderUrl={setDriveFolderUrl}
                   platform={platform}
                   setPlatform={setPlatform}
                   channelOrCreator={channelOrCreator}

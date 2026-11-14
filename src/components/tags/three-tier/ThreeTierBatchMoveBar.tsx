@@ -1,13 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle2,
   CornerDownRight,
-  FolderInput,
   Loader2,
   Palette,
   RotateCcw,
-  Search,
   Sparkles,
   Trash2,
   X,
@@ -16,18 +14,20 @@ import {
   BatchTagMoveDestination,
   TagReorgUndoRecord,
 } from '../../../context/cms/cms.types';
-import { isStagingGroupId, isStagingTagId } from '../../../services/seedData';
 import {
   CategoryGroup,
   CategoryTag,
+  CategoryTier,
+  DEFAULT_TIER_SUBCATEGORIES,
   EntitySubtype,
+  TierSubCategoriesConfig,
 } from '../../../types/tag.types';
-import { CategoryGroupIcon } from '../../ui/CategoryGroupIcon';
 import { COLOR_OPTIONS } from '../constants/tagPastelPalette';
 
 interface ThreeTierBatchMoveBarProps {
   categoryGroups: CategoryGroup[];
   tags: CategoryTag[];
+  tierSubCategories?: TierSubCategoriesConfig;
   selectedTagIds: string[];
   isBatchMovingTags: boolean;
   batchMoveProgressText: string | null;
@@ -47,8 +47,7 @@ interface ThreeTierBatchMoveBarProps {
 }
 
 export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
-  categoryGroups,
-  tags,
+  tierSubCategories = DEFAULT_TIER_SUBCATEGORIES,
   selectedTagIds,
   isBatchMovingTags,
   batchMoveProgressText,
@@ -60,69 +59,22 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
   onUndoLastTagReorg,
   onDismissTagReorgUndoRecord,
 }) => {
-  const [parentSearch, setParentSearch] = useState('');
-  const [selectedTargetParentId, setSelectedTargetParentId] = useState('');
-  const [selectedEntityType, setSelectedEntityType] =
-    useState<EntitySubtype>('PERSON');
   const [batchEditEntityType, setBatchEditEntityType] =
     useState<EntitySubtype>('PERSON');
-
-  const validGroups = useMemo(
-    () => categoryGroups.filter((g) => !isStagingGroupId(g.id)),
-    [categoryGroups]
-  );
-
-  const groupNameMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    categoryGroups.forEach((g) => {
-      map[g.id] = g.name;
-    });
-    return map;
-  }, [categoryGroups]);
-
-  // Available Tier 1 Main Tags that are NOT currently in `selectedTagIds`
-  const availableParentMainTags = useMemo(() => {
-    const selectedSet = new Set(selectedTagIds);
-    const q = parentSearch.trim().toLowerCase();
-
-    return tags
-      .filter((t) => {
-        if (isStagingTagId(t.id)) return false;
-        if (t.tier === 2 || Boolean(t.parentId)) return false;
-        if (selectedSet.has(t.id)) return false;
-        if (!q) return true;
-        const gId = t.groupId || `GRP-${t.groupType || 'GENERAL'}`;
-        const gName = (groupNameMap[gId] || '').toLowerCase();
-        return (
-          t.name.toLowerCase().includes(q) ||
-          gName.includes(q) ||
-          t.id.toLowerCase().includes(q)
-        );
-      })
-      .map((t) => {
-        const gId = t.groupId || `GRP-${t.groupType || 'GENERAL'}`;
-        return {
-          tag: t,
-          groupName: groupNameMap[gId] || 'มิติหลัก',
-        };
-      });
-  }, [tags, selectedTagIds, parentSearch, groupNameMap]);
-
-  const effectiveTargetParentId = useMemo(() => {
-    if (
-      selectedTargetParentId &&
-      availableParentMainTags.some((p) => p.tag.id === selectedTargetParentId)
-    ) {
-      return selectedTargetParentId;
-    }
-    return availableParentMainTags[0]?.tag.id || '';
-  }, [selectedTargetParentId, availableParentMainTags]);
 
   const selectedCount = selectedTagIds.length;
   const shouldShowBar =
     selectedCount > 0 || isBatchMovingTags || Boolean(lastTagReorgUndoRecord);
 
   if (!shouldShowBar) return null;
+
+  const handleMoveToTierSub = (tier: CategoryTier, subCategory: string) => {
+    onExecuteBatchMove(selectedTagIds, {
+      mode: 'MOVE_TO_TIER_SUBCATEGORY',
+      targetTier: tier,
+      targetSubCategory: subCategory,
+    });
+  };
 
   return (
     <div className="border-t border-[#E2D5C4] bg-[#FDFBF7] px-3 sm:px-4 py-2.5 shrink-0 space-y-2 shadow-sm">
@@ -174,7 +126,7 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
         </div>
       )}
 
-      {/* 3. Multi-Select Bulk Action Studio (Move, Convert, Edit Color/Type, Delete) */}
+      {/* 3. Multi-Select Bulk Action Studio (Move to Tier 1/2/3 Subcategory, Edit Color/Type, Delete) */}
       {selectedCount > 0 && !isBatchMovingTags && (
         <div className="bg-white border border-[#E2D5C4] rounded-2xl p-2.5 shadow-2xs space-y-2">
           {/* Top Row: Selection Count + Batch Edit Color/Type + Batch Delete */}
@@ -198,7 +150,7 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
                 <div className="flex flex-wrap items-center gap-1.5 pl-2 border-l border-[#E8DFD3]">
                   <span className="text-[11px] font-bold text-[#524538] flex items-center gap-1 whitespace-nowrap">
                     <Palette className="w-3.5 h-3.5 text-[#2C5378]" />
-                    <span>เปลี่ยนสีพาสเทลพร้อมกัน:</span>
+                    <span>เปลี่ยนสีพาสเทล:</span>
                   </span>
                   <div className="flex items-center gap-1 bg-[#FAF8F5] px-2 py-1 rounded-xl border border-[#E8DFD3]">
                     {COLOR_OPTIONS.map((c) => (
@@ -222,11 +174,11 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
                 </div>
               )}
 
-              {/* Batch Edit Subcategory Entity Type */}
+              {/* Batch Edit Entity Type */}
               {onExecuteBatchMetadataUpdate && (
                 <div className="flex items-center gap-1.5 pl-2 border-l border-[#E8DFD3]">
                   <span className="text-[11px] font-bold text-[#524538] whitespace-nowrap">
-                    เปลี่ยนประเภท:
+                    สัญลักษณ์:
                   </span>
                   <select
                     value={batchEditEntityType}
@@ -235,11 +187,11 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
                     }
                     className="bg-[#FAF8F5] border border-[#E2D5C4] rounded-lg px-2 py-1 text-xs font-semibold text-[#3D332A] focus:outline-none"
                   >
-                    <option value="PERSON">บุคคล/ดารา</option>
-                    <option value="TOPIC">หัวข้อ/คอนเซ็ปต์</option>
-                    <option value="ACTION">กิริยา/มุก</option>
-                    <option value="ANIMAL">สัตว์</option>
-                    <option value="GENERAL">ทั่วไป</option>
+                    <option value="TOPIC">🎯 หมวด/ประเด็น</option>
+                    <option value="ACTION">⚡ สถานการณ์/สไตล์</option>
+                    <option value="PERSON">👤 บุคคล/รายการ</option>
+                    <option value="ANIMAL">🐾 สัตว์</option>
+                    <option value="GENERAL">🏷️ ทั่วไป</option>
                   </select>
                   <button
                     type="button"
@@ -250,7 +202,7 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
                     }
                     className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#EDF4FA] hover:bg-[#2C5378] text-[#1B4369] hover:text-white border border-[#B2D5ED] transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    ใช้ประเภทนี้
+                    ใช้สัญลักษณ์นี้
                   </button>
                 </div>
               )}
@@ -270,110 +222,60 @@ export const ThreeTierBatchMoveBar: React.FC<ThreeTierBatchMoveBarProps> = ({
             )}
           </div>
 
-          {/* Bottom Row: Move to Dimension (Tier 1) OR Convert to Subcategory (Tier 2) */}
-          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2">
-            {/* Option A — Move as Tier 1 Main Tag to Dimension */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-[#6E5F52] flex items-center gap-1 mr-0.5 whitespace-nowrap">
-                <FolderInput className="w-3.5 h-3.5 text-[#78593A]" />
-                <span>ย้ายข้ามมิติ (เป็นแท็กหลัก):</span>
+          {/* Bottom Row: Instant 1-Click Move into Tier 1, Tier 2, or Tier 3 Sub-categories */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+            {/* Tier 1 Destinations */}
+            <div className="flex flex-wrap items-center gap-1 bg-[#F4F9FD] px-2.5 py-1.5 rounded-xl border border-[#D5E6F5]">
+              <span className="text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-[#2C5378] text-white shrink-0">
+                ย้ายไป TIER 1
               </span>
-
-              {validGroups.map((grp) => (
+              {tierSubCategories.tier1.map((sub) => (
                 <button
-                  key={grp.id}
+                  key={`t1-${sub}`}
                   type="button"
-                  onClick={() =>
-                    onExecuteBatchMove(selectedTagIds, {
-                      mode: 'MOVE_TO_GROUP',
-                      targetGroupId: grp.id,
-                    })
-                  }
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#FAF5EB] hover:bg-[#78593A] text-[#453119] hover:text-white border border-[#DFC6A3] transition-colors cursor-pointer whitespace-nowrap"
-                  title={`ย้าย ${selectedCount} แท็กไปเป็นแท็กหลักในมิติ "${grp.name}"`}
+                  onClick={() => handleMoveToTierSub(1, sub)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white hover:bg-[#2C5378] text-[#184366] hover:text-white border border-[#C5DCEF] transition-colors cursor-pointer"
                 >
-                  <CategoryGroupIcon icon={grp.icon} className="w-3.5 h-3.5" />
-                  <span>{grp.name}</span>
+                  <CornerDownRight className="w-3 h-3" />
+                  <span>{sub}</span>
                 </button>
               ))}
             </div>
 
-            {/* Option B — Convert/Move as Tier 2 Subcategory under any Main Tag */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-2 xl:pt-0 border-t xl:border-t-0 xl:border-l border-[#E8DFD3] xl:pl-3">
-              <span className="text-[11px] font-bold text-[#255431] flex items-center gap-1 whitespace-nowrap">
-                <CornerDownRight className="w-3.5 h-3.5 text-[#3B6845]" />
-                <span>แปลงเป็นแท็กย่อยใต้:</span>
+            {/* Tier 2 Destinations */}
+            <div className="flex flex-wrap items-center gap-1 bg-[#FFFDF9] px-2.5 py-1.5 rounded-xl border border-[#EFE0C6]">
+              <span className="text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-[#8A5A22] text-white shrink-0">
+                ย้ายไป TIER 2
               </span>
+              {tierSubCategories.tier2.map((sub) => (
+                <button
+                  key={`t2-${sub}`}
+                  type="button"
+                  onClick={() => handleMoveToTierSub(2, sub)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white hover:bg-[#8A5A22] text-[#6B4415] hover:text-white border border-[#E8CFA6] transition-colors cursor-pointer"
+                >
+                  <CornerDownRight className="w-3 h-3" />
+                  <span>{sub}</span>
+                </button>
+              ))}
+            </div>
 
-              {/* Search Filter for Target Main Tag */}
-              <div className="relative w-32 sm:w-36">
-                <Search className="w-3 h-3 text-[#8C7B6C] absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={parentSearch}
-                  onChange={(e) => setParentSearch(e.target.value)}
-                  placeholder="ค้นหาแท็กแม่..."
-                  className="w-full pl-6 pr-5 py-1 rounded-lg bg-[#FAF8F5] border border-[#D8C5A6] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:bg-white focus:border-[#3B6845]"
-                />
-                {parentSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setParentSearch('')}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
-              {/* Target Parent Main Tag Select */}
-              <select
-                value={effectiveTargetParentId}
-                onChange={(e) => setSelectedTargetParentId(e.target.value)}
-                className="max-w-[200px] bg-white border border-[#BAD8BF] rounded-lg px-2 py-1 text-xs font-bold text-[#1C4824] focus:outline-none focus:ring-1 focus:ring-[#3B6845]"
-              >
-                {availableParentMainTags.length === 0 ? (
-                  <option value="">-- ไม่พบแท็กหลักปลายทาง --</option>
-                ) : (
-                  availableParentMainTags.map(({ tag, groupName }) => (
-                    <option key={tag.id} value={tag.id}>
-                      [{groupName}] #{tag.name}
-                    </option>
-                  ))
-                )}
-              </select>
-
-              {/* Entity Type Selector for Subcategories */}
-              <select
-                value={selectedEntityType}
-                onChange={(e) =>
-                  setSelectedEntityType(e.target.value as EntitySubtype)
-                }
-                className="bg-white border border-[#E2D5C4] rounded-lg px-2 py-1 text-xs text-[#524538] focus:outline-none"
-                title="ประเภทของแท็กย่อยเมื่อย้ายเข้าไป"
-              >
-                <option value="PERSON">บุคคล/ดารา</option>
-                <option value="TOPIC">หัวข้อ/คอนเซ็ปต์</option>
-                <option value="ACTION">กิริยา/มุก</option>
-                <option value="ANIMAL">สัตว์</option>
-                <option value="GENERAL">ทั่วไป</option>
-              </select>
-
-              <button
-                type="button"
-                disabled={!effectiveTargetParentId}
-                onClick={() => {
-                  if (!effectiveTargetParentId) return;
-                  onExecuteBatchMove(selectedTagIds, {
-                    mode: 'MOVE_TO_PARENT_TAG',
-                    targetParentTagId: effectiveTargetParentId,
-                    entityType: selectedEntityType,
-                  });
-                }}
-                className="px-3 py-1 rounded-lg bg-[#3B6845] hover:bg-[#2C5235] disabled:opacity-50 text-white text-xs font-bold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-              >
-                ย้ายเป็นแท็กย่อย
-              </button>
+            {/* Tier 3 Destinations */}
+            <div className="flex flex-wrap items-center gap-1 bg-[#F6FBF7] px-2.5 py-1.5 rounded-xl border border-[#CEE8D5]">
+              <span className="text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-[#2D623C] text-white shrink-0">
+                ย้ายไป TIER 3
+              </span>
+              {tierSubCategories.tier3.map((sub) => (
+                <button
+                  key={`t3-${sub}`}
+                  type="button"
+                  onClick={() => handleMoveToTierSub(3, sub)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white hover:bg-[#2D623C] text-[#1D4D2B] hover:text-white border border-[#BFE0C8] transition-colors cursor-pointer"
+                >
+                  <CornerDownRight className="w-3 h-3" />
+                  <span>{sub}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>

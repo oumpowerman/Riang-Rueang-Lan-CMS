@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion } from 'motion/react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Inbox,
   RotateCcw,
@@ -8,19 +8,23 @@ import {
   Sparkles,
   Clock,
   Maximize2,
-  X,
   FileSpreadsheet,
-  CalendarClock,
+  ChevronDown,
+  Wrench,
+  MessageSquare,
+  FolderCheck,
 } from 'lucide-react';
 import { CooldownStatus } from '../../../types/footage.types';
 import { SystemSettings } from '../../../types/tag.types';
 import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
+import { CleanPrefixedTitlesButton } from '../CleanPrefixedTitlesButton';
 import { AnimatedMetricNumber } from './AnimatedMetricNumber';
 import { ActiveScopeDescription, VaultMetricsSummary } from './vault.types';
 
 export interface VaultHeaderKpiSectionProps {
   totalVaultCount: number;
   stagingCount: number;
+  missingDriveCount?: number;
   isStagingFilterActive: boolean;
   vaultMetrics: VaultMetricsSummary;
   activeScopeDescription: ActiveScopeDescription;
@@ -38,11 +42,14 @@ export interface VaultHeaderKpiSectionProps {
   onOpenFullscreenStudio?: () => void;
   onOpenSheetTagImportModal?: () => void;
   onOpenYouTubeDateSyncModal?: () => void;
+  onOpenLineOaModal?: () => void;
+  onOpenQuickDriveLinker?: () => void;
 }
 
 export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
   totalVaultCount,
   stagingCount,
+  missingDriveCount = 0,
   isStagingFilterActive,
   vaultMetrics,
   activeScopeDescription,
@@ -51,62 +58,81 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
   settings,
   onToggleStagingFilter,
   onStatusFilterChange,
-  onClearHierarchySelection,
   onOpenGoogleDriveBatchModal,
   onOpenFullscreenStudio,
   onOpenSheetTagImportModal,
-  onOpenYouTubeDateSyncModal,
+  onOpenLineOaModal,
+  onOpenQuickDriveLinker,
 }) => {
-  return (
-    <div className="bg-white border border-slate-200/90 rounded-2xl p-4 space-y-3.5 shadow-2xs">
-      {/* Top Action & Uncategorized Triage Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Left: Uncategorized Clips Quick Triage Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors ${
-              isStagingFilterActive
-                ? 'bg-amber-100 border-amber-400 text-amber-950'
-                : stagingCount > 0
-                ? 'bg-amber-50/90 border-amber-200 text-amber-900'
-                : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
-          >
-            <Inbox
-              className={`w-4 h-4 shrink-0 ${
-                stagingCount > 0 ? 'text-amber-600' : 'text-slate-400'
-              }`}
-            />
-            <span>คลิปไม่มีหมวดหมู่</span>
-            <span
-              className={`px-2 py-0.5 rounded-md font-mono tabular-nums text-xs font-extrabold ${
-                stagingCount > 0
-                  ? 'bg-amber-400/90 text-slate-950'
-                  : 'bg-slate-200/80 text-slate-600'
-              }`}
-            >
-              {stagingCount}
-            </span>
-          </div>
+  const [isMobileToolsOpen, setIsMobileToolsOpen] = useState(false);
+  const mobileToolsRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        mobileToolsRef.current &&
+        !mobileToolsRef.current.contains(e.target as Node)
+      ) {
+        setIsMobileToolsOpen(false);
+      }
+    };
+    if (isMobileToolsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMobileToolsOpen]);
+
+  return (
+    <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-2xs">
+      {/* Top Action & Uncategorized Triage Bar */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Left: Unified Uncategorized Clips Toggle Button + Desktop Studio/Clean Actions */}
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={onToggleStagingFilter}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               isStagingFilterActive
-                ? 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900'
+                ? 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900 shadow-2xs'
                 : stagingCount > 0
-                ? 'bg-white hover:bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
-                : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+                ? 'bg-amber-50/90 hover:bg-amber-100/80 border-amber-300 text-amber-950 shadow-2xs'
+                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
             }`}
+            title={
+              isStagingFilterActive
+                ? 'คลิกเพื่อกลับไปดูฟุตเทจทั้งหมดในคลัง'
+                : 'คลิกเพื่อกรองดูเฉพาะคลิปที่ยังไม่มีหมวดหมู่'
+            }
           >
             {isStagingFilterActive ? (
               <>
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>ดูทั้งหมด ({totalVaultCount})</span>
+                <RotateCcw className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="hidden sm:inline">
+                  กำลังดูไม่มีหมวด ({stagingCount}) · ดูทั้งหมด ({totalVaultCount})
+                </span>
+                <span className="sm:hidden">
+                  ไม่มีหมวด ({stagingCount}) · ดูทั้งหมด
+                </span>
               </>
             ) : (
-              <span>ดูคลิปไม่มีหมวด</span>
+              <>
+                <Inbox
+                  className={`w-3.5 h-3.5 shrink-0 ${
+                    stagingCount > 0 ? 'text-amber-600' : 'text-slate-400'
+                  }`}
+                />
+                <span className="hidden sm:inline">คลิปไม่มีหมวดหมู่</span>
+                <span className="sm:hidden">ไม่มีหมวด</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[11px] font-extrabold ${
+                    stagingCount > 0
+                      ? 'bg-amber-400/90 text-slate-950'
+                      : 'bg-slate-200/80 text-slate-600'
+                  }`}
+                >
+                  {stagingCount}
+                </span>
+              </>
             )}
           </button>
 
@@ -114,52 +140,154 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
             <button
               type="button"
               onClick={onOpenFullscreenStudio}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
               title="เปิดสตูดิโอคัดแยกหมวดหมู่เต็มจอ"
             >
-              <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />
+              <Maximize2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
               <span>คัดแยกเต็มจอ</span>
             </button>
           )}
+
+          <div className="hidden sm:block">
+            <CleanPrefixedTitlesButton />
+          </div>
         </div>
 
-        {/* Right: Active Filter Chip (if filtered) + YouTube Date Sync + Sheet Match + Google Drive Import */}
-        <div className="flex flex-wrap items-center gap-2">
-          {hasHierarchySelection && (
+        {/* Right: Desktop Sync/Drive Buttons + Mobile Unified Tools Dropdown */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Desktop Buttons (sm:flex) */}
+          <div className="hidden sm:flex items-center gap-2">
+            {onOpenLineOaModal && (
+              <button
+                type="button"
+                onClick={onOpenLineOaModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+                title="รับโค้ด Google Apps Script เชื่อมแชท LINE OA ส่งฟุตเทจเข้าคลังอัตโนมัติ"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>เชื่อม LINE OA</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={onClearHierarchySelection}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold transition-colors cursor-pointer"
-              title="ล้างหมวดหมู่ที่เลือก"
+              onClick={onOpenSheetTagImportModal}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#1C4824] bg-[#EEF5EE] hover:bg-[#E2EFE2] border border-[#BAD8BF] rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+              title="สตูดิโอซิงก์ตารางหลัก 10 คอลัมน์ (A–J): ฟุตเทจ + แท็ก 3 ชั้น + จัดอันดับ EP + วันที่เผยแพร่"
             >
-              <span>{activeScopeDescription.label}</span>
-              <X className="w-3.5 h-3.5 text-indigo-600" />
+              <FileSpreadsheet className="w-4 h-4 text-[#3B6845] shrink-0" />
+              <span>ซิงก์ Google Sheet</span>
             </button>
-          )}
 
-          <button
-            type="button"
-            onClick={onOpenSheetTagImportModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#1C4824] bg-[#EEF5EE] hover:bg-[#E2EFE2] border border-[#BAD8BF] rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-            title="สตูดิโอซิงก์ข้อมูล 2 ขั้นตอน: (1) ซิงก์แท็ก & จัดอันดับ EP จาก Sheet และ (2) ซิงก์วันที่เผยแพร่จริงจาก YouTube"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-[#3B6845] shrink-0" />
-            <span>ซิงก์ข้อมูล Sheet & วันที่ YouTube</span>
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-white/90 text-[#1C4824] border border-[#BAD8BF] font-mono text-[10px] font-extrabold">
-              <CalendarClock className="w-3 h-3 text-[#3B6845]" />
-              <span>2 ขั้นตอน</span>
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={onOpenGoogleDriveBatchModal}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 border border-slate-200/90 hover:border-slate-300 rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+              title="ดึงข้อมูลคลิปจากโฟลเดอร์ Google Drive"
+            >
+              <GoogleDriveIcon className="w-4 h-4 shrink-0" />
+              <span>ดึงข้อมูลจาก Drive</span>
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={onOpenGoogleDriveBatchModal}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 border border-slate-200/90 hover:border-slate-300 rounded-xl transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-            title="ดึงข้อมูลคลิปจากโฟลเดอร์ Google Drive"
-          >
-            <GoogleDriveIcon className="w-4 h-4 shrink-0" />
-            <span>ดึงข้อมูลจาก Drive</span>
-          </button>
+          {/* Mobile Unified Tools Menu (< sm) */}
+          <div className="relative sm:hidden" ref={mobileToolsRef}>
+            <button
+              type="button"
+              onClick={() => setIsMobileToolsOpen((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200/90 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Wrench className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>เครื่องมือคลัง</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-slate-500 transition-transform ${
+                  isMobileToolsOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {isMobileToolsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                  transition={{ duration: 0.14 }}
+                  className="absolute right-0 mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/90 p-1.5 z-40 space-y-1"
+                >
+                  {onOpenLineOaModal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileToolsOpen(false);
+                        onOpenLineOaModal();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-emerald-50 text-xs font-bold text-emerald-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <MessageSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>เชื่อม LINE OA (Apps Script)</span>
+                    </button>
+                  )}
+
+                  {missingDriveCount > 0 && onOpenQuickDriveLinker && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileToolsOpen(false);
+                        onOpenQuickDriveLinker();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-amber-50 text-xs font-bold text-amber-900 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <FolderCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>คิววางลิงก์ Drive ด่วน ({missingDriveCount})</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileToolsOpen(false);
+                      onOpenSheetTagImportModal?.();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-[#EEF5EE] text-xs font-bold text-[#1C4824] flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-[#3B6845] shrink-0" />
+                    <span>ซิงก์ Google Sheet</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileToolsOpen(false);
+                      onOpenGoogleDriveBatchModal?.();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 text-xs font-bold text-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <GoogleDriveIcon className="w-4 h-4 shrink-0" />
+                    <span>ดึงข้อมูลจาก Google Drive</span>
+                  </button>
+
+                  {stagingCount > 0 && onOpenFullscreenStudio && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileToolsOpen(false);
+                        onOpenFullscreenStudio();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-indigo-50 text-xs font-bold text-indigo-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <Maximize2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>สตูดิโอคัดแยกเต็มจอ ({stagingCount})</span>
+                    </button>
+                  )}
+
+                  <div className="pt-1 border-t border-slate-100 px-1">
+                    <CleanPrefixedTitlesButton compact />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
@@ -170,7 +298,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
           type="button"
           whileTap={{ scale: 0.985 }}
           onClick={() => onStatusFilterChange('ALL')}
-          className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
+          className={`text-left p-3 sm:p-3.5 rounded-xl border transition-all cursor-pointer ${
             statusFilter === 'ALL'
               ? 'bg-indigo-50/90 text-indigo-950 border-indigo-400 ring-2 ring-indigo-200/60'
               : 'bg-slate-50/70 hover:bg-slate-100/70 border-slate-200/80 text-slate-900'
@@ -178,27 +306,29 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
         >
           <div className="flex items-center justify-between gap-1.5">
             <span
-              className={`text-xs font-bold flex items-center gap-1.5 truncate ${
+              className={`text-xs font-bold flex items-center gap-1.5 min-w-0 ${
                 statusFilter === 'ALL' ? 'text-indigo-800' : 'text-slate-600'
               }`}
             >
               <Film className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">
+              <span className="truncate whitespace-nowrap">
                 {hasHierarchySelection ? activeScopeDescription.label : 'ทั้งหมด'}
               </span>
             </span>
             {hasHierarchySelection && (
-              <span className="text-[11px] font-mono text-slate-400 tabular-nums shrink-0">
+              <span className="hidden sm:inline text-[11px] font-mono text-slate-400 tabular-nums shrink-0">
                 /{totalVaultCount}
               </span>
             )}
           </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
+          <div className="mt-1.5 flex items-baseline justify-between gap-1">
             <AnimatedMetricNumber
               value={vaultMetrics.total}
               className="text-2xl font-extrabold tabular-nums"
             />
-            <span className="text-[11px] text-slate-500">คลิป</span>
+            <span className="hidden sm:inline text-[11px] text-slate-500 whitespace-nowrap">
+              คลิป
+            </span>
           </div>
         </motion.button>
 
@@ -211,7 +341,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               statusFilter === 'READY_FRESH' ? 'ALL' : 'READY_FRESH'
             )
           }
-          className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
+          className={`text-left p-3 sm:p-3.5 rounded-xl border transition-all cursor-pointer ${
             statusFilter === 'READY_FRESH'
               ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-300/60'
               : 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-200/80 text-slate-900'
@@ -219,7 +349,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
         >
           <div className="flex items-center justify-between gap-1.5">
             <span
-              className={`text-xs font-bold flex items-center gap-1.5 ${
+              className={`text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${
                 statusFilter === 'READY_FRESH' ? 'text-white' : 'text-emerald-800'
               }`}
             >
@@ -227,14 +357,14 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               <span>พร้อมใช้</span>
             </span>
             <span
-              className={`text-[11px] font-mono tabular-nums ${
+              className={`hidden sm:inline text-[11px] font-mono tabular-nums whitespace-nowrap ${
                 statusFilter === 'READY_FRESH' ? 'text-emerald-100' : 'text-emerald-700'
               }`}
             >
               พัก ≥{settings.greenReadyDays ?? 21}ว.
             </span>
           </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
+          <div className="mt-1.5 flex items-baseline justify-between gap-1">
             <AnimatedMetricNumber
               value={vaultMetrics.readyFresh}
               className={`text-2xl font-extrabold tabular-nums ${
@@ -242,11 +372,11 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               }`}
             />
             <span
-              className={`text-[11px] font-mono tabular-nums ${
+              className={`hidden sm:inline text-[11px] font-mono tabular-nums whitespace-nowrap ${
                 statusFilter === 'READY_FRESH' ? 'text-emerald-100' : 'text-emerald-700'
               }`}
             >
-              ใช้ได้รวม {vaultMetrics.usable}
+              รวม {vaultMetrics.usable}
             </span>
           </div>
         </motion.button>
@@ -260,7 +390,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               statusFilter === 'NEW_UNTOUCHED' ? 'ALL' : 'NEW_UNTOUCHED'
             )
           }
-          className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
+          className={`text-left p-3 sm:p-3.5 rounded-xl border transition-all cursor-pointer ${
             statusFilter === 'NEW_UNTOUCHED'
               ? 'bg-sky-600 text-white border-sky-600 ring-2 ring-sky-300/60'
               : 'bg-sky-50/50 hover:bg-sky-50 border-sky-200/80 text-slate-900'
@@ -268,7 +398,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
         >
           <div className="flex items-center justify-between gap-1.5">
             <span
-              className={`text-xs font-bold flex items-center gap-1.5 ${
+              className={`text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${
                 statusFilter === 'NEW_UNTOUCHED' ? 'text-white' : 'text-sky-800'
               }`}
             >
@@ -276,14 +406,14 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               <span>คลิปใหม่</span>
             </span>
             <span
-              className={`text-[11px] ${
+              className={`hidden sm:inline text-[11px] whitespace-nowrap ${
                 statusFilter === 'NEW_UNTOUCHED' ? 'text-sky-100' : 'text-sky-700'
               }`}
             >
               ยังไม่เคยใช้
             </span>
           </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
+          <div className="mt-1.5 flex items-baseline justify-between gap-1">
             <AnimatedMetricNumber
               value={vaultMetrics.newUntouched}
               className={`text-2xl font-extrabold tabular-nums ${
@@ -291,7 +421,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               }`}
             />
             <span
-              className={`text-[11px] ${
+              className={`hidden sm:inline text-[11px] whitespace-nowrap ${
                 statusFilter === 'NEW_UNTOUCHED' ? 'text-sky-100' : 'text-sky-700'
               }`}
             >
@@ -309,7 +439,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               statusFilter === 'RECENT_COOLDOWN' ? 'ALL' : 'RECENT_COOLDOWN'
             )
           }
-          className={`text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
+          className={`text-left p-3 sm:p-3.5 rounded-xl border transition-all cursor-pointer ${
             statusFilter === 'RECENT_COOLDOWN'
               ? 'bg-rose-600 text-white border-rose-600 ring-2 ring-rose-300/60'
               : 'bg-rose-50/50 hover:bg-rose-50 border-rose-200/80 text-slate-900'
@@ -317,7 +447,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
         >
           <div className="flex items-center justify-between gap-1.5">
             <span
-              className={`text-xs font-bold flex items-center gap-1.5 ${
+              className={`text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${
                 statusFilter === 'RECENT_COOLDOWN' ? 'text-white' : 'text-rose-800'
               }`}
             >
@@ -325,14 +455,14 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               <span>ติดคูลดาวน์</span>
             </span>
             <span
-              className={`text-[11px] font-mono tabular-nums ${
+              className={`hidden sm:inline text-[11px] font-mono tabular-nums whitespace-nowrap ${
                 statusFilter === 'RECENT_COOLDOWN' ? 'text-rose-100' : 'text-rose-700'
               }`}
             >
               พัก &lt;{settings.cooldownDays}ว.
             </span>
           </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
+          <div className="mt-1.5 flex items-baseline justify-between gap-1">
             <AnimatedMetricNumber
               value={vaultMetrics.inCooldown}
               className={`text-2xl font-extrabold tabular-nums ${
@@ -340,7 +470,7 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
               }`}
             />
             <span
-              className={`text-[11px] ${
+              className={`hidden sm:inline text-[11px] whitespace-nowrap ${
                 statusFilter === 'RECENT_COOLDOWN' ? 'text-rose-100' : 'text-rose-700'
               }`}
             >

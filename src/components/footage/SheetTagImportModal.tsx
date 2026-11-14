@@ -2,21 +2,11 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { FileSpreadsheet, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
-import { firestoreService } from '../../firebase/firestoreService';
-import {
-  isStagingTagId,
-  normalizeFootageTags,
-} from '../../services/seedData';
-import { Episode, EpisodeRankingSlot } from '../../types/episode.types';
-import { CategoryTag } from '../../types/tag.types';
-import { getReferenceTodayDate } from '../../utils/cooldownCalculator';
-import {
-  generateMasterEpisodeFileName,
-  generateNextId,
-} from '../../utils/fileNameGenerator';
+import { PublishSlot } from '../../types/episode.types';
 import { BaseModal } from '../ui/BaseModal';
 import { JunkTagCleanupModal } from '../tags/JunkTagCleanupModal';
 import { YouTubeDateSyncTabContent } from '../episodes/youtubeDateSync/YouTubeDateSyncModal';
+import { executeSheetUnifiedSync } from './sheetImport/executeSheetUnifiedSync';
 import { SheetCollapsiblePasteSection } from './sheetImport/SheetCollapsiblePasteSection';
 import { SheetEpisodeGroupsPreview } from './sheetImport/SheetEpisodeGroupsPreview';
 import { SheetFootageRowsTable } from './sheetImport/SheetFootageRowsTable';
@@ -25,9 +15,8 @@ import {
   UnifiedSyncMainTab,
 } from './sheetImport/SheetInspectionHeaderBar';
 import {
-  normalizeCompareKey,
   parseSheetClipboardData,
-  SAMPLE_4COL_SHEET_DATA,
+  SAMPLE_10COL_SHEET_DATA,
 } from './sheetImport/sheetImportParser';
 import {
   SheetPasteAnalyzingView,
@@ -43,9 +32,6 @@ import {
   TableRowDensity,
 } from './sheetImport/sheetImport.types';
 
-const yieldToBrowser = () =>
-  new Promise<void>((resolve) => setTimeout(resolve, 18));
-
 export const SheetTagImportModal: React.FC = () => {
   const {
     isSheetTagImportModalOpen,
@@ -53,6 +39,7 @@ export const SheetTagImportModal: React.FC = () => {
     isYouTubeDateSyncModalOpen,
     setIsYouTubeDateSyncModalOpen,
     computedFootage,
+    computedFootageMap,
     tags,
     tagMap,
     episodes,
@@ -60,6 +47,7 @@ export const SheetTagImportModal: React.FC = () => {
     batchAddDirectFootage,
     batchSyncFootageTagsByMap,
     batchUpsertEpisodes,
+    batchSyncFootageCreatedAtByMap,
     setActiveTab,
   } = useCMS();
 
@@ -86,6 +74,12 @@ export const SheetTagImportModal: React.FC = () => {
   const [epSearchQuery, setEpSearchQuery] = useState('');
   const [rankingOrder, setRankingOrder] =
     useState<RankingOrderDirection>('RANK_5_TO_1');
+
+  // Inline overrides for Episode Group Publish Date (Col I) and Publish Slot (Col J)
+  const [customPublishDateByGroupKey, setCustomPublishDateByGroupKey] =
+    useState<Record<string, string>>({});
+  const [customPublishSlotByGroupKey, setCustomPublishSlotByGroupKey] =
+    useState<Record<string, PublishSlot>>({});
 
   // Selection States (Exclusions)
   const [excludedRowIndices, setExcludedRowIndices] = useState<Set<number>>(
@@ -122,7 +116,6 @@ export const SheetTagImportModal: React.FC = () => {
     };
   }, []);
 
-  // Automatically select Step 1 or Step 2 depending on which open state triggered the modal
   useEffect(() => {
     if (isSheetTagImportModalOpen) {
       setActiveMainSyncTab('SHEET_SYNC');
@@ -135,14 +128,12 @@ export const SheetTagImportModal: React.FC = () => {
     }
   }, [isYouTubeDateSyncModalOpen]);
 
-  // Auto-switch to FOOTAGE_ROWS tab if EP sync is turned off while on EPISODE_GROUPS tab
   useEffect(() => {
     if (!syncEpisodesFromColD && activePreviewTab === 'EPISODE_GROUPS') {
       setActivePreviewTab('FOOTAGE_ROWS');
     }
   }, [syncEpisodesFromColD, activePreviewTab]);
 
-  // Handle paste changes & trigger 0.8s Step Morphing transition into the table
   const handleChangePastedText = (nextText: string) => {
     const wasEmpty = !pastedText.trim();
     const isMajorPaste =
@@ -152,6 +143,8 @@ export const SheetTagImportModal: React.FC = () => {
     setPastedText(nextText);
     setExcludedRowIndices(new Set());
     setExcludedEpisodeKeys(new Set());
+    setCustomPublishDateByGroupKey({});
+    setCustomPublishSlotByGroupKey({});
 
     if (!nextText.trim()) {
       setIsInputExpanded(true);
@@ -164,11 +157,11 @@ export const SheetTagImportModal: React.FC = () => {
       }
       analyzeTimerRef.current = window.setTimeout(() => {
         setIsAnalyzingPaste(false);
-      }, 780);
+      }, 720);
     }
   };
 
-  // Parse clipboard rows + Episode groups with O(1) lookup maps
+  // Parse 10-Column Master Sheet (plus Legacy 4-Col / 2-Col) with O(1) lookup maps
   const { parsedRows, episodeGroups, stats } = useMemo(
     () =>
       parseSheetClipboardData({
@@ -179,6 +172,8 @@ export const SheetTagImportModal: React.FC = () => {
         episodes,
         rankingOrder,
         includeSeriesTagOnFootage,
+        customPublishDateByGroupKey,
+        customPublishSlotByGroupKey,
       }),
     [
       pastedText,
@@ -188,10 +183,11 @@ export const SheetTagImportModal: React.FC = () => {
       episodes,
       rankingOrder,
       includeSeriesTagOnFootage,
+      customPublishDateByGroupKey,
+      customPublishSlotByGroupKey,
     ]
   );
 
-  // Row & Episode Selection Handlers
   const handleToggleRowSelection = (rowIndex: number) => {
     setExcludedRowIndices((prev) => {
       const next = new Set(prev);
@@ -250,7 +246,6 @@ export const SheetTagImportModal: React.FC = () => {
     });
   };
 
-  // Active (non-excluded) rows and episodes
   const activeRows = useMemo(
     () => parsedRows.filter((r) => !excludedRowIndices.has(r.rowIndex)),
     [parsedRows, excludedRowIndices]
@@ -269,435 +264,35 @@ export const SheetTagImportModal: React.FC = () => {
     [activeRows, autoCreateMissingFootage]
   );
 
-  // Execute Chunked Batch Sync (Locks onSnapshot + Awaits All 400-Item Cloud Chunks)
   const handleExecuteImport = async () => {
     if (actionableClipsCount === 0) return;
 
     setIsProcessing(true);
 
     try {
-      await firestoreService.withBatchWriteLock(async () => {
-        const todayIso = getReferenceTodayDate();
-
-        const totalEstimatedWork = Math.max(
-          1,
-          activeRows.length +
-            (syncEpisodesFromColD ? activeEpisodeGroups.length : 0)
-        );
-        let completedWork = 0;
-
-        const updateProgress = (
-          phaseIndex: 1 | 2 | 3 | 4,
-          phaseLabel: string,
-          absoluteCompleted?: number
-        ) => {
-          if (absoluteCompleted !== undefined) {
-            completedWork = Math.min(totalEstimatedWork, absoluteCompleted);
-          }
-          const percent = Math.min(
-            99,
-            Math.round((completedWork / totalEstimatedWork) * 100)
-          );
-          setSyncProgress({
-            phaseIndex,
-            phaseLabel,
-            completedItems: completedWork,
-            totalItems: totalEstimatedWork,
-            percent,
-          });
-        };
-
-        // PHASE 1: Ensure all required Tags exist
-        updateProgress(1, 'กำลังตรวจสอบและบันทึกแท็กหมวดหมู่ใหม่ขึ้น Cloud...', 0);
-        await yieldToBrowser();
-
-        const tagIdByLowerName = new Map<string, string>();
-        tags.forEach((t) => {
-          if (!isStagingTagId(t.id)) {
-            tagIdByLowerName.set(t.name.toLowerCase(), t.id);
-          }
-        });
-
-        const newTagsToPersist: CategoryTag[] = [];
-        const accumulatedTagIds = tags.map((t) => t.id);
-
-        const ensureTagExists = (
-          rawTagName: string,
-          isSeriesTag = false
-        ): string => {
-          const cleaned = rawTagName.trim();
-          const lower = cleaned.toLowerCase();
-          if (tagIdByLowerName.has(lower)) {
-            return tagIdByLowerName.get(lower)!;
-          }
-
-          const nextId = generateNextId('TAG', accumulatedTagIds);
-          accumulatedTagIds.push(nextId);
-
-          const newTag: CategoryTag = {
-            id: nextId,
-            name: cleaned,
-            groupType: 'THEME',
-            groupId: 'GRP-THEME',
-            tier: 1,
-            parentId: null,
-            color: isSeriesTag ? 'emerald' : 'amber',
-            description: isSeriesTag
-              ? 'สร้างอัตโนมัติจากชื่อรายการจัดอันดับใน Google Sheets'
-              : 'นำเข้าอัตโนมัติจาก Google Sheets',
-            createdAt: todayIso,
-          };
-
-          newTagsToPersist.push(newTag);
-          tagIdByLowerName.set(lower, nextId);
-          return nextId;
-        };
-
-        activeRows.forEach((row) => {
-          if (!row.matchedFootage && !autoCreateMissingFootage) return;
-          row.tagNames.forEach((tName) => {
-            ensureTagExists(tName, false);
-          });
-        });
-
-        if (syncEpisodesFromColD && includeSeriesTagOnFootage && activeEpisodeGroups.length > 0) {
-          activeEpisodeGroups.forEach((group) => {
-            if (group.primaryTagName) {
-              ensureTagExists(group.primaryTagName, true);
-            }
-          });
-        }
-
-        if (newTagsToPersist.length > 0) {
-          await batchAddTags(newTagsToPersist, (chunkProg) => {
-            updateProgress(
-              1,
-              `กำลังบันทึกหมวดหมู่ใหม่ขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} แท็ก)...`
-            );
-          });
-        }
-
-        // PHASE 2: Auto-create missing Footages and await all Cloud chunks
-        updateProgress(2, 'กำลังสร้างรายการฟุตเทจใหม่เข้าคลังและบันทึกขึ้น Cloud...');
-        await yieldToBrowser();
-
-        const footageIdByNormTitle = new Map<string, string>();
-        const existingTagsByFootageId = new Map<string, string[]>();
-
-        activeRows.forEach((row) => {
-          if (row.matchedFootage) {
-            const normKey = normalizeCompareKey(row.title);
-            footageIdByNormTitle.set(normKey, row.matchedFootage.id);
-            existingTagsByFootageId.set(
-              row.matchedFootage.id,
-              row.matchedFootage.tags
-            );
-          }
-        });
-
-        let createdClipsCount = 0;
-
-        if (autoCreateMissingFootage) {
-          const missingByNormTitle = new Map<
-            string,
-            {
-              title: string;
-              tagIds: Set<string>;
-              episodeNote: string;
-            }
-          >();
-
-          activeRows.forEach((row) => {
-            if (row.matchedFootage) return;
-            const normKey = normalizeCompareKey(row.title);
-            const resolvedTagIds = row.tagNames
-              .map((tName) => tagIdByLowerName.get(tName.toLowerCase()))
-              .filter((id): id is string => Boolean(id));
-
-            const existingEntry = missingByNormTitle.get(normKey);
-            if (existingEntry) {
-              resolvedTagIds.forEach((id) => existingEntry.tagIds.add(id));
-            } else {
-              missingByNormTitle.set(normKey, {
-                title: row.title,
-                tagIds: new Set(resolvedTagIds),
-                episodeNote: row.episodeTitle
-                  ? `ซิงค์จากชีท (${row.episodeTitle})`
-                  : 'ซิงค์จากชีท',
-              });
-            }
-          });
-
-          if (missingByNormTitle.size > 0) {
-            const missingEntries = Array.from(missingByNormTitle.entries());
-            const createdAll = await batchAddDirectFootage(
-              missingEntries.map(([, val]) => ({
-                title: val.title,
-                tags: Array.from(val.tagIds),
-                durationSec: 15,
-                driveFileUrl: '',
-                mascotNotes: val.episodeNote,
-              })),
-              'FT',
-              (chunkProg) => {
-                updateProgress(
-                  2,
-                  `กำลังบันทึกฟุตเทจใหม่ขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} คลิป)...`,
-                  chunkProg.completedOps
-                );
-              }
-            );
-
-            createdAll.forEach((ft, idx) => {
-              const entry = missingEntries[idx];
-              if (entry) {
-                footageIdByNormTitle.set(entry[0], ft.id);
-                existingTagsByFootageId.set(ft.id, ft.tags);
-              }
-            });
-
-            createdClipsCount = createdAll.length;
-          }
-        }
-
-        // PHASE 3: Merge tags for all matched footages and await all Cloud chunks
-        updateProgress(3, 'กำลังผสานแท็กและย้ายฟุตเทจออกจากพื้นที่พักขึ้น Cloud...');
-        await yieldToBrowser();
-
-        const mergedTagSetByFootageId = new Map<string, Set<string>>();
-        const movedFromStagingFootageIds = new Set<string>();
-
-        activeRows.forEach((row) => {
-          if (!row.matchedFootage) return;
-          const ftId = row.matchedFootage.id;
-
-          if (!mergedTagSetByFootageId.has(ftId)) {
-            const baseSet = new Set<string>();
-            (existingTagsByFootageId.get(ftId) || []).forEach((tid) => {
-              if (!isStagingTagId(tid)) {
-                baseSet.add(tid);
-              }
-            });
-            mergedTagSetByFootageId.set(ftId, baseSet);
-          }
-
-          const targetSet = mergedTagSetByFootageId.get(ftId)!;
-          row.tagNames.forEach((tName) => {
-            const tagId = tagIdByLowerName.get(tName.toLowerCase());
-            if (tagId) {
-              targetSet.add(tagId);
-            }
-          });
-
-          if (row.isInStaging && targetSet.size > 0) {
-            movedFromStagingFootageIds.add(ftId);
-          }
-        });
-
-        const footageIdEntries = Array.from(mergedTagSetByFootageId.entries());
-        const updatedClipsCount = footageIdEntries.length;
-
-        if (footageIdEntries.length > 0) {
-          const fullPayload: Record<string, string[]> = {};
-          footageIdEntries.forEach(([ftId, tagSet]) => {
-            fullPayload[ftId] = normalizeFootageTags(Array.from(tagSet));
-          });
-
-          await batchSyncFootageTagsByMap(fullPayload, 'REPLACE', (chunkProg) => {
-            updateProgress(
-              3,
-              `กำลังอัปเดตแท็กฟุตเทจขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} คลิป)...`,
-              createdClipsCount + chunkProg.completedOps
-            );
-          });
-        }
-
-        // PHASE 4: Build and Upsert 5-Rank Episodes and await all Cloud chunks
-        let createdEpisodesCount = 0;
-        let updatedEpisodesCount = 0;
-        const syncedEpisodeTitles: string[] = [];
-
-        if (syncEpisodesFromColD && activeEpisodeGroups.length > 0) {
-          updateProgress(4, 'กำลังจัดอันดับและบันทึกคลังคลิปหลัก (EP) ขึ้น Cloud...');
-          await yieldToBrowser();
-
-          const accumulatedEpIds = episodes.map((e) => e.id);
-          const episodesToUpsert: Episode[] = [];
-
-          const rankSequence: Array<5 | 4 | 3 | 2 | 1> =
-            rankingOrder === 'RANK_5_TO_1' ? [5, 4, 3, 2, 1] : [1, 2, 3, 4, 5];
-
-          activeEpisodeGroups.forEach((group) => {
-            const groupActiveRows = group.rows.filter(
-              (r) => !excludedRowIndices.has(r.rowIndex)
-            );
-            if (groupActiveRows.length === 0) return;
-
-            const existingEp = group.existingEpisode;
-            const epId = existingEp
-              ? existingEp.id
-              : generateNextId('EP', accumulatedEpIds);
-
-            if (!existingEp) {
-              accumulatedEpIds.push(epId);
-              createdEpisodesCount += 1;
-            } else {
-              updatedEpisodesCount += 1;
-            }
-
-            // Determine primary tag: use first valid tag from group's row tags, or existing episode tag, or fallback
-            let resolvedTagIdForGroup: string | null = null;
-            for (const r of groupActiveRows) {
-              for (const tName of r.tagNames) {
-                const foundId = tagIdByLowerName.get(tName.toLowerCase());
-                if (foundId) {
-                  resolvedTagIdForGroup = foundId;
-                  break;
-                }
-              }
-              if (resolvedTagIdForGroup) break;
-            }
-
-            const primaryTagId =
-              resolvedTagIdForGroup ||
-              (existingEp?.seriesId ? existingEp.seriesId : null) ||
-              tagIdByLowerName.get(group.primaryTagName.toLowerCase()) ||
-              tags.find((t) => !isStagingTagId(t.id))?.id ||
-              'TAG-0001';
-
-            const rankings: EpisodeRankingSlot[] = (
-              [5, 4, 3, 2, 1] as const
-            ).map((rankSlot) => {
-              const seqIndex = rankSequence.indexOf(rankSlot);
-              const rowForSlot =
-                seqIndex >= 0 ? groupActiveRows[seqIndex] || null : null;
-
-              let resolvedFootageId: string | null = null;
-              if (rowForSlot) {
-                if (rowForSlot.matchedFootage) {
-                  resolvedFootageId = rowForSlot.matchedFootage.id;
-                } else {
-                  const normKey = normalizeCompareKey(rowForSlot.title);
-                  resolvedFootageId = footageIdByNormTitle.get(normKey) || null;
-                }
-              }
-
-              if (!resolvedFootageId && existingEp) {
-                const prevSlot = existingEp.rankings.find(
-                  (r) => r.rank === rankSlot
-                );
-                if (prevSlot?.footageId) {
-                  resolvedFootageId = prevSlot.footageId;
-                }
-              }
-
-              const existingMascotScript =
-                existingEp?.rankings.find((r) => r.rank === rankSlot)
-                  ?.mascotScript || '';
-
-              return {
-                rank: rankSlot,
-                footageId: resolvedFootageId,
-                mascotScript:
-                  existingMascotScript ||
-                  (rowForSlot
-                    ? `อันดับที่ ${rankSlot} — ${rowForSlot.title}`
-                    : `อันดับที่ ${rankSlot}`),
-                snapshotNote: rowForSlot?.isInStaging
-                  ? 'ซิงค์จากฟุตเทจไร้หมวดหมู่ผ่าน Google Sheets'
-                  : 'ซิงค์จัดอันดับจาก Google Sheets',
-              };
-            });
-
-            const publishDate = existingEp?.publishDate || todayIso;
-            const publishSlot = existingEp?.publishSlot || 'EVENING_1800';
-            const youtubeUrl =
-              group.youtubeUrl || existingEp?.masterVideoInfo?.youtubeUrl || '';
-
-            const autoMasterFileName = generateMasterEpisodeFileName(
-              epId,
-              publishDate,
-              publishSlot,
-              group.episodeTitle
-            );
-
-            const epPayload: Episode = {
-              id: epId,
-              title: group.episodeTitle,
-              categoryEpisodeNo: group.episodeNo,
-              categoryEpisodeScope: 'MAIN_CATEGORY',
-              seriesId: primaryTagId,
-              seriesTitle: group.seriesBaseName || group.episodeTitle,
-              categoryGroupId: existingEp?.categoryGroupId || 'GRP-THEME',
-              mainCategoryTagId: primaryTagId,
-              productionTarget:
-                existingEp?.productionTarget || 'MAIN_CATEGORY_VARIETY',
-              targetSubcategoryId: existingEp?.targetSubcategoryId || null,
-              publishDate,
-              publishSlot,
-              workflowStage: '4_PUBLISHED',
-              introMascotScript:
-                existingEp?.introMascotScript ||
-                `สวัสดีครับ วันนี้พบกับ ${group.episodeTitle} ไปดูกันเลย!`,
-              outroMascotScript:
-                existingEp?.outroMascotScript ||
-                `ชอบอันดับไหนใน ${group.episodeTitle} คอมเมนต์บอกกันได้เลย!`,
-              rankings,
-              masterVideoInfo: {
-                masterFileName:
-                  existingEp?.masterVideoInfo?.masterFileName ||
-                  autoMasterFileName,
-                masterDriveUrl:
-                  existingEp?.masterVideoInfo?.masterDriveUrl ||
-                  `https://drive.google.com/file/d/MASTER-${epId}/view`,
-                youtubeUrl,
-                facebookUrl: existingEp?.masterVideoInfo?.facebookUrl || '',
-                viewsCount: existingEp?.masterVideoInfo?.viewsCount || 0,
-                performanceNote:
-                  existingEp?.masterVideoInfo?.performanceNote ||
-                  `ซิงค์จาก Google Sheets (${groupActiveRows.length} ฟุตเทจ)`,
-              },
-              createdAt: existingEp?.createdAt || todayIso,
-            };
-
-            episodesToUpsert.push(epPayload);
-            syncedEpisodeTitles.push(group.episodeTitle);
-          });
-
-          if (episodesToUpsert.length > 0) {
-            await batchUpsertEpisodes(episodesToUpsert, (chunkProg) => {
-              updateProgress(
-                4,
-                `กำลังบันทึกคลังคลิปหลักขึ้น Cloud ก้อนที่ ${chunkProg.completedChunks}/${chunkProg.totalChunks} (${chunkProg.completedOps.toLocaleString()}/${chunkProg.totalOps.toLocaleString()} ตอน)...`,
-                activeRows.length + chunkProg.completedOps
-              );
-            });
-          }
-        }
-
-        setSyncProgress({
-          phaseIndex: 4,
-          phaseLabel: 'ซิงค์ฐานข้อมูลขึ้น Cloud เสร็จสมบูรณ์ 100%!',
-          completedItems: totalEstimatedWork,
-          totalItems: totalEstimatedWork,
-          percent: 100,
-        });
-
-        setSuccessReport({
-          updatedClipsCount,
-          createdClipsCount,
-          movedFromStagingCount: movedFromStagingFootageIds.size,
-          skippedRowsCount: excludedRowIndices.size,
-          createdTagsCount: newTagsToPersist.length,
-          createdTagNames: newTagsToPersist.map((t) => t.name),
-          createdEpisodesCount,
-          updatedEpisodesCount,
-          skippedEpisodesCount: excludedEpisodeKeys.size,
-          syncedEpisodeTitles,
-        });
+      const report = await executeSheetUnifiedSync({
+        activeRows,
+        activeEpisodeGroups,
+        excludedRowIndices,
+        excludedEpisodeKeys,
+        syncEpisodesFromColD,
+        autoCreateMissingFootage,
+        includeSeriesTagOnFootage,
+        rankingOrder,
+        tags,
+        episodes,
+        computedFootageMap,
+        batchAddTags,
+        batchAddDirectFootage,
+        batchSyncFootageTagsByMap,
+        batchUpsertEpisodes,
+        batchSyncFootageCreatedAtByMap,
+        onProgressUpdate: setSyncProgress,
       });
+
+      setSuccessReport(report);
     } catch (err) {
-      console.error('Sheet tag & episode sync error:', err);
+      console.error('Unified 10-Column Sheet sync error:', err);
     } finally {
       setIsProcessing(false);
     }
@@ -718,6 +313,8 @@ export const SheetTagImportModal: React.FC = () => {
     setEpSearchQuery('');
     setExcludedRowIndices(new Set());
     setExcludedEpisodeKeys(new Set());
+    setCustomPublishDateByGroupKey({});
+    setCustomPublishSlotByGroupKey({});
   };
 
   const handleGoToMasterEpisodes = () => {
@@ -728,7 +325,6 @@ export const SheetTagImportModal: React.FC = () => {
   const isModalOpen = isSheetTagImportModalOpen || isYouTubeDateSyncModalOpen;
   const hasData = parsedRows.length > 0;
 
-  // Minimalist Single-Row Header Right Controls (2-Step Workflow Switcher + Sub-Switcher + Icon-Only Buttons)
   const modalHeaderRight = !isProcessing && (
     <SheetHeaderRightControls
       activeMainSyncTab={activeMainSyncTab}
@@ -743,7 +339,7 @@ export const SheetTagImportModal: React.FC = () => {
       isInputExpanded={isInputExpanded}
       onToggleInputExpanded={() => setIsInputExpanded((prev) => !prev)}
       onClearPastedText={() => handleChangePastedText('')}
-      onLoadSampleData={() => handleChangePastedText(SAMPLE_4COL_SHEET_DATA)}
+      onLoadSampleData={() => handleChangePastedText(SAMPLE_10COL_SHEET_DATA)}
       rowDensity={rowDensity}
       onToggleRowDensity={() =>
         setRowDensity((prev) => (prev === 'COMPACT' ? 'NORMAL' : 'COMPACT'))
@@ -789,7 +385,7 @@ export const SheetTagImportModal: React.FC = () => {
                 </>
               ) : (
                 <span className="text-xs text-[#7A6E60] ml-1">
-                  (เฉพาะแท็กฟุตเทจ A–B · ปิดสร้าง EP)
+                  (เฉพาะแท็กฟุตเทจ · ปิดสร้าง EP)
                 </span>
               )}
             </span>
@@ -803,10 +399,9 @@ export const SheetTagImportModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActivePreviewTab('EPISODE_GROUPS')}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#FEF8ED] hover:bg-[#FAEED6] text-[#734B17] border border-[#EDD7AF] transition-colors cursor-pointer whitespace-nowrap"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#FEF6E8] hover:bg-[#FAEBD0] text-[#734B17] border border-[#EAD5AE] transition-colors cursor-pointer whitespace-nowrap"
               >
-                ดูพรีวิวจัดอันดับ {activeEpisodeGroups.length.toLocaleString()} EP
-                ก่อนบันทึก
+                ดูพรีวิวจัดอันดับ & วันที่ {activeEpisodeGroups.length.toLocaleString()} EP
               </button>
             )}
 
@@ -824,8 +419,8 @@ export const SheetTagImportModal: React.FC = () => {
             <span>
               {actionableClipsCount > 0
                 ? syncEpisodesFromColD && activeEpisodeGroups.length > 0
-                  ? `ยืนยันซิงค์ ${actionableClipsCount.toLocaleString()} แถว & จัดอันดับ ${activeEpisodeGroups.length.toLocaleString()} EP ➔`
-                  : `ยืนยันจับคู่แท็ก (${actionableClipsCount.toLocaleString()} รายการ) ➔`
+                  ? `ยืนยันซิงค์ ${actionableClipsCount.toLocaleString()} แถว + แท็ก 3 ชั้น + ${activeEpisodeGroups.length.toLocaleString()} EP ➔`
+                  : `ยืนยันจับคู่แท็ก 3 ชั้น (${actionableClipsCount.toLocaleString()} รายการ) ➔`
                 : 'กรุณาวางข้อมูลหรือติ๊กเลือกรายการเพื่อซิงค์'}
             </span>
           </button>
@@ -852,33 +447,27 @@ export const SheetTagImportModal: React.FC = () => {
         }
         title={
           activeMainSyncTab === 'YOUTUBE_DATE_SYNC'
-            ? 'ซิงก์วันที่เผยแพร่จริง (จาก YouTube / ตารางวันที่)'
+            ? 'อัปเดตเฉพาะวันที่เผยแพร่จริง (ตาราง 2 คอลัมน์)'
             : syncEpisodesFromColD
-            ? 'ซิงก์แท็ก & จัดอันดับ EP (จาก Google Sheets 4 คอลัมน์)'
-            : 'ซิงก์แท็กฟุตเทจจาก Sheet (คอลัมน์ A–B)'
+            ? 'สตูดิโอซิงก์ตารางหลัก 10 คอลัมน์ (ฟุตเทจ + แท็ก 3 ชั้น + EP + วันที่)'
+            : 'ซิงก์แท็กฟุตเทจจาก Sheet (เฉพาะแท็กหมวดหมู่)'
         }
         badge={
           activeMainSyncTab === 'YOUTUBE_DATE_SYNC' ? (
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#254B2D] border border-[#BAD8BF] font-bold">
-              ขั้นที่ 2/2 · YouTube Date
-            </span>
-          ) : syncEpisodesFromColD ? (
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#254B2D] border border-[#BAD8BF] font-bold">
-              ขั้นที่ 1/2 · 4-Col Sheet
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#FEF6E8] text-[#8A4D1F] border border-[#EAD5AE] font-bold">
+              2-Col Date Patch
             </span>
           ) : (
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#F0F7FF] text-[#1E40AF] border border-[#BFDBFE] font-bold">
-              ขั้นที่ 1/2 · 2-Col Tag
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] font-bold">
+              10-Col Unified (A–J)
             </span>
           )
         }
         subtitle={
           activeMainSyncTab === 'YOUTUBE_DATE_SYNC'
-            ? 'วางตาราง วันที่ลงคลิป + ชื่อคลิปหลัก EP เพื่ออัปเดตวันเผยแพร่จริงและคำนวณวันพักฟุต (Cooldown) ใหม่'
+            ? 'วางตาราง วันที่ลงคลิป + ชื่อคลิปหลัก EP เพื่ออัปเดตเฉพาะวันเผยแพร่จริงและคำนวณวันพักฟุต (Cooldown) ใหม่'
             : !hasData
-            ? syncEpisodesFromColD
-              ? 'วางข้อมูล ชื่อฟุตเทจ | #แท็ก | ลิงก์ | ชื่อ EP จาก Google Sheets เพื่อผูกแท็กให้คลิปย่อยและสร้าง EP'
-              : 'ก๊อปปี้คอลัมน์ A (ชื่อคลิป) และ B (#แท็ก) จาก Google Sheets มาวางเพื่อจับคู่หมวดหมู่ฟุตเทจ'
+            ? 'วางตาราง 10 คอลัมน์ (ชื่อฟุต | ชื่อคลิป | ชื่ออันดับ | คำสร้อย | แท็ก Tier 1–3 | ลิงค์ | วันที่ | เวลา) เพื่อซิงก์ครบจบในครั้งเดียว'
             : undefined
         }
         headerRight={modalHeaderRight}
@@ -915,7 +504,6 @@ export const SheetTagImportModal: React.FC = () => {
           />
         ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {/* 1. Paste Input Canvas (Full-screen when empty, or Slide-Down Drawer when editing existing paste) */}
             <AnimatePresence initial={false}>
               {(!hasData || isInputExpanded) && (
                 <SheetCollapsiblePasteSection
@@ -929,7 +517,6 @@ export const SheetTagImportModal: React.FC = () => {
               )}
             </AnimatePresence>
 
-            {/* 2. Full-Bleed Table / Episode Accordion Flushed Directly Against the Single-Row Modal Header */}
             {hasData && (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <AnimatePresence mode="wait">
@@ -949,6 +536,18 @@ export const SheetTagImportModal: React.FC = () => {
                       onBatchSetEpisodeSelection={handleBatchSetEpisodeSelection}
                       excludedRowIndices={excludedRowIndices}
                       rowDensity={rowDensity}
+                      onChangeCustomGroupPublishDate={(groupKey, dateIso) =>
+                        setCustomPublishDateByGroupKey((prev) => ({
+                          ...prev,
+                          [groupKey]: dateIso,
+                        }))
+                      }
+                      onChangeCustomGroupPublishSlot={(groupKey, slot) =>
+                        setCustomPublishSlotByGroupKey((prev) => ({
+                          ...prev,
+                          [groupKey]: slot,
+                        }))
+                      }
                     />
                   ) : (
                     <SheetFootageRowsTable

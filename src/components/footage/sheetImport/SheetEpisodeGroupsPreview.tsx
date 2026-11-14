@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle,
+  Calendar,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -11,12 +12,17 @@ import {
   Film,
   Inbox,
   ListOrdered,
+  MessageSquareQuote,
+  Moon,
   Plus,
   RefreshCw,
   Search,
+  Sun,
   Tag,
+  Trophy,
   X,
 } from 'lucide-react';
+import { PublishSlot } from '../../../types/episode.types';
 import {
   EpisodeGroupFilterMode,
   ParsedEpisodeGroup,
@@ -38,6 +44,11 @@ interface SheetEpisodeGroupsPreviewProps {
   onBatchSetEpisodeSelection: (groupKeys: string[], include: boolean) => void;
   excludedRowIndices: Set<number>;
   rowDensity: TableRowDensity;
+  onChangeCustomGroupPublishDate?: (groupKey: string, dateIso: string) => void;
+  onChangeCustomGroupPublishSlot?: (
+    groupKey: string,
+    slot: PublishSlot
+  ) => void;
 }
 
 export const SheetEpisodeGroupsPreview: React.FC<
@@ -56,12 +67,13 @@ export const SheetEpisodeGroupsPreview: React.FC<
   onBatchSetEpisodeSelection,
   excludedRowIndices,
   rowDensity,
+  onChangeCustomGroupPublishDate,
+  onChangeCustomGroupPublishSlot,
 }) => {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
 
-  // Helper to check if an EP group has an anomaly/issue
   const hasGroupIssue = (group: ParsedEpisodeGroup): boolean => {
     const activeRowsCount = group.rows.filter(
       (r) => !excludedRowIndices.has(r.rowIndex)
@@ -72,7 +84,6 @@ export const SheetEpisodeGroupsPreview: React.FC<
     return false;
   };
 
-  // Counts for filter tabs
   const filterCounts = useMemo(() => {
     let issues = 0;
     let complete = 0;
@@ -95,7 +106,6 @@ export const SheetEpisodeGroupsPreview: React.FC<
     return { issues, complete, newEp, updateEp };
   }, [episodeGroups, autoCreateMissingFootage, excludedRowIndices]);
 
-  // Filtered EP groups
   const filteredGroups = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
@@ -117,6 +127,8 @@ export const SheetEpisodeGroupsPreview: React.FC<
       const matchClipInside = g.rows.some(
         (r) =>
           r.title.toLowerCase().includes(q) ||
+          r.rankTitle.toLowerCase().includes(q) ||
+          r.punchlineNote.toLowerCase().includes(q) ||
           r.matchedFootage?.id.toLowerCase().includes(q)
       );
 
@@ -194,10 +206,10 @@ export const SheetEpisodeGroupsPreview: React.FC<
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center bg-white space-y-2">
         <Film className="w-8 h-8 text-[#A39485] mx-auto" />
         <p className="text-sm font-bold text-[#3D332A]">
-          ไม่พบข้อมูลคอลัมน์ D (ชื่อคลิปหลังจัดอันดับ)
+          ไม่พบข้อมูลคอลัมน์ B (ชื่อคลิปหลัก EP)
         </p>
         <p className="text-xs text-[#7D6E61] max-w-md mx-auto">
-          หากในชีทของคุณมีคอลัมน์ C (ลิงก์) และคอลัมน์ D (ชื่อคลิปหลัก เช่น พี่เสกสุดฮา EP.1) ให้ก๊อปปี้มาทั้ง 4 คอลัมน์ (A–D) เพื่อให้ระบบจัดอันดับเข้าคลังคลิปหลักให้อัตโนมัติ
+          ก๊อปปี้ตาราง 10 คอลัมน์ (A–J) ที่มีคอลัมน์ B (ชื่อคลิป เช่น 5 อันดับพี่เสกสุดฮา EP.1) เพื่อให้ระบบจัดกลุ่ม 5 อันดับเข้าคลังคลิปหลักให้อัตโนมัติ
         </p>
       </div>
     );
@@ -269,9 +281,9 @@ export const SheetEpisodeGroupsPreview: React.FC<
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className="flex-1 min-h-0 flex flex-col bg-white overflow-hidden"
     >
-      {/* Unified Single-Bar Filter & Ranking Toolbar (Flushed directly under Modal Header) */}
+      {/* Unified Single-Bar Filter & Ranking Toolbar */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 px-4 sm:px-5 py-2 bg-[#FAF8F5] border-b border-[#E8DFD3] shrink-0">
-        {/* Left: Anomaly Filter Tabs with Sliding Pill Indicator */}
+        {/* Left: Anomaly Filter Tabs */}
         <div className="flex flex-wrap items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl text-xs">
           {epFilterButtons
             .filter((btn) => btn.show !== false)
@@ -315,7 +327,6 @@ export const SheetEpisodeGroupsPreview: React.FC<
 
         {/* Right: Ranking Order + Search + Expand Page + Select All */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Ranking Direction Switcher with Sliding Pill Indicator */}
           <div className="flex items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl text-xs">
             <ListOrdered className="w-3.5 h-3.5 text-[#3B6845] ml-1.5" />
             <button
@@ -364,7 +375,7 @@ export const SheetEpisodeGroupsPreview: React.FC<
               type="text"
               value={searchQuery}
               onChange={(e) => onChangeSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อ EP หรือชื่อฟุตเทจ..."
+              placeholder="ค้นหาชื่อ EP, ชื่ออันดับ, คำสร้อย..."
               className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#8FA892]"
             />
             {searchQuery && (
@@ -408,7 +419,7 @@ export const SheetEpisodeGroupsPreview: React.FC<
         </div>
       </div>
 
-      {/* Full-Bleed Accordion Episode List with Framer Motion Filter/Page Transition */}
+      {/* Full-Bleed Accordion Episode List */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <AnimatePresence mode="wait">
           <motion.div
@@ -445,9 +456,9 @@ export const SheetEpisodeGroupsPreview: React.FC<
                         : 'bg-white'
                     }`}
                   >
-                    {/* 1-Line Compact Accordion Header */}
+                    {/* 1-Line Compact Accordion Header with Inline Col I/J Date & Slot Controls */}
                     <div
-                      className={`${rowPadClass} flex items-center justify-between gap-3 hover:bg-[#FAF7F2] transition-colors`}
+                      className={`${rowPadClass} flex flex-wrap items-center justify-between gap-2.5 hover:bg-[#FAF7F2] transition-colors`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <input
@@ -460,7 +471,7 @@ export const SheetEpisodeGroupsPreview: React.FC<
                           title="เลือกซิงค์หรือข้าม EP นี้"
                         />
 
-                        <span className="w-9 text-right font-mono text-xs text-[#998A7C] tabular-nums shrink-0">
+                        <span className="w-8 text-right font-mono text-xs text-[#998A7C] tabular-nums shrink-0">
                           #{globalIndex}
                         </span>
 
@@ -486,29 +497,78 @@ export const SheetEpisodeGroupsPreview: React.FC<
                             </span>
                           )}
 
-                          <span className="hidden md:inline-flex items-center gap-1 text-xs text-[#6E5F52] shrink-0">
+                          <span className="hidden lg:inline-flex items-center gap-1 text-xs text-[#6E5F52] shrink-0">
                             <Tag className="w-3 h-3 text-[#3B6845]" />
                             <span>#{group.primaryTagName}</span>
                           </span>
                         </button>
                       </div>
 
-                      {/* Right Status Badges & Expand Trigger */}
-                      <div className="flex items-center gap-2 shrink-0">
+                      {/* Right: Inline Col I (วันที่) + Col J (เวลา/รอบ) + Status Badges */}
+                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                        {/* Inline Publish Date & Slot Picker (Col I & Col J) */}
+                        <div
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#FAF8F5] border border-[#E2D5C4]"
+                          onClick={(e) => e.stopPropagation()}
+                          title="วันที่เผยแพร่จริง (Col I) และรอบเวลาลงคลิป (Col J) — แก้ไขได้โดยตรง"
+                        >
+                          <Calendar className="w-3 h-3 text-[#3B6845] shrink-0" />
+                          <input
+                            type="date"
+                            value={group.publishDate}
+                            onChange={(e) =>
+                              onChangeCustomGroupPublishDate?.(
+                                group.groupKey,
+                                e.target.value
+                              )
+                            }
+                            className="bg-transparent font-mono text-[11px] font-bold text-[#3D332A] focus:outline-none cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onChangeCustomGroupPublishSlot?.(
+                                group.groupKey,
+                                group.publishSlot === 'MORNING_0600'
+                                  ? 'EVENING_1800'
+                                  : 'MORNING_0600'
+                              )
+                            }
+                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                              group.publishSlot === 'MORNING_0600'
+                                ? 'bg-[#FEF6E8] text-[#8A4D1F] border border-[#EAD5AE]'
+                                : 'bg-[#EEF5FB] text-[#1E40AF] border border-[#C6DDF2]'
+                            }`}
+                            title="คลิกเพื่อสลับรอบเช้า (06:00) / รอบเย็น (18:00)"
+                          >
+                            {group.publishSlot === 'MORNING_0600' ? (
+                              <>
+                                <Sun className="w-2.5 h-2.5" />
+                                <span>{group.publishTime || 'เช้า'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Moon className="w-2.5 h-2.5" />
+                                <span>{group.publishTime || 'เย็น'}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
                         {activeRows.length === 5 && !isIssue ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]">
                             <Check className="w-3 h-3 text-[#3B6845]" />
-                            <span>ครบ 5/5 อันดับ</span>
+                            <span>ครบ 5/5</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-[#FDF4EB] text-[#8A4D1F] border border-[#EBD1BE]">
                             <AlertTriangle className="w-3 h-3 text-[#8A4D1F]" />
                             <span>
                               {activeRows.length !== 5
-                                ? `มี ${activeRows.length}/5 อันดับ`
+                                ? `${activeRows.length}/5 อันดับ`
                                 : group.hasDuplicateClipsInGroup
-                                ? 'มีคลิปซ้ำใน EP เดียวกัน'
-                                : `ไม่พบฟุต ${group.missingFootageCount} คลิป`}
+                                ? 'คลิปซ้ำใน EP'
+                                : `ไม่พบฟุต ${group.missingFootageCount}`}
                             </span>
                           </span>
                         )}
@@ -581,11 +641,29 @@ export const SheetEpisodeGroupsPreview: React.FC<
                                     </div>
 
                                     {rowItem ? (
-                                      <div
-                                        className="font-extrabold text-[#3D332A] line-clamp-2 leading-snug"
-                                        title={rowItem.title}
-                                      >
-                                        {rowItem.title}
+                                      <div className="space-y-1">
+                                        <div
+                                          className="font-extrabold text-[#3D332A] line-clamp-2 leading-snug"
+                                          title={rowItem.title}
+                                        >
+                                          {rowItem.title}
+                                        </div>
+                                        {rowItem.rankTitle && (
+                                          <div className="flex items-center gap-1 text-[11px] font-bold text-[#8A5A22] truncate">
+                                            <Trophy className="w-2.5 h-2.5 shrink-0" />
+                                            <span className="truncate">
+                                              {rowItem.rankTitle}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {rowItem.punchlineNote && (
+                                          <div className="flex items-center gap-1 text-[11px] text-[#3B6845] italic truncate">
+                                            <MessageSquareQuote className="w-2.5 h-2.5 shrink-0" />
+                                            <span className="truncate">
+                                              "{rowItem.punchlineNote}"
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                     ) : (
                                       <div className="italic text-[#8A4D1F] py-1">

@@ -11,6 +11,7 @@ import {
 import { useCMSAnalytics } from './cms/useCMSAnalytics';
 import { useCMSCategoryActions } from './cms/useCMSCategoryActions';
 import { useCMSCloudAndStorageSync } from './cms/useCMSCloudAndStorageSync';
+import { useCMSDuplicateMerge } from './cms/useCMSDuplicateMerge';
 import { useCMSEpisodeActions } from './cms/useCMSEpisodeActions';
 import { useCMSFootageActions } from './cms/useCMSFootageActions';
 import { useCMSNavigationState } from './cms/useCMSNavigationState';
@@ -97,6 +98,17 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEpisodes,
   });
 
+  // 7. Actions: Atomic Duplicate Footage Merge & Reference Migration
+  const duplicateMergeActions = useCMSDuplicateMerge({
+    footage,
+    setFootage,
+    episodes,
+    setEpisodes,
+    sources,
+    setSources,
+    setSelectedFootageIdsForBatch: navigationState.setSelectedFootageIdsForBatch,
+  });
+
   return (
     <CMSContext.Provider
       value={{
@@ -110,6 +122,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...categoryActions,
         ...footageActions,
         ...episodeActions,
+        ...duplicateMergeActions,
         resetDemoData,
         clearAllClips,
         isClearingClips,

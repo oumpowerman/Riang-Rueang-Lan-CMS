@@ -126,17 +126,17 @@ export const BaseModal: React.FC<BaseModalProps> = ({
             {/* Header Section (Light Pastel Earth-Tone) */}
             {(title || headerContent || headerRight) && (
               <header className="bg-[#FDFBF7] border-b border-[#E8DFD3] shrink-0">
-                <div className="px-5 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="px-3.5 sm:px-5 py-2.5 flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
                     {icon && (
-                      <div className="w-10 h-10 rounded-2xl bg-[#EEF5EE] border border-[#BAD8BF] flex items-center justify-center text-[#3B6845] shrink-0">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#EEF5EE] border border-[#BAD8BF] flex items-center justify-center text-[#3B6845] shrink-0 mt-0.5">
                         {icon}
                       </div>
                     )}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         {typeof title === 'string' ? (
-                          <h2 className="text-base sm:text-lg font-extrabold text-[#3D332A] truncate">
+                          <h2 className="text-sm sm:text-lg font-extrabold text-[#3D332A] truncate">
                             {title}
                           </h2>
                         ) : (
@@ -145,19 +145,19 @@ export const BaseModal: React.FC<BaseModalProps> = ({
                         {badge}
                       </div>
                       {subtitle && (
-                        <div className="text-xs text-[#7D6E61] mt-0.5 leading-relaxed">
+                        <div className="text-[11px] sm:text-xs text-[#7D6E61] mt-0.5 leading-snug">
                           {subtitle}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {headerRight}
                     <button
                       type="button"
                       onClick={onClose}
-                      className="w-8 h-8 rounded-xl bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#7D6E61] hover:text-[#3D332A] border border-[#E2D5C4] flex items-center justify-center transition-colors cursor-pointer"
+                      className="w-8 h-8 rounded-xl bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#7D6E61] hover:text-[#3D332A] border border-[#E2D5C4] flex items-center justify-center transition-colors cursor-pointer shrink-0"
                       aria-label="ปิดหน้าต่าง"
                       title="ปิดหน้าต่าง (Esc)"
                     >
@@ -167,7 +167,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
                 </div>
 
                 {headerContent && (
-                  <div className="px-5 sm:px-6 pb-3 pt-0">{headerContent}</div>
+                  <div className="px-3.5 sm:px-5 pb-2.5 pt-0">{headerContent}</div>
                 )}
               </header>
             )}

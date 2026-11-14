@@ -10,6 +10,8 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
+import { useCMS } from '../../../context/CMSContext';
+import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { DashboardProductionRadarData } from './dashboard.types';
 
 interface DashboardProductionRadarProps {
@@ -29,6 +31,8 @@ export const DashboardProductionRadar: React.FC<DashboardProductionRadarProps> =
   setIsDirectFootageModalOpen,
   setTraceabilityFootageId,
 }) => {
+  const { setPreviewFootageId } = useCMS();
+
   return (
     <div className="rounded-2xl bg-slate-50/80 border border-slate-200/80 p-3.5 space-y-3">
       <div
@@ -82,9 +86,9 @@ export const DashboardProductionRadar: React.FC<DashboardProductionRadarProps> =
                     </span>
                   </div>
                   <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                    {productionRadar.readyCategories.slice(0, 5).map((stat) => (
+                    {productionRadar.readyCategories.slice(0, 5).map((stat, idx) => (
                       <div
-                        key={stat.tag.id}
+                        key={`ready-${stat.tag.id}-${idx}`}
                         className="flex items-center justify-between gap-2 p-2 rounded-xl bg-emerald-50/40 hover:bg-emerald-50/90 border border-emerald-200/60 transition-colors"
                       >
                         <div className="min-w-0">
@@ -128,9 +132,9 @@ export const DashboardProductionRadar: React.FC<DashboardProductionRadarProps> =
                         ไม่มีหมวดค้าง 3–4 คลิป
                       </div>
                     ) : (
-                      productionRadar.almostReadyCategories.map((stat) => (
+                      productionRadar.almostReadyCategories.map((stat, idx) => (
                         <div
-                          key={stat.tag.id}
+                          key={`almost-${stat.tag.id}-${idx}`}
                           className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-50/40 hover:bg-amber-50/90 border border-amber-200/60 transition-colors"
                         >
                           <div className="min-w-0">
@@ -167,26 +171,36 @@ export const DashboardProductionRadar: React.FC<DashboardProductionRadarProps> =
                     </span>
                   </div>
                   <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                    {productionRadar.topRoiFootages.map((ft) => (
+                    {productionRadar.topRoiFootages.map((ft, idx) => (
                       <div
-                        key={ft.id}
+                        key={`roi-${ft.id}-${idx}`}
                         onClick={() => setTraceabilityFootageId(ft.id)}
-                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-sky-50/40 hover:bg-sky-50/90 border border-sky-200/60 transition-colors cursor-pointer"
+                        className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-sky-50/40 hover:bg-sky-50/90 border border-sky-200/60 transition-colors cursor-pointer"
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 truncate">
-                            {ft.cooldownStatus === 'NEW_UNTOUCHED' ? (
-                              <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                            ) : (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            )}
-                            <span className="font-mono text-indigo-700">{ft.id}</span>
-                            <span className="truncate">{ft.title}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-mono tabular-nums truncate">
-                            {ft.cooldownStatus === 'NEW_UNTOUCHED'
-                              ? 'ยังไม่เคยใช้'
-                              : `พัก ${ft.daysSinceLastUsed}ว.`}
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <VideoThumbnailPreview
+                            footage={ft}
+                            size="xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewFootageId(ft.id);
+                            }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 truncate">
+                              {ft.cooldownStatus === 'NEW_UNTOUCHED' ? (
+                                <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                              ) : (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              )}
+                              <span className="font-mono text-indigo-700">{ft.id}</span>
+                              <span className="truncate">{ft.title}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono tabular-nums truncate">
+                              {ft.cooldownStatus === 'NEW_UNTOUCHED'
+                                ? 'ยังไม่เคยใช้'
+                                : `พัก ${ft.daysSinceLastUsed}ว.`}
+                            </div>
                           </div>
                         </div>
                         <ChevronRight className="w-3.5 h-3.5 text-sky-700 shrink-0" />

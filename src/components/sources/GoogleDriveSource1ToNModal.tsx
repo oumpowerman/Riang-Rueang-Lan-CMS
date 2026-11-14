@@ -10,7 +10,6 @@ import {
   Loader2,
   Sparkles,
   Video,
-  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCMS } from '../../context/CMSContext';
@@ -23,6 +22,8 @@ import { SourcePlatform } from '../../types/source.types';
 import { CategoryTag } from '../../types/tag.types';
 import { reconcileSubfolder } from '../../utils/tagReconciler';
 import { defaultGoogleDriveApiKey } from '../../firebase/config';
+import { Modal } from '../ui/Modal';
+import { DrivePlatformSelector } from './driveModal/DrivePlatformSelector';
 
 interface GoogleDriveSource1ToNModalProps {
   isOpen: boolean;
@@ -200,6 +201,7 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
             channelOrCreator: channelOrCreator.trim() || 'Google Drive Studio',
             totalDuration: totalDuration.trim() || '01:30:00',
             tags: [selectedTagId],
+            driveFolderUrl: driveFolderUrl.trim(),
             notes: `นำเข้าแบบ 1:N จากโฟลเดอร์ Google Drive (${allFiles.length} ช็อตย่อย)`,
           },
           allFiles.map((file, idx) => {
@@ -243,6 +245,7 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
               channelOrCreator: channelOrCreator.trim() || bucket.folderName,
               totalDuration: totalDuration.trim() || '01:20:00',
               tags: [reconciled.tagId],
+              driveFolderUrl: `https://drive.google.com/drive/folders/${bucket.folderId}`,
               notes: `นำเข้าอัตโนมัติจากโฟลเดอร์ย่อย: ${bucket.folderPath}`,
             },
             clips: bucket.files.map((file: DiscoveredDriveVideo, idx: number) => {
@@ -288,6 +291,7 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
           channelOrCreator: channelOrCreator.trim() || 'Drive Live Archive',
           totalDuration: '01:45:00',
           tags: [selectedTagId],
+          driveFolderUrl: 'https://drive.google.com/drive/folders/demo-source-1ton',
           notes: 'นำเข้าจากโฟลเดอร์ Google Drive แบบ 1 โฟลเดอร์ = 1 ไลฟ์ (5 ช็อตย่อยพร้อมลิงก์ Drive)',
         },
         [
@@ -406,181 +410,214 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full p-6 space-y-5 shadow-xl my-8">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-bold">
-              <HardDrive className="w-3.5 h-3.5" />
-              <span>Google Drive 1:N Source & Split Clips Importer</span>
-            </div>
-            <h2 className="text-lg font-extrabold text-slate-900">
-              ดึงโฟลเดอร์ไลฟ์สดจาก Google Drive มาสร้างคลิปยาว & แตกช็อตย่อย (Flow 1:N)
-            </h2>
-            <p className="text-xs text-slate-500">
-              เลือกโหมดจับคู่โครงสร้างโฟลเดอร์ได้ทั้งแบบ 1 โฟลเดอร์ต่อ 1 ไลฟ์ หรือหลายโฟลเดอร์ย่อยหลายไลฟ์ พร้อมแนบลิงก์ไฟล์ Drive ให้ทุกช็อตอัตโนมัติ
-            </p>
-          </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="ดึงโฟลเดอร์ไลฟ์สดจาก Google Drive"
+      subtitle="สร้างคลิปยาวต้นฉบับ & แตกช็อตฟุตเทจย่อยอัตโนมัติ (Flow 1:N)"
+      maxWidthClass="max-w-2xl"
+      badge={
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-200">
+          <HardDrive className="w-3.5 h-3.5" />
+          <span>Flow 1:N</span>
+        </span>
+      }
+      footer={
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 w-full">
           <button
             type="button"
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 cursor-pointer"
+            onClick={handleQuickDemoImport}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50/90 hover:bg-indigo-100/90 border border-indigo-200/90 rounded-xl transition-all cursor-pointer shadow-2xs"
           >
-            <X className="w-5 h-5" />
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            <span>
+              จำลองดึงโฟลเดอร์ Drive ({importMode === 'SINGLE_SOURCE' ? '1 ไลฟ์ 5 ช็อต' : '2 ไลฟ์ 5 ช็อต'}) ทดสอบ
+            </span>
           </button>
-        </div>
 
-        {/* Mode Switcher */}
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-700 block">
-            1. เลือกรูปแบบการจับคู่โครงสร้างโฟลเดอร์ (Folder-to-Source Mapping):
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="flex items-center justify-end gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition-colors cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              disabled={totalDiscoveredVideos === 0 || isScanning}
+              onClick={handleConfirmImport}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-xl transition-all shadow-xs cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>ยืนยันสร้างไลฟ์ ({totalDiscoveredVideos} ช็อต)</span>
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-3.5">
+        {/* Step 1 Card: Folder Mapping & Source Details */}
+        <div className="bg-[#FAF8F5] border border-[#E8DFD3] rounded-2xl p-3.5 sm:p-4 space-y-3">
+          {/* Section 1 Header */}
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+              1
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-stone-900">
+              เลือกรูปแบบโครงสร้างโฟลเดอร์ & ข้อมูลไลฟ์
+            </span>
+          </div>
+
+          {/* Mode Switcher Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={() => setImportMode('SINGLE_SOURCE')}
-              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 importMode === 'SINGLE_SOURCE'
-                  ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  ? 'border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/20 shadow-xs'
+                  : 'border-stone-200/90 hover:border-stone-300 bg-white'
               }`}
             >
-              <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
-                <FolderGit2 className="w-4 h-4 text-indigo-600" />
-                <span>โหมด A: 1 โฟลเดอร์ = 1 ไลฟ์ต้นฉบับ (1:N)</span>
+              <div className="flex items-center gap-1.5 font-bold text-xs text-stone-900">
+                <FolderGit2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>โหมด A: 1 โฟลเดอร์ = 1 ไลฟ์ (1:N)</span>
               </div>
-              <p className="text-[11px] text-slate-600 mt-1">
-                เหมาะกับโฟลเดอร์ของไลฟ์ 1 ตอน ที่ทีมตัดต่อหั่นไฟล์คลิปย่อยใส่ไว้ข้างใน (สร้าง 1 SRC + N ฟุตย่อย)
+              <p className="text-[11px] text-stone-600 mt-1 leading-snug">
+                เหมาะกับโฟลเดอร์ไลฟ์ 1 ตอน ที่หั่นไฟล์คลิปย่อยใส่ไว้ข้างใน (สร้าง 1 SRC + N ฟุตย่อย)
               </p>
             </button>
 
             <button
               type="button"
               onClick={() => setImportMode('MULTI_SUBFOLDER')}
-              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 importMode === 'MULTI_SUBFOLDER'
-                  ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-xs'
+                  : 'border-stone-200/90 hover:border-stone-300 bg-white'
               }`}
             >
-              <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
-                <FolderTree className="w-4 h-4 text-emerald-600" />
-                <span>โหมด B: หลายโฟลเดอร์ย่อย = หลายไลฟ์ (Multi 1:N)</span>
+              <div className="flex items-center gap-1.5 font-bold text-xs text-stone-900">
+                <FolderTree className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>โหมด B: หลายโฟลเดอร์ย่อย = หลายไลฟ์</span>
               </div>
-              <p className="text-[11px] text-slate-600 mt-1">
-                เหมาะกับโฟลเดอร์ใหญ่ที่แยกแต่ละไลฟ์เป็น Subfolder ย่อย (สร้างหลาย SRC แยกตามโฟลเดอร์ย่อยอัตโนมัติ)
+              <p className="text-[11px] text-stone-600 mt-1 leading-snug">
+                เหมาะกับโฟลเดอร์ใหญ่ที่แยกแต่ละไลฟ์เป็น Subfolder (สร้างหลาย SRC ตามโฟลเดอร์ย่อย)
               </p>
             </button>
           </div>
-        </div>
 
-        {/* Metadata Inputs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-          <div>
-            <label className="text-[11px] font-bold text-slate-700 block mb-1">
-              แพลตฟอร์มต้นทาง
+          {/* Platform Selector */}
+          <div className="pt-0.5">
+            <label className="text-[11px] font-bold text-stone-700 block mb-1.5">
+              ช่องทาง / แพลตฟอร์มต้นทาง
             </label>
-            <select
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value as SourcePlatform)}
-              className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg font-semibold text-slate-900"
-            >
-              <option value="YOUTUBE">YouTube</option>
-              <option value="FACEBOOK">Facebook</option>
-              <option value="TIKTOK">TikTok</option>
-              <option value="OTHER">Other</option>
-            </select>
+            <DrivePlatformSelector platform={platform} onChange={setPlatform} />
           </div>
 
-          <div>
-            <label className="text-[11px] font-bold text-slate-700 block mb-1">
-              หมวดหมู่หลัก (กรณีโหมด A หรือค่าเริ่มต้น)
-            </label>
-            <select
-              value={selectedTagId}
-              onChange={(e) => setSelectedTagId(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg font-semibold text-slate-900"
-            >
-              {tags.map((t) => (
-                <option key={t.id} value={t.id}>
-                  #{t.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Source Info Fields Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+            <div>
+              <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                หมวดหมู่หลัก {importMode === 'MULTI_SUBFOLDER' ? '(ค่าเริ่มต้น)' : ''}
+              </label>
+              <select
+                value={selectedTagId}
+                onChange={(e) => setSelectedTagId(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-white border border-stone-200/90 rounded-xl font-medium text-stone-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+              >
+                {tags.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    #{t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div>
-            <label className="text-[11px] font-bold text-slate-700 block mb-1">
-              ความยาวไลฟ์โดยประมาณ (HH:MM:SS)
-            </label>
-            <input
-              type="text"
-              value={totalDuration}
-              onChange={(e) => setTotalDuration(e.target.value)}
-              placeholder="01:30:00"
-              className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-lg text-slate-900"
-            />
-          </div>
-
-          {importMode === 'SINGLE_SOURCE' && (
-            <div className="sm:col-span-2">
-              <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                ชื่อไลฟ์สดต้นฉบับ (เว้นว่างเพื่อใช้ชื่อโฟลเดอร์จาก Drive อัตโนมัติ)
+            <div>
+              <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                ความยาวไลฟ์โดยประมาณ (HH:MM:SS)
               </label>
               <input
                 type="text"
-                value={customSourceTitle}
-                onChange={(e) => setCustomSourceTitle(e.target.value)}
-                placeholder="เช่น ไลฟ์สดพี่แจ๊ส & โหนกระแส ช็อตฮาคัดเน้นๆ"
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-900"
+                value={totalDuration}
+                onChange={(e) => setTotalDuration(e.target.value)}
+                placeholder="01:30:00"
+                className="w-full px-3 py-2 text-xs font-mono bg-white border border-stone-200/90 rounded-xl text-stone-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
               />
             </div>
-          )}
 
-          <div className={importMode === 'SINGLE_SOURCE' ? '' : 'sm:col-span-3'}>
-            <label className="text-[11px] font-bold text-slate-700 block mb-1">
-              ชื่อช่อง / ครีเอเตอร์ต้นทาง
-            </label>
-            <input
-              type="text"
-              value={channelOrCreator}
-              onChange={(e) => setChannelOrCreator(e.target.value)}
-              placeholder="เช่น โหนกระแส Official / แป้ง zbing z."
-              className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-900"
-            />
+            {importMode === 'SINGLE_SOURCE' && (
+              <div>
+                <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                  ชื่อไลฟ์สดต้นฉบับ <span className="text-stone-400 font-normal">(เว้นว่างเพื่อใช้ชื่อโฟลเดอร์)</span>
+                </label>
+                <input
+                  type="text"
+                  value={customSourceTitle}
+                  onChange={(e) => setCustomSourceTitle(e.target.value)}
+                  placeholder="เช่น ไลฟ์สดพี่แจ๊ส ช็อตฮาคัดเน้นๆ"
+                  className="w-full px-3 py-2 text-xs bg-white border border-stone-200/90 rounded-xl text-stone-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+                />
+              </div>
+            )}
+
+            <div className={importMode === 'SINGLE_SOURCE' ? '' : 'sm:col-span-2'}>
+              <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                ชื่อช่อง / ครีเอเตอร์ต้นทาง
+              </label>
+              <input
+                type="text"
+                value={channelOrCreator}
+                onChange={(e) => setChannelOrCreator(e.target.value)}
+                placeholder="เช่น โหนกระแส Official / แป้ง zbing z."
+                className="w-full px-3 py-2 text-xs bg-white border border-stone-200/90 rounded-xl text-stone-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Google Drive Connection & Folder URL */}
-        <div className="space-y-3">
+        {/* Step 2 Card: Connect & Scan Google Drive */}
+        <div className="bg-[#FAF8F5] border border-[#E8DFD3] rounded-2xl p-3.5 sm:p-4 space-y-3">
+          {/* Section 2 Header */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-bold text-slate-700">
-              2. เชื่อมต่อสิทธิ์และวางลิงก์โฟลเดอร์ Google Drive:
-            </span>
             <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                2
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-stone-900">
+                เชื่อมต่อสิทธิ์ & วางลิงก์โฟลเดอร์ Google Drive
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
               {driveAccessToken ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>เชื่อมต่อ Google Drive OAuth แล้ว</span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>เชื่อมต่อ OAuth แล้ว</span>
                 </span>
               ) : (
                 <button
                   type="button"
                   onClick={() => signInWithGoogle()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
                 >
                   <HardDrive className="w-3.5 h-3.5" />
-                  <span>เชื่อมต่อ Google Drive (OAuth)</span>
+                  <span>เชื่อมต่อ OAuth</span>
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => setShowApiKeyInput((v) => !v)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                  showApiKeyInput || fallbackApiKey
+                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                    : 'bg-white hover:bg-stone-100 text-stone-600 border-stone-200'
+                }`}
               >
-                <KeyRound className="w-3.5 h-3.5" />
+                <KeyRound className="w-3 h-3 text-amber-700" />
                 <span>API Key สำรอง</span>
               </button>
             </div>
@@ -591,28 +628,29 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
               type="password"
               value={fallbackApiKey}
               onChange={(e) => handleUpdateFallbackApiKey(e.target.value)}
-              placeholder="วาง Google Drive API Key สำรอง (ซิงก์ขึ้น Cloud ถาวรทุกเครื่องอัตโนมัติ)..."
-              className="w-full px-3.5 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl"
+              placeholder="วาง Google Drive API Key สำรอง (ซิงก์ขึ้น Cloud ถาวรอัตโนมัติ)..."
+              className="w-full px-3 py-2 text-xs font-mono bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
           )}
 
+          {/* Drive URL Input & Scan Action */}
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={driveFolderUrl}
               onChange={(e) => setDriveFolderUrl(e.target.value)}
-              placeholder="วางลิงก์ https://drive.google.com/drive/folders/... ที่เก็บไฟล์ช็อตย่อยของไลฟ์สด"
-              className="flex-1 px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-900 focus:bg-white"
+              placeholder="วางลิงก์ https://drive.google.com/drive/folders/... ที่เก็บไฟล์ช็อตย่อย"
+              className="flex-1 px-3.5 py-2.5 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/15 text-stone-900 placeholder:text-stone-400"
             />
             <button
               type="button"
               disabled={isScanning}
               onClick={handleScanFolder}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-xl shrink-0 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-stone-900 hover:bg-stone-800 disabled:opacity-50 rounded-xl shrink-0 cursor-pointer transition-colors shadow-2xs"
             >
               {isScanning ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
                   <span>กำลังสแกน...</span>
                 </>
               ) : (
@@ -624,95 +662,63 @@ export const GoogleDriveSource1ToNModal: React.FC<GoogleDriveSource1ToNModalProp
             </button>
           </div>
 
+          {/* Progress / Alert Messages */}
           {isScanning && scanProgressMsg && (
-            <div className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl px-3.5 py-2.5 font-medium">
-              {scanProgressMsg}
+            <div className="text-xs text-indigo-800 bg-indigo-50 border border-indigo-200/80 rounded-xl px-3 py-2 font-medium flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-indigo-600" />
+              <span>{scanProgressMsg}</span>
             </div>
           )}
 
           {scanError && (
-            <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div className="flex items-center gap-2 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{scanError}</span>
             </div>
           )}
 
           {importSuccessMsg && (
-            <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 font-bold">
+            <div className="flex items-center gap-2 text-xs text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 font-bold">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
               <span>{importSuccessMsg}</span>
             </div>
           )}
-        </div>
 
-        {/* Discovered Preview */}
-        {discoveredBuckets.length > 0 && (
-          <div className="border border-slate-200 rounded-xl p-3.5 space-y-2.5 max-h-56 overflow-y-auto bg-slate-50/60">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-              <span>
-                ผลการสแกนโฟลเดอร์ "{rootFolderName}": พบ {discoveredBuckets.length} โฟลเดอร์ย่อย · รวม{' '}
-                {totalDiscoveredVideos} ไฟล์วิดีโอ
-              </span>
-              <span className="text-indigo-700 font-mono">
-                {importMode === 'SINGLE_SOURCE'
-                  ? `จะสร้าง 1 ไลฟ์ (SRC) + ${totalDiscoveredVideos} ฟุตย่อย`
-                  : `จะสร้าง ${discoveredBuckets.length} ไลฟ์ (SRC) + ${totalDiscoveredVideos} ฟุตย่อย`}
-              </span>
-            </div>
-            <div className="space-y-1.5">
-              {discoveredBuckets.map((b) => (
-                <div
-                  key={b.folderId}
-                  className="flex items-center justify-between text-xs bg-white px-3 py-2 rounded-lg border border-slate-200/80"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <Video className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span className="font-semibold text-slate-800 truncate">
-                      {b.folderPath}
+          {/* Discovered Folders & Videos Preview */}
+          {discoveredBuckets.length > 0 && (
+            <div className="border border-stone-200 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] font-bold text-stone-800 border-b border-stone-100 pb-1.5">
+                <span>
+                  ผลการสแกน "{rootFolderName}": {discoveredBuckets.length} โฟลเดอร์ · รวม {totalDiscoveredVideos} ไฟล์
+                </span>
+                <span className="text-indigo-700 font-mono">
+                  {importMode === 'SINGLE_SOURCE'
+                    ? `จะสร้าง 1 ไลฟ์ + ${totalDiscoveredVideos} ช็อต`
+                    : `จะสร้าง ${discoveredBuckets.length} ไลฟ์ + ${totalDiscoveredVideos} ช็อต`}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {discoveredBuckets.map((b) => (
+                  <div
+                    key={b.folderId}
+                    className="flex items-center justify-between text-xs bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200/70"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Video className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="font-medium text-stone-800 truncate text-[11px]">
+                        {b.folderPath}
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-stone-700 shrink-0 text-[11px] pl-2">
+                      {b.files.length} ช็อต
                     </span>
                   </div>
-                  <span className="font-mono font-bold text-slate-700 shrink-0">
-                    {b.files.length} ช็อต
-                  </span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Footer Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleQuickDemoImport}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>
-              จำลองดึงโฟลเดอร์ Drive ({importMode === 'SINGLE_SOURCE' ? '1 ไลฟ์ 5 ช็อต' : '2 ไลฟ์ 5 ช็อต'}) ทดสอบระบบทันที
-            </span>
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-            >
-              ยกเลิก
-            </button>
-            <button
-              type="button"
-              disabled={totalDiscoveredVideos === 0 || isScanning}
-              onClick={handleConfirmImport}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-xl transition-colors cursor-pointer"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>ยืนยันสร้างไลฟ์ & แตกฟุตย่อย ({totalDiscoveredVideos} ช็อต)</span>
-            </button>
-          </div>
+          )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };

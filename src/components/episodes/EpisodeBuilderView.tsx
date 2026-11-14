@@ -17,7 +17,7 @@ export const EpisodeBuilderView: React.FC = () => {
     computedFootageMap,
     settings,
     setActiveTab,
-    setIsStatusRuleModalOpen,
+    setIsThreeTierManagerOpen,
 
     nextEpisodeId,
     activeBuilderStep,
@@ -26,10 +26,21 @@ export const EpisodeBuilderView: React.FC = () => {
     setPreselectNotice,
     savedBannerMessage,
 
-    groupStockStats,
-    selectedGroupId,
+    tagStockMap,
+    tier1Groups,
+    tier2Groups,
+    tier3Groups,
+    selectedFacetTagIds,
+    scopeMatchMode,
+    setScopeMatchMode,
+    step1SearchQuery,
+    setStep1SearchQuery,
+    tagClickMode,
+    setTagClickMode,
+    handleToggleFacetTag,
+    handleClearFacetTags,
+
     activeGroup,
-    categoriesInSelectedGroup,
     mainCategoryTagId,
     productionTarget,
     targetSubcategoryId,
@@ -37,11 +48,7 @@ export const EpisodeBuilderView: React.FC = () => {
     currentSubcategories,
     activeCategoryStat,
     liveCategoryStock,
-    handleSelectGroup,
     handleSelectCategory,
-    handleSelectVarietyMode,
-    handleSelectSoloMode,
-    handleSelectSubcategory,
 
     activeRecipe,
     applyRecipeForCategory,
@@ -61,6 +68,7 @@ export const EpisodeBuilderView: React.FC = () => {
     clearSlotByRank,
     clearAllSlots,
     updateSlotScript,
+    updateSlotRankFields,
     footageToAssignedRankMap,
     allowCrossCategory,
     setAllowCrossCategory,
@@ -130,28 +138,34 @@ export const EpisodeBuilderView: React.FC = () => {
         onNavigateTab={setActiveTab}
       />
 
-      {/* Step 1: 3-Tier Category Selection */}
+      {/* Step 1: 3-Tier Independent Tag Selection & Scope Combiner */}
       <BuilderStep1CategoryTarget
         isOpen={activeBuilderStep === 1}
         onToggle={() => setActiveBuilderStep(1)}
         onNextStep={() => setActiveBuilderStep(2)}
-        groupStockStats={groupStockStats}
-        selectedGroupId={selectedGroupId}
-        activeGroup={activeGroup}
-        categoriesInSelectedGroup={categoriesInSelectedGroup}
+        onAutoFillAndNextStep={() => {
+          applyRecipeForCategory(mainCategoryTagId, activeRecipe);
+          setActiveBuilderStep(2);
+        }}
         mainCategoryTagId={mainCategoryTagId}
         activeCategoryStat={activeCategoryStat}
         liveCategoryStock={liveCategoryStock}
-        productionTarget={productionTarget}
-        targetSubcategoryId={targetSubcategoryId}
-        activeSubcategory={activeSubcategory}
-        currentSubcategories={currentSubcategories}
-        computedFootage={computedFootage}
-        onSelectGroup={handleSelectGroup}
+        tagMap={tagMap}
+        tagStockMap={tagStockMap}
+        tier1Groups={tier1Groups}
+        tier2Groups={tier2Groups}
+        tier3Groups={tier3Groups}
+        selectedFacetTagIds={selectedFacetTagIds}
+        scopeMatchMode={scopeMatchMode}
+        onChangeScopeMatchMode={setScopeMatchMode}
+        step1SearchQuery={step1SearchQuery}
+        onChangeStep1SearchQuery={setStep1SearchQuery}
+        tagClickMode={tagClickMode}
+        onChangeTagClickMode={setTagClickMode}
         onSelectCategory={handleSelectCategory}
-        onSelectVarietyMode={handleSelectVarietyMode}
-        onSelectSoloMode={handleSelectSoloMode}
-        onSelectSubcategory={handleSelectSubcategory}
+        onToggleFacetTag={handleToggleFacetTag}
+        onClearFacetTags={handleClearFacetTags}
+        onOpenThreeTierManager={() => setIsThreeTierManagerOpen(true)}
       />
 
       {/* Diversity & Collision Guard Banners */}
@@ -177,6 +191,7 @@ export const EpisodeBuilderView: React.FC = () => {
         onClearAllSlots={clearAllSlots}
         onMoveSlotByIndex={handleMoveSlotByIndex}
         onUpdateSlotScript={updateSlotScript}
+        onUpdateSlotRankFields={updateSlotRankFields}
         onDropItemOnSlot={handleDropItemOnSlot}
         onAssignFootageToRank={assignFootageToRank}
         footageToAssignedRankMap={footageToAssignedRankMap}

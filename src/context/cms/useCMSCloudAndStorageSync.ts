@@ -55,7 +55,10 @@ export function useCMSCloudAndStorageSync(
         cmsRepository.saveCategoryGroups(groups);
       }
       if (pendingTagsRef.current !== null) {
-        const normalized = pendingTagsRef.current;
+        const normalized = cmsRepository.normalizeAndRepairTags(
+          pendingTagsRef.current,
+          pendingTagsRef.current.length <= 1
+        );
         pendingTagsRef.current = null;
         setTags(normalized);
         cmsRepository.saveTags(normalized);
@@ -101,12 +104,10 @@ export function useCMSCloudAndStorageSync(
 
     const unsubCategories = firestoreService.subscribeCategories(
       (cloudCats) => {
-        const normalized = cloudCats.map((t) => ({
-          ...t,
-          tier: (t.tier === 2 || !!t.parentId ? 2 : 1) as 1 | 2,
-          parentId: t.tier === 2 || !!t.parentId ? t.parentId || null : null,
-          groupId: t.groupId || `GRP-${t.groupType || 'GENERAL'}`,
-        }));
+        const normalized = cmsRepository.normalizeAndRepairTags(
+          cloudCats,
+          cloudCats.length <= 1
+        );
         setIsCloudConnected(true);
         setIsCloudSynced(true);
         if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
@@ -241,6 +242,30 @@ export function useCMSCloudAndStorageSync(
       setFootage([]);
       setEpisodes([]);
       setSelectedTagFilter([]);
+
+      // Also reset sync timestamps on savedDriveFolders while keeping folder URLs & names intact
+      setSettings((prev) => {
+        const cleanedFolders = (prev.savedDriveFolders || []).map((f) => ({
+          ...f,
+          lastSyncTimestamp: undefined,
+          totalClipsInFolder: 0,
+        }));
+        const nextSettings = {
+          ...prev,
+          savedDriveFolders: cleanedFolders,
+        };
+        try {
+          localStorage.setItem(
+            'rrl_drive_saved_folders_v1',
+            JSON.stringify(cleanedFolders)
+          );
+        } catch {
+          // ignore
+        }
+        firestoreService.saveSettings(nextSettings).catch(() => {});
+        return nextSettings;
+      });
+
       await firestoreService.clearAllClipsFromCloud();
       cmsRepository.markCloudClipsWiped();
       setIsCloudSynced(true);

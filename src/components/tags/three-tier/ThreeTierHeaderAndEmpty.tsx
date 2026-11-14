@@ -15,11 +15,19 @@ import {
   X,
   FolderX,
   ArrowRight,
-  LayoutGrid,
   Eraser,
+  Settings,
+  ChevronDown,
+  BookOpen,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
-import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
+import { isStagingTagId } from '../../../services/seedData';
+import {
+  CategoryGroup,
+  CategoryTag,
+  CategoryTier,
+  DEFAULT_UNCLASSIFIED_SUBCATEGORY,
+} from '../../../types/tag.types';
 import { getPastelColorConfig } from '../constants/tagPastelPalette';
 
 export type UnifiedTagStudioTab = 'STUDIO_3TIER' | 'COOLDOWN_RULES';
@@ -30,6 +38,7 @@ interface IconTooltipButtonProps {
   active?: boolean;
   danger?: boolean;
   badgeText?: string;
+  className?: string;
   children: React.ReactNode;
 }
 
@@ -39,13 +48,14 @@ const IconTooltipButton: React.FC<IconTooltipButtonProps> = ({
   active = false,
   danger = false,
   badgeText,
+  className = '',
   children,
 }) => {
   const [hovered, setHovered] = useState(false);
 
   return (
     <div
-      className="relative inline-flex"
+      className={`relative inline-flex ${className}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -95,14 +105,16 @@ interface ThreeTierHeaderRightControlsProps {
   greenReadyDays: number;
   showConceptBanner: boolean;
   onToggleConceptBanner: () => void;
+  showGlobalSearch?: boolean;
+  onToggleGlobalSearch?: () => void;
   onRequestWipe: () => void;
   onRestoreDefaults: () => void;
   onRequestClearAllClips: () => void;
   isFullScreen: boolean;
   onToggleFullScreen: () => void;
   isBulkFocusMode?: boolean;
-  onToggleBulkFocusMode?: () => void;
   onOpenJunkTagCleanup?: () => void;
+  onOpenTagRulesDictionary?: () => void;
 }
 
 export const ThreeTierHeaderRightControls: React.FC<
@@ -114,110 +126,207 @@ export const ThreeTierHeaderRightControls: React.FC<
   greenReadyDays,
   showConceptBanner,
   onToggleConceptBanner,
+  showGlobalSearch = false,
+  onToggleGlobalSearch,
   onRequestWipe,
   onRestoreDefaults,
   onRequestClearAllClips,
   isFullScreen,
   onToggleFullScreen,
   isBulkFocusMode = false,
-  onToggleBulkFocusMode,
   onOpenJunkTagCleanup,
+  onOpenTagRulesDictionary,
 }) => {
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
+  const isExpandedView = isFullScreen || isBulkFocusMode;
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Prominent Bulk Focus / Multi-Column Expand Toggle */}
-      {activeStudioTab === 'STUDIO_3TIER' && onToggleBulkFocusMode && (
-        <button
-          type="button"
-          onClick={onToggleBulkFocusMode}
-          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
-            isBulkFocusMode
-              ? 'bg-[#3B6845] hover:bg-[#2C5235] text-white border-[#2C5235] shadow-2xs'
-              : 'bg-[#EEF5EE] hover:bg-[#DCECE0] text-[#1C4824] border-[#BAD8BF]'
-          }`}
-          title={
-            isBulkFocusMode
-              ? 'ย่อกลับสู่มุมมอง 3 คอลัมน์ปกติ'
-              : 'ขยายเต็มพื้นที่: กางรายการแท็กเป็นตารางหลายคอลัมน์ และซ่อนส่วนที่ไม่จำเป็นเพื่อย้ายหมวดหมู่ด่วน'
-          }
-        >
-          {isBulkFocusMode ? (
-            <>
-              <Minimize2 className="w-3.5 h-3.5" />
-              <span>ย่อกลับมุมมองปกติ</span>
-            </>
-          ) : (
-            <>
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>ขยายจัดการเต็มพื้นที่</span>
-            </>
+    <div className="flex items-center gap-1.5 flex-nowrap">
+      {!isExpandedView && (
+        <>
+          {/* 2-Tab Switcher on Top Right */}
+          <div className="flex items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl border border-[#E2D5C4]">
+            <IconTooltipButton
+              onClick={() => onChangeActiveStudioTab('STUDIO_3TIER')}
+              active={activeStudioTab === 'STUDIO_3TIER'}
+              tooltip="1. สตูดิโอแท็ก 3 ชั้นอิสระ"
+            >
+              <FolderTree className="w-4 h-4 text-[#3B6845]" />
+            </IconTooltipButton>
+
+            <IconTooltipButton
+              onClick={() => onChangeActiveStudioTab('COOLDOWN_RULES')}
+              active={activeStudioTab === 'COOLDOWN_RULES'}
+              badgeText={`${cooldownDays}/${greenReadyDays}`}
+              tooltip={`2. ตั้งค่าเกณฑ์สีพักฟุต (${cooldownDays}d / ${greenReadyDays}d)`}
+            >
+              <Sliders className="w-4 h-4 text-[#734B17]" />
+            </IconTooltipButton>
+          </div>
+
+          {/* Search Toggle Icon */}
+          {onToggleGlobalSearch && (
+            <IconTooltipButton
+              onClick={onToggleGlobalSearch}
+              active={showGlobalSearch}
+              tooltip={
+                showGlobalSearch
+                  ? 'ซ่อนแถบค้นหาด่วนข้าม 3 ชั้น'
+                  : 'ค้นหาด่วนข้ามทั้ง 3 ชั้น (ชื่อแท็ก, หมวดย่อย)'
+              }
+            >
+              <Search className="w-4 h-4 text-[#78593A]" />
+            </IconTooltipButton>
           )}
-        </button>
-      )}
 
-      {/* 2-Tab Main Switcher with Sliding Pill Indicator */}
-      {!isBulkFocusMode && (
-        <div className="flex items-center p-1 bg-[#EFE7DC] rounded-xl border border-[#E2D5C4]">
-          <button
-            type="button"
-            onClick={() => onChangeActiveStudioTab('STUDIO_3TIER')}
-            className={`relative px-3 py-1 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-              activeStudioTab === 'STUDIO_3TIER'
-                ? 'text-[#3D332A]'
-                : 'text-[#6E5F52] hover:text-[#3D332A]'
-            }`}
-          >
-            {activeStudioTab === 'STUDIO_3TIER' && (
-              <motion.span
-                layoutId="tagStudioMainTabPill"
-                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                className="absolute inset-0 rounded-lg bg-white shadow-2xs"
+          {/* Mobile Tools Dropdown Menu (md:hidden) */}
+          <div className="relative md:hidden">
+            <button
+              type="button"
+              onClick={() => setIsToolsMenuOpen((prev) => !prev)}
+              className={`h-8 px-2 rounded-xl border flex items-center gap-1 text-xs font-bold transition-colors cursor-pointer ${
+                isToolsMenuOpen
+                  ? 'bg-[#EEF5EE] text-[#1C4824] border-[#BAD8BF]'
+                  : 'bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border-[#E2D5C4]'
+              }`}
+              title="เมนูเครื่องมือเพิ่มเติม"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#78593A]" />
+              <span className="text-[11px]">เครื่องมือ</span>
+              <ChevronDown
+                className={`w-3 h-3 text-[#78593A] transition-transform ${
+                  isToolsMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {/* Dropdown Backdrop */}
+            {isToolsMenuOpen && (
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsToolsMenuOpen(false)}
               />
             )}
-            <span className="relative z-10 inline-flex items-center gap-1.5">
-              <FolderTree className="w-3.5 h-3.5 text-[#3B6845]" />
-              <span>1. สตูดิโอแท็ก 3 ชั้น</span>
-            </span>
-          </button>
 
-          <button
-            type="button"
-            onClick={() => onChangeActiveStudioTab('COOLDOWN_RULES')}
-            className={`relative px-3 py-1 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-              activeStudioTab === 'COOLDOWN_RULES'
-                ? 'text-[#3D332A]'
-                : 'text-[#6E5F52] hover:text-[#3D332A]'
-            }`}
-          >
-            {activeStudioTab === 'COOLDOWN_RULES' && (
-              <motion.span
-                layoutId="tagStudioMainTabPill"
-                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-              />
+            {/* Dropdown Popover */}
+            <AnimatePresence>
+              {isToolsMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-1.5 z-50 w-60 rounded-2xl bg-white border border-[#E2D5C4] shadow-lg p-1.5 space-y-1 text-xs"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToggleConceptBanner();
+                      setIsToolsMenuOpen(false);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 text-[#4D3A24] hover:bg-[#FAF7F2] font-semibold cursor-pointer"
+                  >
+                    <Lightbulb className="w-4 h-4 text-[#A67438] shrink-0" />
+                    <span>
+                      {showConceptBanner
+                        ? 'ซ่อนคำอธิบายแนวคิด 3 มิติ'
+                        : 'ดูคำอธิบายแนวคิด 3 มิติ'}
+                    </span>
+                  </button>
+
+                  {onOpenTagRulesDictionary && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenTagRulesDictionary();
+                        setIsToolsMenuOpen(false);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 text-[#1C4824] hover:bg-[#EEF5EE] font-bold cursor-pointer"
+                    >
+                      <BookOpen className="w-4 h-4 text-[#3B6845] shrink-0" />
+                      <span>คู่มือกฎ Tag & Data Dictionary</span>
+                    </button>
+                  )}
+
+                  {onOpenJunkTagCleanup && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenJunkTagCleanup();
+                        setIsToolsMenuOpen(false);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 text-[#4D3A24] hover:bg-[#FAF7F2] font-semibold cursor-pointer"
+                    >
+                      <Eraser className="w-4 h-4 text-[#8A4D1F] shrink-0" />
+                      <span>สแกนและล้างแท็กขยะ</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRestoreDefaults();
+                      setIsToolsMenuOpen(false);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 text-[#244B2F] hover:bg-[#EEF5EE] font-semibold cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4 text-[#3B6845] shrink-0" />
+                    <span>คืนค่าหมวดหมู่เริ่มต้น</span>
+                  </button>
+
+                  <div className="border-t border-[#EFE7DC] my-1" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRequestWipe();
+                      setIsToolsMenuOpen(false);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 text-[#8A3C31] hover:bg-[#FDF2F0] font-semibold cursor-pointer"
+                  >
+                    <FolderX className="w-4 h-4 shrink-0" />
+                    <span>ล้างโครงสร้างแท็กทั้งหมด</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRequestClearAllClips();
+                      setIsToolsMenuOpen(false);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 text-[#8A3C31] hover:bg-[#FDF2F0] font-semibold cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <span>ล้างคลังคลิปทั้งหมด</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Desktop Individual Icon Buttons (hidden md:inline-flex) */}
+          <div className="hidden md:flex items-center gap-1.5">
+            {onOpenTagRulesDictionary && (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={onOpenTagRulesDictionary}
+                className="h-8 px-2.5 rounded-xl bg-[#EEF5EE] hover:bg-[#E1EFE2] text-[#1C4824] border border-[#BAD8BF] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                title="เปิดคู่มือกฎการติด Tag & Data Dictionary พร้อมจัดระเบียบอัตโนมัติ"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[#2E7D32]" />
+                <span>คู่มือกฎ Tag & Dictionary</span>
+              </motion.button>
             )}
-            <span className="relative z-10 inline-flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-[#734B17]" />
-              <span>2. ตั้งค่าเกณฑ์สีพักฟุต</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
-                {cooldownDays}d/{greenReadyDays}d
-              </span>
-            </span>
-          </button>
-        </div>
-      )}
 
-      {/* Icon-Only Utility Buttons with Framer Motion Hover Tooltips */}
-      <div className="flex items-center gap-1.5">
-        {!isBulkFocusMode && (
-          <>
             <IconTooltipButton
               onClick={onToggleConceptBanner}
               active={showConceptBanner}
               tooltip={
                 showConceptBanner
-                  ? 'ซ่อนคำอธิบายแนวคิดแท็กหลายมิติ'
-                  : 'ดูคำอธิบายแนวคิดแท็กหลายมิติ'
+                  ? 'ซ่อนคำอธิบายแนวคิดแท็ก 3 ชั้นอิสระ'
+                  : 'ดูคำอธิบายแนวคิดแท็ก 3 ชั้นอิสระ'
               }
             >
               <Lightbulb className="w-4 h-4 text-[#A67438]" />
@@ -233,7 +342,7 @@ export const ThreeTierHeaderRightControls: React.FC<
             <IconTooltipButton
               onClick={onRequestWipe}
               danger
-              tooltip="ล้างโครงสร้างหมวดหมู่ทั้งหมด (Tier 0–2)"
+              tooltip="ล้างโครงสร้างแท็กทั้งหมด"
             >
               <FolderX className="w-4 h-4" />
             </IconTooltipButton>
@@ -254,21 +363,23 @@ export const ThreeTierHeaderRightControls: React.FC<
             >
               <Trash2 className="w-4 h-4" />
             </IconTooltipButton>
-          </>
-        )}
+          </div>
+        </>
+      )}
 
-        <IconTooltipButton
-          onClick={onToggleFullScreen}
-          active={isFullScreen}
-          tooltip={isFullScreen ? 'ย่อขนาดหน้าต่างปกติ' : 'ขยายเต็มจอ 100%'}
-        >
-          {isFullScreen ? (
-            <Minimize2 className="w-4 h-4" />
-          ) : (
-            <Maximize2 className="w-4 h-4" />
-          )}
-        </IconTooltipButton>
-      </div>
+      {/* Full screen toggle (hidden on mobile, visible on desktop) */}
+      <IconTooltipButton
+        onClick={onToggleFullScreen}
+        active={isExpandedView}
+        className="hidden md:inline-flex"
+        tooltip={isExpandedView ? 'ย่อกลับขนาดหน้าต่างปกติ' : 'ขยายเต็มจอ 100%'}
+      >
+        {isExpandedView ? (
+          <Minimize2 className="w-4 h-4" />
+        ) : (
+          <Maximize2 className="w-4 h-4" />
+        )}
+      </IconTooltipButton>
     </div>
   );
 };
@@ -277,201 +388,159 @@ interface ThreeTierQuickSearchAndSummaryBarProps {
   categoryGroups: CategoryGroup[];
   tags: CategoryTag[];
   categoryMatrix: CategoryMatrixStat[];
-  onJumpToTag: (groupId: string, mainCatId: string) => void;
+  onJumpToTag: (tier: CategoryTier, tagName: string) => void;
+  isSearchOpen?: boolean;
+  onCloseSearch?: () => void;
 }
 
 export const ThreeTierQuickSearchAndSummaryBar: React.FC<
   ThreeTierQuickSearchAndSummaryBarProps
-> = ({ categoryGroups, tags, categoryMatrix, onJumpToTag }) => {
+> = ({ tags, categoryMatrix, onJumpToTag, isSearchOpen = false, onCloseSearch }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const mainCategoriesCount = useMemo(
-    () => tags.filter((t) => t.tier === 1 || (!t.parentId && !t.tier)).length,
+  const realTags = useMemo(
+    () => tags.filter((t) => !isStagingTagId(t.id)),
     [tags]
   );
 
-  const subcategoriesCount = useMemo(
-    () => tags.filter((t) => t.tier === 2 || Boolean(t.parentId)).length,
-    [tags]
-  );
-
-  const totalProducibleEps = useMemo(
-    () =>
-      categoryMatrix.reduce(
-        (sum, item) =>
-          sum + (item.tag.tier === 1 ? item.producibleEpisodesCount : 0),
-        0
-      ),
-    [categoryMatrix]
-  );
-
-  const readySoloEpsCount = useMemo(
-    () =>
-      categoryMatrix.filter(
-        (item) =>
-          (item.tag.tier === 2 || Boolean(item.tag.parentId)) &&
-          item.usableCount >= 5
-      ).length,
-    [categoryMatrix]
-  );
-
-  // Instant search across Tier 1 and Tier 2 tags
+  // Instant search across Tier 1, Tier 2, and Tier 3 tags
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
 
-    return tags
+    return realTags
       .filter((t) => {
         const matchName = t.name.toLowerCase().includes(q);
+        const matchSub = (t.subCategory || '').toLowerCase().includes(q);
         const matchId = t.id.toLowerCase().includes(q);
-        const matchDesc = (t.description || '').toLowerCase().includes(q);
-        return matchName || matchId || matchDesc;
+        return matchName || matchSub || matchId;
       })
       .slice(0, 8)
       .map((tag) => {
-        const isSub = tag.tier === 2 || Boolean(tag.parentId);
-        const parentTag = isSub
-          ? tags.find((p) => p.id === tag.parentId) || null
-          : tag;
-        const resolvedGroupId =
-          parentTag?.groupId ||
-          (parentTag?.groupType ? `GRP-${parentTag.groupType}` : '') ||
-          categoryGroups[0]?.id ||
-          '';
-        const groupObj = categoryGroups.find((g) => g.id === resolvedGroupId);
         const stat = categoryMatrix.find((m) => m.tag.id === tag.id);
-
         return {
           tag,
-          isSub,
-          parentTag,
-          resolvedGroupId,
-          groupName: groupObj?.name || 'มิติหลัก',
+          tier: (tag.tier || 1) as CategoryTier,
+          subCategory: tag.subCategory || DEFAULT_UNCLASSIFIED_SUBCATEGORY,
           usableCount: stat?.usableCount || 0,
           totalCount: stat?.totalCount || 0,
         };
       });
-  }, [searchQuery, tags, categoryGroups, categoryMatrix]);
+  }, [searchQuery, realTags, categoryMatrix]);
 
   return (
-    <div className="bg-[#FAF8F5] border-b border-[#E8DFD3] px-4 sm:px-5 py-2 shrink-0 space-y-2">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-        {/* Left: Instant Tag Search Input */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ค้นหาชื่อแท็กหลัก, #แท็กย่อย, ดารา หรือรหัส TAG-xxxx..."
-            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#8FA892]"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Right: Unified Studio KPI Summary Strip */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="px-2.5 py-1 rounded-lg bg-white border border-[#E8DFD3] text-[#524538] font-semibold">
-            มิติกลุ่ม:{' '}
-            <strong className="font-mono text-[#3D332A]">
-              {categoryGroups.length}
-            </strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-white border border-[#E8DFD3] text-[#524538] font-semibold">
-            แท็กหลัก:{' '}
-            <strong className="font-mono text-[#1B4369]">
-              {mainCategoriesCount}
-            </strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-white border border-[#E8DFD3] text-[#524538] font-semibold">
-            แท็กย่อย:{' '}
-            <strong className="font-mono text-[#255431]">
-              {subcategoriesCount}
-            </strong>
-          </span>
-          <span className="px-2.5 py-1 rounded-lg bg-[#EEF5EE] border border-[#BAD8BF] text-[#1C4824] font-bold">
-            พร้อมผลิต:{' '}
-            <strong className="font-mono">{totalProducibleEps} EP</strong>
-          </span>
-          {readySoloEpsCount > 0 && (
-            <span className="px-2.5 py-1 rounded-lg bg-[#FEF8ED] border border-[#EDD7AF] text-[#734B17] font-bold">
-              Solo EP พร้อม:{' '}
-              <strong className="font-mono">{readySoloEpsCount}</strong>
+    <AnimatePresence initial={false}>
+      {isSearchOpen && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="bg-[#FAF8F5] border-b border-[#E8DFD3] px-3.5 sm:px-5 py-2.5 shrink-0 space-y-2 overflow-hidden"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-[#4D3A24] flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-[#78593A]" />
+              <span>ค้นหาด่วนข้ามทั้ง 3 ชั้น</span>
             </span>
-          )}
-        </div>
-      </div>
+            {onCloseSearch && (
+              <button
+                type="button"
+                onClick={onCloseSearch}
+                className="text-xs text-[#7D6E61] hover:text-[#3D332A] inline-flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded-md hover:bg-white border border-transparent hover:border-[#E2D5C4]"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>ปิด</span>
+              </button>
+            )}
+          </div>
 
-      {/* Instant Search Jump Strip */}
-      <AnimatePresence initial={false}>
-        {searchQuery.trim().length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <div className="p-2 rounded-xl bg-white border border-[#E3D8CB] flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-[#7D6E61] px-1">
-                ผลการค้นหา ({searchResults.length}):
-              </span>
-              {searchResults.length === 0 ? (
-                <span className="text-xs text-[#8C7B6C] italic">
-                  ไม่พบแท็กที่ตรงกับ &ldquo;{searchQuery}&rdquo;
-                </span>
-              ) : (
-                searchResults.map((item) => {
-                  const colorCfg = getPastelColorConfig(
-                    item.parentTag?.color || item.tag.color
-                  );
-                  return (
-                    <button
-                      key={item.tag.id}
-                      type="button"
-                      onClick={() => {
-                        if (item.resolvedGroupId && item.parentTag) {
-                          onJumpToTag(item.resolvedGroupId, item.parentTag.id);
-                        }
-                        setSearchQuery('');
-                      }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#FAF7F2] hover:bg-[#EEF5EE] text-[#3D332A] border border-[#E2D5C4] transition-colors cursor-pointer"
-                      title={`คลิกเพื่อเปิดในคอลัมน์ (${item.groupName})`}
-                    >
-                      <span
-                        className={`w-2 h-2 rounded-full ${colorCfg.swatchBg}`}
-                      />
-                      <span>#{item.tag.name}</span>
-                      <span className="text-[10px] font-mono text-[#6E5F52]">
-                        ({item.usableCount}/{item.totalCount} ฟุต)
-                      </span>
-                      <ArrowRight className="w-3 h-3 text-[#3B6845]" />
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          <div className="relative w-full max-w-xl">
+            <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="พิมพ์ชื่อแท็ก, หมวดย่อย, หรือรหัส TAG-xxxx..."
+              className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#8FA892] shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Instant Search Jump Strip */}
+          <AnimatePresence initial={false}>
+            {searchQuery.trim().length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+                className="overflow-hidden pt-1"
+              >
+                <div className="p-2 rounded-xl bg-white border border-[#E3D8CB] flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-[#7D6E61] px-1">
+                    ผลการค้นหา ({searchResults.length}):
+                  </span>
+                  {searchResults.length === 0 ? (
+                    <span className="text-xs text-[#8C7B6C] italic">
+                      ไม่พบแท็กที่ตรงกับ &ldquo;{searchQuery}&rdquo;
+                    </span>
+                  ) : (
+                    searchResults.map((item) => {
+                      const colorCfg = getPastelColorConfig(item.tag.color);
+                      return (
+                        <button
+                          key={item.tag.id}
+                          type="button"
+                          onClick={() => {
+                            onJumpToTag(item.tier, item.tag.name);
+                            setSearchQuery('');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#FAF7F2] hover:bg-[#EEF5EE] text-[#3D332A] border border-[#E2D5C4] transition-colors cursor-pointer"
+                          title={`คลิกเพื่อกรองในคอลัมน์ Tier ${item.tier} (${item.subCategory})`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${colorCfg.swatchBg}`}
+                          />
+                          <span className="text-[10px] font-mono px-1 rounded bg-[#EFE7DC] text-[#524538]">
+                            T{item.tier}:{item.subCategory}
+                          </span>
+                          <span>#{item.tag.name}</span>
+                          <span className="text-[10px] font-mono text-[#6E5F52]">
+                            ({item.usableCount}/{item.totalCount} ฟุต)
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-[#3B6845]" />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
 interface ThreeTierConceptBannerProps {
   isOpen: boolean;
+  onOpenTagRulesDictionary?: () => void;
 }
 
 export const ThreeTierConceptBanner: React.FC<ThreeTierConceptBannerProps> = ({
   isOpen,
+  onOpenTagRulesDictionary,
 }) => {
   return (
     <AnimatePresence initial={false}>
@@ -483,16 +552,45 @@ export const ThreeTierConceptBanner: React.FC<ThreeTierConceptBannerProps> = ({
           transition={{ duration: 0.22, ease: 'easeInOut' }}
           className="overflow-hidden"
         >
-          <div className="px-3.5 py-2.5 rounded-xl bg-[#FEF8ED] border border-[#EDD7AF] flex items-center gap-2.5 text-xs text-[#6E583C]">
-            <Lightbulb className="w-4 h-4 text-[#A67438] shrink-0" />
-            <span className="leading-relaxed">
-              <strong className="font-bold text-[#4D3A24]">
-                แนวคิดแท็กหลายมิติ:
-              </strong>{' '}
-              แต่ละกลุ่มแท็กทำหน้าที่เป็นมิติอิสระ (เช่น มิติตัวละคร,
-              มิติมุก/แกล้ง, มิติสถานการณ์) ฟุตเทจ 1 คลิปสามารถเลือกแท็กได้หลายมิติพร้อมกัน
-              พร้อมคำนวณจำนวนฟุตเทจพร้อมใช้และแจ้งเตือนเมื่อแท็กย่อยครบ 5 คลิปสำหรับทำ Solo EP ทันที
-            </span>
+          <div className="p-3.5 rounded-2xl bg-[#FEF8ED] border border-[#EDD7AF] space-y-2.5 text-xs text-[#6E583C] shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-[#A67438] shrink-0" />
+                <span className="font-extrabold text-[#4D3A24]">
+                  ระบบ Tag 3 ชั้นอิสระ (3-Tier Independent Faceted Tags)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-[#8C6D45] hidden sm:inline">
+                  ฟุตเทจ 1 คลิปติดป้ายผสมกันได้อย่างอิสระจากทั้ง 3 มิติ
+                </span>
+                {onOpenTagRulesDictionary && (
+                  <button
+                    type="button"
+                    onClick={onOpenTagRulesDictionary}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-[#2E7D32]" />
+                    <span>เปิดดู Data Dictionary ฉบับเต็ม</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-[11px]">
+              <div className="p-2 rounded-xl bg-[#EEF5FB] border border-[#C5DCEF] text-[#184366]">
+                <strong className="block font-bold mb-0.5">Tier 1 · หมวดกว้าง (Topic):</strong>
+                <span className="text-[#325A7E]">บอกว่าคลิปนี้อยู่วงการไหน เช่น #คนมีชื่อเสียง #วิถีชาวบ้าน #สัตว์โลก #อาชีพ #สื่อและบันเทิง #ความเชื่อและลี้ลับ #ทั่วไป</span>
+              </div>
+              <div className="p-2 rounded-xl bg-[#FEF6E8] border border-[#E8CFA6] text-[#6B4415]">
+                <strong className="block font-bold mb-0.5">Tier 2 · บริบท/สไตล์ (Context):</strong>
+                <span className="text-[#7F521B]">กลุ่ม A–D เช่น #พูดผิด #ช็อตฟีล #น้ำท่วม #สัมภาษณ์ข่าว #ไลฟ์สด #คลิปในตำนาน</span>
+              </div>
+              <div className="p-2 rounded-xl bg-[#EDF6F0] border border-[#BFE0C8] text-[#1D4D2B]">
+                <strong className="block font-bold mb-0.5">Tier 3 · บุคคล/รายการ (Entity):</strong>
+                <span className="text-[#255E36]">ระบุว่าใครหรือรายการอะไร เช่น #พี่เสก #แจ๊ส #เซียนหรั่ง #แก๊บโบ๋ #โหนกระแส</span>
+              </div>
+            </div>
           </div>
         </motion.div>
       )}
@@ -521,12 +619,11 @@ export const ThreeTierEmptyState: React.FC<ThreeTierEmptyStateProps> = ({
       </div>
       <div className="max-w-lg space-y-1.5">
         <h3 className="text-lg font-bold text-[#3F3529]">
-          สตูดิโอยังไม่มีมิติกลุ่มแท็ก พร้อมสำหรับข้อมูลจริงของคุณแล้ว
+          สตูดิโอยังไม่มีป้ายแท็ก พร้อมสร้างระบบแท็ก 3 ชั้นของคุณแล้ว
         </h3>
         <p className="text-sm text-[#736859]">
-          คุณสามารถเริ่มสร้างมิติแรก (เช่น &quot;คนมีชื่อเสียง / ดารา&quot;,
-          &quot;ลีลามุก & แกล้ง&quot;, หรือ &quot;วิถีชีวิต & ไวรัล&quot;)
-          เพื่อเริ่มติดแท็กคลิป หรือกดโหลดโครงสร้างตัวอย่างกลับมาใช้งาน
+          คุณสามารถเริ่มสร้างป้ายแท็กใน Tier 1, Tier 2, หรือ Tier 3
+          หรือกดโหลดโครงสร้างตัวอย่างกลับมาใช้งานได้ทันที
         </p>
       </div>
       <div className="flex items-center gap-3">
@@ -536,7 +633,7 @@ export const ThreeTierEmptyState: React.FC<ThreeTierEmptyStateProps> = ({
           className="px-4 py-2.5 bg-[#78593A] hover:bg-[#62462A] text-white rounded-xl text-sm font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span>สร้างมิติกลุ่มแท็กแรกของคุณ</span>
+          <span>เริ่มสร้างแท็กแรก</span>
         </button>
         <button
           type="button"
@@ -563,7 +660,7 @@ export const ThreeTierModalFooter: React.FC<ThreeTierModalFooterProps> = ({
       <div className="flex items-center gap-2">
         <Info className="w-4 h-4 text-[#8A6840] shrink-0" />
         <span>
-          มิติกลุ่มแท็ก สีป้ายพาสเทล และเกณฑ์สีพักฟุตจะอัปเดตแบบเรียลไทม์ทั่วทั้งระบบทันที
+          การย้ายแท็กข้าม Tier และหมวดหมู่ย่อยจะซิงก์ขึ้น Cloud ทันทีโดยไม่กระทบป้ายแท็กที่ติดอยู่ในคลิปฟุตเทจ
         </span>
       </div>
       <button

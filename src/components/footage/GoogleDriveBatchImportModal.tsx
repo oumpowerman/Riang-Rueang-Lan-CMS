@@ -103,6 +103,15 @@ export const GoogleDriveBatchImportModal: React.FC = () => {
                 onSyncModeChange={driveImport.setSyncMode}
                 folderSyncRecord={driveImport.folderSyncRecord}
                 isLoadingSyncRecord={driveImport.isLoadingSyncRecord}
+                onResetFolderSyncHistory={
+                  driveImport.handleResetFolderSyncHistory
+                }
+                onAdjustSyncLookbackDays={
+                  driveImport.handleAdjustSyncLookbackDays
+                }
+                onSetCustomSyncTimestamp={
+                  driveImport.handleSetCustomSyncTimestamp
+                }
                 categoryStrategy={driveImport.categoryStrategy}
                 onSelectSubfolderStrategy={
                   driveImport.handleSelectSubfolderStrategy

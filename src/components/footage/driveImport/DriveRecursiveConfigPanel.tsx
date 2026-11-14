@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AlertCircle,
   Bookmark,
+  CalendarClock,
   Check,
   Clock,
   Folder,
@@ -12,6 +13,8 @@ import {
   Link2,
   Pencil,
   RefreshCw,
+  RotateCcw,
+  Trash2,
   X,
   Zap,
 } from 'lucide-react';
@@ -41,6 +44,9 @@ interface DriveRecursiveConfigPanelProps {
   onSyncModeChange: (mode: DriveSyncMode) => void;
   folderSyncRecord: DriveSyncRecord | null;
   isLoadingSyncRecord: boolean;
+  onResetFolderSyncHistory?: () => void;
+  onAdjustSyncLookbackDays?: (daysAgo: number) => void;
+  onSetCustomSyncTimestamp?: (isoDateStr: string) => void;
   categoryStrategy: DriveCategoryStrategy;
   onSelectSubfolderStrategy: () => void;
   onSelectAllToStagingStrategy: () => void;
@@ -68,6 +74,9 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
   onSyncModeChange,
   folderSyncRecord,
   isLoadingSyncRecord,
+  onResetFolderSyncHistory,
+  onAdjustSyncLookbackDays,
+  onSetCustomSyncTimestamp,
   categoryStrategy,
   onSelectSubfolderStrategy,
   onSelectAllToStagingStrategy,
@@ -79,6 +88,9 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
 }) => {
   const [isNamingFolder, setIsNamingFolder] = useState(false);
   const [customFolderName, setCustomFolderName] = useState('');
+  const [isAdjustingSyncDate, setIsAdjustingSyncDate] = useState(false);
+  const [lookbackDaysInput, setLookbackDaysInput] = useState<string>('12');
+  const [customDateInput, setCustomDateInput] = useState<string>('');
 
   const currentSavedPreset = savedFolders.find(
     (f) => f.folderId === activeFolderId
@@ -100,6 +112,20 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
     }
   };
 
+  const formatRelativeDaysAgo = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const target = new Date(isoString).getTime();
+      if (isNaN(target)) return '';
+      const diffMs = Date.now() - target;
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays <= 0) return 'วันนี้';
+      return `${diffDays} วันที่แล้ว`;
+    } catch {
+      return '';
+    }
+  };
+
   const handleOpenNameEditor = () => {
     setCustomFolderName(
       currentSavedPreset?.folderName ||
@@ -112,6 +138,20 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
   const handleConfirmSavePreset = () => {
     onSaveCurrentFolderPreset(customFolderName);
     setIsNamingFolder(false);
+  };
+
+  const handleApplyLookbackDays = (days: number) => {
+    onAdjustSyncLookbackDays?.(days);
+    setIsAdjustingSyncDate(false);
+  };
+
+  const handleApplyCustomDate = (dateVal: string) => {
+    if (!dateVal) return;
+    const d = new Date(`${dateVal}T00:00:00`);
+    if (!isNaN(d.getTime())) {
+      onSetCustomSyncTimestamp?.(d.toISOString());
+      setIsAdjustingSyncDate(false);
+    }
   };
 
   return (
@@ -262,15 +302,9 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
                             isActive ? 'text-emerald-600' : 'text-indigo-500'
                           }`}
                         />
-                        <span className="font-bold truncate max-w-[180px]">
+                        <span className="font-bold truncate max-w-[220px]">
                           {preset.folderName}
                         </span>
-                        {typeof preset.totalClipsInFolder === 'number' &&
-                          preset.totalClipsInFolder > 0 && (
-                            <span className="text-[10px] font-mono tabular-nums text-slate-500">
-                              · {preset.totalClipsInFolder.toLocaleString()} คลิป
-                            </span>
-                          )}
                       </button>
                       <button
                         type="button"
@@ -288,22 +322,46 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
           )}
         </div>
 
-        {/* Delta Sync History & Mode Selector */}
+        {/* Delta Sync History, Lookback Adjuster & Mode Selector */}
         {folderSyncRecord?.lastSyncTimestamp ? (
-          <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-2">
+          <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs text-slate-700">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
                 <History className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span className="font-semibold text-slate-900">
                   เคยซิงค์โฟลเดอร์นี้ล่าสุด:
                 </span>
-                <span className="font-mono tabular-nums text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/70">
+                <span className="font-mono tabular-nums text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
                   {formatSyncDate(folderSyncRecord.lastSyncTimestamp)}
+                  {formatRelativeDaysAgo(folderSyncRecord.lastSyncTimestamp)
+                    ? ` (${formatRelativeDaysAgo(folderSyncRecord.lastSyncTimestamp)})`
+                    : ''}
                 </span>
-                {folderSyncRecord.totalClipsInFolder > 0 && (
-                  <span className="text-[11px] font-mono tabular-nums text-slate-500">
-                    (สะสมแล้ว {folderSyncRecord.totalClipsInFolder.toLocaleString()} คลิป)
-                  </span>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustingSyncDate((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                    isAdjustingSyncDate
+                      ? 'bg-amber-50 text-amber-900 border-amber-300'
+                      : 'bg-slate-50 hover:bg-amber-50/70 text-slate-700 hover:text-amber-900 border-slate-200'
+                  }`}
+                  title="ถอยวันซิงก์ย้อนหลัง (กรณีเผลอกดซิงก์แล้วปิดทิ้ง หรือต้องการดึงไฟล์ย้อนหลังใหม่)"
+                >
+                  <CalendarClock className="w-3.5 h-3.5 text-amber-700" />
+                  <span>ปรับวันย้อนหลัง</span>
+                </button>
+
+                {onResetFolderSyncHistory && (
+                  <button
+                    type="button"
+                    onClick={onResetFolderSyncHistory}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/80 transition-colors cursor-pointer"
+                    title="ล้างประวัติเวลาซิงก์ของโฟลเดอร์นี้เพื่อเริ่มซิงก์ใหม่"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>ล้างประวัติซิงก์</span>
+                  </button>
                 )}
               </div>
 
@@ -338,6 +396,74 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
               </div>
             </div>
 
+            {/* Inline Adjustable Sync Lookback Panel */}
+            {isAdjustingSyncDate && (
+              <div className="p-3 rounded-xl bg-[#FAF8F5] border border-amber-200/90 space-y-2.5 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-stone-800 flex items-center gap-1">
+                      <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                      <span>ถอยเวลาซิงก์กลับไปเมื่อ:</span>
+                    </span>
+                    <div className="inline-flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        max={3650}
+                        value={lookbackDaysInput}
+                        onChange={(e) => setLookbackDaysInput(e.target.value)}
+                        className="w-18 px-2 py-1 text-xs font-mono font-bold text-center bg-white border border-stone-300 rounded-lg focus:outline-none focus:border-amber-600 text-stone-900"
+                      />
+                      <span className="font-semibold text-stone-700">วันที่แล้ว</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleApplyLookbackDays(
+                            Math.max(0, parseInt(lookbackDaysInput, 10) || 0)
+                          )
+                        }
+                        className="px-3 py-1 rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-bold cursor-pointer transition-colors"
+                      >
+                        ยืนยันถอยวัน
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-stone-500">หรือระบุวันที่เอง:</span>
+                    <input
+                      type="date"
+                      value={customDateInput}
+                      onChange={(e) => {
+                        setCustomDateInput(e.target.value);
+                        handleApplyCustomDate(e.target.value);
+                      }}
+                      className="px-2 py-1 text-xs font-mono bg-white border border-stone-300 rounded-lg text-stone-800 focus:outline-none focus:border-amber-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-amber-200/60">
+                  <span className="text-[11px] font-semibold text-stone-600">
+                    ปุ่มลัดถอยวันด่วน:
+                  </span>
+                  {[1, 3, 7, 12, 14, 30].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => {
+                        setLookbackDaysInput(String(d));
+                        handleApplyLookbackDays(d);
+                      }}
+                      className="px-2.5 py-0.5 rounded-md bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-stone-200 font-semibold text-[11px] transition-colors cursor-pointer"
+                    >
+                      ย้อน {d} วัน
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {syncMode === 'DELTA' && (
               <p className="text-[11px] text-slate-600 flex items-center gap-1 leading-relaxed">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
@@ -351,16 +477,68 @@ export const DriveRecursiveConfigPanel: React.FC<DriveRecursiveConfigPanelProps>
             )}
           </div>
         ) : folderUrl.trim() && !isLoadingSyncRecord ? (
-          <div className="px-3 py-2 rounded-xl bg-indigo-50/60 border border-indigo-100/80 flex items-center justify-between text-xs text-indigo-900">
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-indigo-600" />
-              <span>
-                ยังไม่มีประวัติการซิงค์สำหรับโฟลเดอร์นี้ (จะทำการสแกนเต็มรูปแบบครั้งแรก)
+          <div className="px-3 py-2 rounded-xl bg-indigo-50/60 border border-indigo-100/80 space-y-2 text-xs text-indigo-900">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                <span>
+                  ยังไม่มีประวัติการซิงค์สำหรับโฟลเดอร์นี้ (จะทำการสแกนเต็มรูปแบบครั้งแรก)
+                </span>
               </span>
-            </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-200/80 text-indigo-800">
-              โหมด Full Scan
-            </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustingSyncDate((prev) => !prev)}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 cursor-pointer"
+                >
+                  <CalendarClock className="w-3 h-3" />
+                  <span>กำหนดวันเริ่มซิงก์ย้อนหลังเอง</span>
+                </button>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-200/80 text-indigo-800">
+                  โหมด Full Scan
+                </span>
+              </div>
+            </div>
+
+            {isAdjustingSyncDate && (
+              <div className="p-2.5 rounded-xl bg-white border border-indigo-200 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-700">ดึงเฉพาะไฟล์ย้อนหลัง:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={3650}
+                    value={lookbackDaysInput}
+                    onChange={(e) => setLookbackDaysInput(e.target.value)}
+                    className="w-16 px-2 py-1 text-xs font-mono font-bold text-center bg-slate-50 border border-slate-300 rounded-lg"
+                  />
+                  <span>วันที่แล้ว</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleApplyLookbackDays(
+                        Math.max(0, parseInt(lookbackDaysInput, 10) || 0)
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer"
+                  >
+                    ตั้งค่า
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                  {[3, 7, 12, 14, 30].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => handleApplyLookbackDays(d)}
+                      className="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 font-semibold text-[11px] cursor-pointer"
+                    >
+                      ย้อน {d} วัน
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
 

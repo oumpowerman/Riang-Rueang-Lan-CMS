@@ -14,7 +14,8 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { useCMS } from '../../../context/CMSContext';
-import { isStagingTagId } from '../../../services/seedData';
+import { isStagingTagId, normalizeFootageTags } from '../../../services/seedData';
+import { CleanPrefixedTitlesButton } from '../CleanPrefixedTitlesButton';
 import {
   CategoryGroupOverviewItem,
   MainCategoryOverviewItem,
@@ -26,8 +27,8 @@ import { StagingStudioFootageList } from './StagingStudioFootageList';
 interface FullscreenStagingStudioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  categoryGroupsOverview: CategoryGroupOverviewItem[];
-  mainCategoriesOverview: MainCategoryOverviewItem[];
+  categoryGroupsOverview?: CategoryGroupOverviewItem[];
+  mainCategoriesOverview?: MainCategoryOverviewItem[];
   lastUndoRecord: QuickSortUndoRecord | null;
   onQuickAssignCategory: (footageIds: string[], targetTagId: string) => void;
   onUndoLastQuickSort: () => void;
@@ -123,16 +124,8 @@ export const FullscreenStagingStudioModal: React.FC<FullscreenStagingStudioModal
 
     if (targetIds.length === 0) return;
 
-    // Resolve 3-tier hierarchy: if any selected tag is a subtag, automatically include its parent
-    const expandedTags = new Set<string>();
-    stagedTagIds.forEach((tid) => {
-      expandedTags.add(tid);
-      const tagObj = tagMap[tid];
-      if (tagObj?.parentId && !isStagingTagId(tagObj.parentId)) {
-        expandedTags.add(tagObj.parentId);
-      }
-    });
-    const finalTags = Array.from(expandedTags);
+    // In 3-tier independent faceted taxonomy, tags are saved directly and normalized
+    const finalTags = normalizeFootageTags(stagedTagIds);
 
     // Calculate next footage before state update
     if (isAutoAdvanceEnabled) {
@@ -255,6 +248,8 @@ export const FullscreenStagingStudioModal: React.FC<FullscreenStagingStudioModal
 
             {/* Right Controls */}
             <div className="flex items-center gap-2">
+              <CleanPrefixedTitlesButton compact />
+
               {lastUndoRecord && (
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-[#eef5ee] border border-[#bad8bf] text-[#254b2d] text-xs">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#3b6845] shrink-0" />
@@ -352,8 +347,6 @@ export const FullscreenStagingStudioModal: React.FC<FullscreenStagingStudioModal
                   activeFootage={activeFootage}
                   activeFootageIndex={activeFootageIndex}
                   totalStagingCount={stagingCount}
-                  categoryGroupsOverview={categoryGroupsOverview}
-                  mainCategoriesOverview={mainCategoriesOverview}
                   stagedTagIds={stagedTagIds}
                   onToggleTag={handleToggleTag}
                   onClearStagedTags={handleClearStagedTags}

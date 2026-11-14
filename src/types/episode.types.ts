@@ -9,8 +9,11 @@ export type EpisodeWorkflowStage =
 export interface EpisodeRankingSlot {
   rank: 5 | 4 | 3 | 2 | 1;
   footageId: string | null;
+  rankTitle?: string; // Col C: ชื่ออันดับในคลิป (เช่น "จอมยุทธ์เสก", "อยากเก่งแบบพี่เสก")
+  punchlineNote?: string; // Col D: คำสร้อย/มุกตลกประจำอันดับ (เช่น "ไทยแท้แน่นอน", "คิดดีไม่ได้เลย")
+  isCustomOverride?: boolean; // true = ล็อกคำสร้อย/ชื่อฟุตเฉพาะ EP นี้, false/undefined = ดึงแบบ Realtime จากตัวฟุตเทจหลัก
   mascotScript: string; // บทพูดมาสคอตของอันดับนั้น
-  snapshotNote?: string; // บันทึกสถานะฟุตตอนนำมาผสม เช่น "ฟุตใหม่แกะกล่อง" หรือ "นำฟุตเก่าพัก 80 วันมาวนใช้"
+  snapshotNote?: string; // บันทึกสถานะฟุตตอนนำมาผสม หรือสรุปชื่ออันดับ/คำสร้อย
 }
 
 export interface MasterVideoInfo {

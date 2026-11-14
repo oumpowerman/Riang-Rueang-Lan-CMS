@@ -31,13 +31,36 @@ export function generateMasterEpisodeFileName(
   return `${episodeId}_${publishDate}_${slotTag}_${sanitizedTitle || '5อันดับเรียงเรื่องลั่น'}.mp4`;
 }
 
+const MEDIA_EXTENSION_REGEX = /\.(mp4|mov|mkv|avi|webm|flv|m4v|mp3|wav)$/i;
+
+const LEADING_RANK_PREFIX_REGEX =
+  /^(?:(?:อันดับ(?:ที่)?\s*\d{1,3}\s*(?:[.)\-:]+|\s+))|(?:\(\s*\d{1,3}\s*\)|\[\s*\d{1,3}\s*\]|\d{1,3}\s*[.)\-:]+))\s*/i;
+
+export function stripLeadingRankPrefix(title: string): string {
+  if (!title) return '';
+  const trimmed = title.trim();
+  const stripped = trimmed.replace(LEADING_RANK_PREFIX_REGEX, '').trim();
+  return stripped.length > 0 ? stripped : trimmed;
+}
+
+export function hasLeadingRankPrefix(rawTitle: string): boolean {
+  if (!rawTitle) return false;
+  const withoutExt = rawTitle.trim().replace(MEDIA_EXTENSION_REGEX, '').trim();
+  if (!withoutExt) return false;
+  const stripped = stripLeadingRankPrefix(withoutExt);
+  return stripped.length > 0 && stripped !== withoutExt;
+}
+
 export function cleanFootageTitle(rawTitle: string): string {
   if (!rawTitle) return 'คลิปฟุตเทจ';
-  return rawTitle
+  const withoutExt = rawTitle
     .trim()
-    .replace(/\.(mp4|mov|mkv|avi|webm|flv|m4v|mp3|wav)$/i, '')
+    .replace(MEDIA_EXTENSION_REGEX, '')
     .trim();
+  const cleaned = stripLeadingRankPrefix(withoutExt);
+  return cleaned || withoutExt || 'คลิปฟุตเทจ';
 }
+
 
 export function generateNextId(
   prefix: 'FT' | 'SRC' | 'EP' | 'TAG' | 'GRP' | 'CLP',

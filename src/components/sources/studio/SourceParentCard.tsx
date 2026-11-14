@@ -13,6 +13,7 @@ import { RawSource } from '../../../types/source.types';
 import { CategoryTag, SystemSettings } from '../../../types/tag.types';
 import { formatThaiDate } from '../../../utils/fileNameGenerator';
 import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
+import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 import { TagPill } from '../../ui/TagPill';
 import { SourceTimelineBar } from '../SourceTimelineBar';
 import { SourceChildClipsTable } from './SourceChildClipsTable';
@@ -87,7 +88,7 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
     id: source.id,
     title: source.title,
     originalUrl: source.originalUrl || '',
-    driveFileUrl: childFootages[0]?.driveFileUrl || '',
+    driveFileUrl: source.driveFolderUrl || childFootages[0]?.driveFileUrl || '',
     thumbnailUrl: childFootages[0]?.thumbnailUrl || '',
     timestampRange: source.totalDuration || null,
     durationSec: undefined,
@@ -175,6 +176,19 @@ export const SourceParentCard: React.FC<SourceParentCardProps> = ({
             <ExternalLink className="w-3.5 h-3.5" />
             <span>ต้นฉบับ</span>
           </a>
+
+          {source.driveFolderUrl && (
+            <a
+              href={source.driveFolderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-indigo-800 bg-indigo-50/90 hover:bg-indigo-100 border border-indigo-200/90 rounded-xl transition-colors whitespace-nowrap"
+              title="เปิดโฟลเดอร์ Google Drive ต้นฉบับ"
+            >
+              <GoogleDriveIcon className="w-3.5 h-3.5" />
+              <span>โฟลเดอร์ Drive</span>
+            </a>
+          )}
 
           <button
             type="button"

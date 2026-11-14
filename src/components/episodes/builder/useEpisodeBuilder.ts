@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCMS } from '../../../context/CMSContext';
-import { isStagingGroupId, isStagingTagId } from '../../../services/seedData';
+import { isStagingTagId } from '../../../services/seedData';
 import {
   Episode,
   EpisodeProductionTarget,
@@ -8,7 +8,7 @@ import {
   EpisodeWorkflowStage,
   PublishSlot,
 } from '../../../types/episode.types';
-import { CategoryTag } from '../../../types/tag.types';
+import { DEFAULT_TIER_SUBCATEGORIES } from '../../../types/tag.types';
 import {
   MixRecipeId,
   analyzeEpisodeCollisions,
@@ -20,18 +20,18 @@ import {
   generateMasterEpisodeFileName,
   generateNextId,
 } from '../../../utils/fileNameGenerator';
+import { extractDefaultRankFields } from '../../../utils/episodeScriptGenerator';
 import {
   BuilderStepNumber,
   DEFAULT_RANKINGS_1_TO_5,
   DuplicateSubcategoryWarning,
-  GroupStockStat,
-  LiveCategoryStock,
   PickerSortBy,
   PoolQuickFilter,
   RANK_ORDER_1_TO_5,
   RankNumber,
   SlotDropPayload,
 } from './builder.types';
+import { useBuilderThreeTierScope } from './useBuilderThreeTierScope';
 
 export function useEpisodeBuilder() {
   const {
@@ -57,178 +57,145 @@ export function useEpisodeBuilder() {
     episodes.map((e) => e.id)
   );
 
-  // Helper to resolve Tier 0 Group ID for any Tier 1 or Tier 2 tag
-  const resolveTagGroupId = useCallback(
-    (tag: CategoryTag | undefined | null): string => {
-      if (!tag) return categoryGroups[0]?.id || 'GRP-PERSON';
-      if (tag.groupId && categoryGroupMap[tag.groupId]) {
-        return tag.groupId;
-      }
-      if (tag.parentId && tagMap[tag.parentId]) {
-        const parent = tagMap[tag.parentId];
-        if (parent.groupId && categoryGroupMap[parent.groupId]) {
-          return parent.groupId;
-        }
-        const fallbackParentGrp = `GRP-${parent.groupType || 'GENERAL'}`;
-        if (categoryGroupMap[fallbackParentGrp]) return fallbackParentGrp;
-      }
-      const fallbackGrp = `GRP-${tag.groupType || 'GENERAL'}`;
-      if (categoryGroupMap[fallbackGrp]) return fallbackGrp;
-      return categoryGroups[0]?.id || 'GRP-PERSON';
-    },
-    [categoryGroups, categoryGroupMap, tagMap]
-  );
-
-  // Sort categories so those with >=5 ready clips come first (only real Tier 1 main categories, excluding Staging Area)
-  const sortedCategories = useMemo(() => {
-    const mainList = categoryMatrix.filter(
-      (c) =>
-        !isStagingTagId(c.tag.id) &&
-        (c.tag.tier === 1 || (!c.tag.parentId && !c.tag.tier))
+  // Determine initial primary tag (prefer highest-stock real tag)
+  const initialDefaultTagId = useMemo(() => {
+    const nonStaging = categoryMatrix
+      .filter((c) => !isStagingTagId(c.tag.id))
+      .sort((a, b) => b.usableCount - a.usableCount);
+    return (
+      nonStaging[0]?.tag.id ||
+      tags.find((t) => !isStagingTagId(t.id))?.id ||
+      'TAG-0004'
     );
-    return [...mainList].sort((a, b) => {
-      if (b.producibleEpisodesCount !== a.producibleEpisodesCount) {
-        return b.producibleEpisodesCount - a.producibleEpisodesCount;
-      }
-      return b.usableCount - a.usableCount;
-    });
-  }, [categoryMatrix]);
+  }, [categoryMatrix, tags]);
 
-  const defaultCategoryId = sortedCategories[0]?.tag.id || tags[0]?.id || 'TAG-0004';
-  const defaultGroupId = useMemo(() => {
-    const defTag = tagMap[defaultCategoryId];
-    return resolveTagGroupId(defTag);
-  }, [tagMap, defaultCategoryId, resolveTagGroupId]);
-
-  // Step 1: 3-Tier Selection State (Tier 0 Group -> Tier 1 Main Category -> Tier 2 Subcategory)
-  const [selectedGroupId, setSelectedGroupId] = useState<string>(defaultGroupId);
-  const [mainCategoryTagId, setMainCategoryTagId] = useState<string>(defaultCategoryId);
+  // Step 1: Primary Tag & Legacy Group Compatibility State
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(
+    categoryGroups[0]?.id || 'GRP-PERSON'
+  );
+  const [mainCategoryTagId, setMainCategoryTagId] =
+    useState<string>(initialDefaultTagId);
   const [productionTarget, setProductionTarget] =
     useState<EpisodeProductionTarget>('MAIN_CATEGORY_VARIETY');
-  const [targetSubcategoryId, setTargetSubcategoryId] = useState<string | null>(null);
-
-  // Compute Tier 0 Group Stock Stats (excluding Staging Group)
-  const groupStockStats = useMemo<GroupStockStat[]>(() => {
-    return categoryGroups
-      .filter((group) => !isStagingGroupId(group.id))
-      .map((group) => {
-        const groupMainStats = sortedCategories.filter(
-          (stat) => resolveTagGroupId(stat.tag) === group.id
-        );
-      const groupMainIds = new Set(groupMainStats.map((s) => s.tag.id));
-      const subcategoriesCount = tags.filter(
-        (t) => t.tier === 2 && t.parentId && groupMainIds.has(t.parentId)
-      ).length;
-
-      // Collect unique footages across all categories in this group
-      const uniqueFootageIds = new Set<string>();
-      const uniqueUsableIds = new Set<string>();
-      const uniqueNewIds = new Set<string>();
-      const uniqueReadyIds = new Set<string>();
-
-      groupMainStats.forEach((stat) => {
-        stat.allFootages.forEach((ft) => uniqueFootageIds.add(ft.id));
-        stat.usableFootages.forEach((ft) => {
-          uniqueUsableIds.add(ft.id);
-          if (ft.cooldownStatus === 'NEW_UNTOUCHED') uniqueNewIds.add(ft.id);
-          if (ft.cooldownStatus === 'READY_FRESH') uniqueReadyIds.add(ft.id);
-        });
-      });
-
-      const usableCount = uniqueUsableIds.size;
-      const producibleEpisodesCount = groupMainStats.reduce(
-        (sum, s) => sum + s.producibleEpisodesCount,
-        0
-      );
-
-      return {
-        group,
-        mainCategoriesCount: groupMainStats.length,
-        subcategoriesCount,
-        totalCount: uniqueFootageIds.size,
-        usableCount,
-        newCount: uniqueNewIds.size,
-        readyCount: uniqueReadyIds.size,
-        producibleEpisodesCount,
-      };
-    });
-  }, [categoryGroups, sortedCategories, tags, resolveTagGroupId]);
-
-  // Filter Tier 1 Main Categories by currently selected Tier 0 Group
-  const categoriesInSelectedGroup = useMemo(() => {
-    return sortedCategories.filter(
-      (stat) => resolveTagGroupId(stat.tag) === selectedGroupId
-    );
-  }, [sortedCategories, selectedGroupId, resolveTagGroupId]);
-
-  // Subcategories under currently selected mainCategoryTagId (Tier 2)
-  const currentSubcategories = useMemo(() => {
-    return tags.filter((t) => t.parentId === mainCategoryTagId);
-  }, [tags, mainCategoryTagId]);
-
-  // Active Tier 0 Group & Active Tier 2 Subcategory objects
-  const activeGroup = useMemo(
-    () => categoryGroupMap[selectedGroupId] || categoryGroups[0] || null,
-    [categoryGroupMap, selectedGroupId, categoryGroups]
+  const [targetSubcategoryId, setTargetSubcategoryId] = useState<string | null>(
+    null
   );
 
-  const activeSubcategory = useMemo(
-    () => (targetSubcategoryId ? tagMap[targetSubcategoryId] || null : null),
-    [targetSubcategoryId, tagMap]
+  // Active Progressive Accordion Step (1 | 2 | 3)
+  const [activeBuilderStep, setActiveBuilderStep] =
+    useState<BuilderStepNumber>(1);
+
+  // Step 2: Active Recipe State & Rankings 1..5
+  const [activeRecipe, setActiveRecipe] = useState<MixRecipeId>(
+    'FORMULA_2_NEW_3_FRESH'
   );
-
-  // Active Progressive Accordion Step (1 | 2 | 3 | 4)
-  const [activeBuilderStep, setActiveBuilderStep] = useState<BuilderStepNumber>(1);
-
-  // Step 2: Active Recipe State
-  const [activeRecipe, setActiveRecipe] = useState<MixRecipeId>('FORMULA_2_NEW_3_FRESH');
-
-  // Step 3: Rankings 1 -> 2 -> 3 -> 4 -> 5
-  const [rankings, setRankings] = useState<EpisodeRankingSlot[]>(DEFAULT_RANKINGS_1_TO_5);
+  const [rankings, setRankings] = useState<EpisodeRankingSlot[]>(
+    DEFAULT_RANKINGS_1_TO_5
+  );
   const [activeSlotRank, setActiveSlotRank] = useState<RankNumber>(1);
+
+  const selectedFootageIds = useMemo(
+    () =>
+      rankings
+        .map((r) => r.footageId)
+        .filter((id): id is string => Boolean(id)),
+    [rankings]
+  );
+
+  const selectedFootageObjects = useMemo(
+    () =>
+      rankings.map((r) =>
+        r.footageId ? computedFootageMap[r.footageId] || null : null
+      ),
+    [rankings, computedFootageMap]
+  );
+
+  // 3-Tier Independent Scope & Stock Hook
+  const {
+    resolveTagGroupId,
+    tagStockMap,
+    tier1Groups,
+    tier2Groups,
+    tier3Groups,
+    selectedFacetTagIds,
+    setSelectedFacetTagIds,
+    scopeMatchMode,
+    setScopeMatchMode,
+    step1SearchQuery,
+    setStep1SearchQuery,
+    tagClickMode,
+    setTagClickMode,
+    activeScopeTagIds,
+    scopedFootages,
+    liveCategoryStock,
+    currentSubcategories,
+    sortedCategories,
+    groupStockStats,
+    categoriesInSelectedGroup,
+  } = useBuilderThreeTierScope({
+    categoryGroups,
+    categoryGroupMap,
+    tags,
+    tagMap,
+    categoryMatrix,
+    computedFootage,
+    selectedFootageIds,
+    tierSubCategories: settings.tierSubCategories || DEFAULT_TIER_SUBCATEGORIES,
+    mainCategoryTagId,
+    selectedGroupId,
+  });
 
   // Right Pool Filter & Pagination State
   const [allowCrossCategory, setAllowCrossCategory] = useState(false);
   const [poolFilterGroupId, setPoolFilterGroupId] = useState<string>('ALL');
-  const [poolSubcategoryFilterId, setPoolSubcategoryFilterId] = useState<string | null>(null);
+  const [poolSubcategoryFilterId, setPoolSubcategoryFilterId] = useState<
+    string | null
+  >(null);
   const [poolQuickFilter, setPoolQuickFilter] =
     useState<PoolQuickFilter>('AVAILABLE_USABLE');
   const [pickerSearch, setPickerSearch] = useState('');
-  const [pickerSortBy, setPickerSortBy] = useState<PickerSortBy>('REST_DAYS_DESC');
+  const [pickerSortBy, setPickerSortBy] =
+    useState<PickerSortBy>('REST_DAYS_DESC');
   const [pickerPage, setPickerPage] = useState(1);
   const [pickerPageSize, setPickerPageSize] = useState(6);
 
-  // Flexible Episode Scope: 'MAIN_CATEGORY' (Tier 1) or 'SUBCATEGORY' (Tier 2)
-  const [categoryEpisodeScope, setCategoryEpisodeScope] = useState<'MAIN_CATEGORY' | 'SUBCATEGORY'>('MAIN_CATEGORY');
+  // Flexible Episode Scope: 'MAIN_CATEGORY' or 'SUBCATEGORY'
+  const [categoryEpisodeScope, setCategoryEpisodeScope] = useState<
+    'MAIN_CATEGORY' | 'SUBCATEGORY'
+  >('MAIN_CATEGORY');
 
-  // Category Episode Numbering for Series (Supports Tier 1 Main Category or Tier 2 Subcategory)
   const categoryEpisodeCount = useMemo(() => {
     if (categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId) {
-      return episodes.filter((e) => e.targetSubcategoryId === targetSubcategoryId).length;
+      return episodes.filter(
+        (e) => e.targetSubcategoryId === targetSubcategoryId
+      ).length;
     }
-    return episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId).length;
+    return episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId)
+      .length;
   }, [episodes, mainCategoryTagId, categoryEpisodeScope, targetSubcategoryId]);
 
   const nextCategoryEpisodeNo = categoryEpisodeCount + 1;
 
-  const handleToggleEpisodeScope = (scope: 'MAIN_CATEGORY' | 'SUBCATEGORY') => {
-    setCategoryEpisodeScope(scope);
-    if (scope === 'SUBCATEGORY' && targetSubcategoryId && tagMap[targetSubcategoryId]) {
-      const subName = tagMap[targetSubcategoryId].name;
-      const subEpNo = episodes.filter((e) => e.targetSubcategoryId === targetSubcategoryId).length + 1;
-      setTitle(`5 อันดับ ${subName} EP.${subEpNo} - จังหวะพีคคัดเน้นๆ`);
-    } else {
-      const mainName = tagMap[mainCategoryTagId]?.name || 'หมวด';
-      const mainEpNo = episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId).length + 1;
-      setTitle(`5 อันดับ ${mainName} EP.${mainEpNo} - จังหวะพีคคัดเน้นๆ`);
-    }
-  };
+  // Build auto-title helper based on Primary Series Tag + Optional Facet Tags
+  const buildEpisodeAutoTitle = useCallback(
+    (primaryId: string, facetIds: string[]) => {
+      const primaryName = tagMap[primaryId]?.name || 'หมวดรวม';
+      const epNo =
+        episodes.filter((e) => e.mainCategoryTagId === primaryId).length + 1;
+      const facetNames = facetIds
+        .filter((fid) => fid !== primaryId && Boolean(tagMap[fid]))
+        .map((fid) => tagMap[fid].name);
 
-  // Step 4: Auto-Generated Headline, Schedule & Collapsible Optional Master Info
-  const [title, setTitle] = useState(
-    `5 อันดับ ${
-      tagMap[defaultCategoryId]?.name || 'ดาราฮาๆ'
-    } EP.${episodes.filter((e) => e.mainCategoryTagId === defaultCategoryId).length + 1} - จังหวะพีคคัดเน้นๆ`
+      if (facetNames.length > 0) {
+        return `5 อันดับ ${primaryName} (${facetNames.join(' · ')}) EP.${epNo} - จังหวะพีคคัดเน้นๆ`;
+      }
+      return `5 อันดับ ${primaryName} EP.${epNo} - จังหวะพีคคัดเน้นๆ`;
+    },
+    [tagMap, episodes]
+  );
+
+  const [title, setTitle] = useState(() =>
+    buildEpisodeAutoTitle(initialDefaultTagId, [])
   );
   const [publishDate, setPublishDate] = useState<string>('2026-10-28');
   const [publishSlot, setPublishSlot] = useState<PublishSlot>('MORNING_0600');
@@ -247,27 +214,73 @@ export function useEpisodeBuilder() {
   );
 
   const [preselectNotice, setPreselectNotice] = useState<string | null>(null);
-  const [savedBannerMessage, setSavedBannerMessage] = useState<string | null>(null);
-  const [duplicateConfirmModalOpen, setDuplicateConfirmModalOpen] = useState(false);
-  const [newlyCreatedEpisode, setNewlyCreatedEpisode] = useState<Episode | null>(null);
+  const [savedBannerMessage, setSavedBannerMessage] = useState<string | null>(
+    null
+  );
+  const [duplicateConfirmModalOpen, setDuplicateConfirmModalOpen] =
+    useState(false);
+  const [newlyCreatedEpisode, setNewlyCreatedEpisode] =
+    useState<Episode | null>(null);
 
-  // Active Category Stat
-  const activeCategoryStat = useMemo(
-    () => categoryMatrix.find((c) => c.tag.id === mainCategoryTagId) || null,
-    [categoryMatrix, mainCategoryTagId]
+  const activeGroup = useMemo(
+    () => categoryGroupMap[selectedGroupId] || categoryGroups[0] || null,
+    [categoryGroupMap, selectedGroupId, categoryGroups]
   );
 
-  const selectedFootageIds = useMemo(
-    () => rankings.map((r) => r.footageId).filter((id): id is string => Boolean(id)),
-    [rankings]
+  const activeSubcategory = useMemo(
+    () => (targetSubcategoryId ? tagMap[targetSubcategoryId] || null : null),
+    [targetSubcategoryId, tagMap]
   );
 
-  const selectedFootageObjects = useMemo(
-    () => rankings.map((r) => (r.footageId ? computedFootageMap[r.footageId] || null : null)),
-    [rankings, computedFootageMap]
-  );
+  // Active Category Stat (works for Tier 1, Tier 2, or Tier 3 tags)
+  const activeCategoryStat = useMemo(() => {
+    const found = categoryMatrix.find((c) => c.tag.id === mainCategoryTagId);
+    if (found) return found;
+    const fallbackTag = tagMap[mainCategoryTagId];
+    if (!fallbackTag) return null;
+    const stock = tagStockMap[mainCategoryTagId];
+    const allFt = computedFootage.filter((ft) =>
+      ft.tags.includes(mainCategoryTagId)
+    );
+    const usableFt = allFt.filter(
+      (ft) =>
+        ft.cooldownStatus === 'NEW_UNTOUCHED' ||
+        ft.cooldownStatus === 'READY_FRESH'
+    );
+    const newCount = stock?.newCount || 0;
+    const readyCount = stock?.freshCount || 0;
+    const usableCount = stock?.usable || usableFt.length;
+    return {
+      tag: fallbackTag,
+      totalCount: stock?.total || allFt.length,
+      newCount,
+      readyCount,
+      frequentCount: 0,
+      cooldownCount: 0,
+      directFlowCount: allFt.filter((f) => f.ingestionFlow === 'DIRECT_1_TO_1').length,
+      splitFlowCount: allFt.filter((f) => f.ingestionFlow !== 'DIRECT_1_TO_1').length,
+      usableCount,
+      producibleEpisodesCount: stock?.producibleEpisodes || Math.floor(usableCount / 5),
+      remainingForNextEp: 5 - (usableCount % 5),
+      allNewEpisodesCount: Math.floor(newCount / 5),
+      canMakeAllNew5: newCount >= 5,
+      canMakeMix2New3Fresh: newCount >= 2 && usableCount >= 5,
+      usableFootages: usableFt,
+      allFootages: allFt,
+      subcategoriesCount: 0,
+      subcategoryStats: [],
+      varietyEpisodeQuota: Math.floor(usableCount / 5),
+      specialEpisodeSubcategories: [],
+    };
+  }, [
+    categoryMatrix,
+    mainCategoryTagId,
+    tagMap,
+    tagStockMap,
+    computedFootage,
+  ]);
 
-  // Diversity Collision Guard: Detect duplicate subcategories/topics across slots in Variety mode
+  // Diversity Collision Guard
   const duplicateSubcategories = useMemo<DuplicateSubcategoryWarning[]>(() => {
     if (productionTarget !== 'MAIN_CATEGORY_VARIETY') return [];
     const entityUsage: Record<string, DuplicateSubcategoryWarning> = {};
@@ -288,87 +301,105 @@ export function useEpisodeBuilder() {
     return Object.values(entityUsage).filter((item) => item.ranks.length > 1);
   }, [productionTarget, rankings, computedFootageMap, currentSubcategories]);
 
-  // Live Remaining Stock Calculation for the selected category
-  const liveCategoryStock = useMemo<LiveCategoryStock>(() => {
-    if (!activeCategoryStat) {
-      return {
-        totalNew: 0,
-        usedNew: 0,
-        remainingNew: 0,
-        totalFresh: 0,
-        usedFresh: 0,
-        remainingFresh: 0,
-      };
-    }
+  // Populate rankings 1..5 using a recipe and the active 3-Tier Scope
+  const applyRecipeForCategory = useCallback(
+    (
+      tagId: string,
+      recipeId: MixRecipeId,
+      overrideFacetIds?: string[],
+      overrideMatchMode?: 'AND' | 'OR'
+    ) => {
+      setActiveRecipe(recipeId);
+      const facets = overrideFacetIds ?? selectedFacetTagIds;
+      const mode = overrideMatchMode ?? scopeMatchMode;
+      const targetTags = allowCrossCategory
+        ? []
+        : [tagId, ...facets.filter((id) => id !== tagId)];
 
-    const selectedSet = new Set(selectedFootageIds);
-    const catFootages = activeCategoryStat.usableFootages;
-    const catNew = catFootages.filter((f) => f.cooldownStatus === 'NEW_UNTOUCHED');
-    const catFresh = catFootages.filter((f) => f.cooldownStatus === 'READY_FRESH');
+      const autoPicked = generateSmartMixByRecipe(
+        computedFootage,
+        recipeId,
+        targetTags,
+        allowCrossCategory,
+        mode
+      );
 
-    const usedNew = catNew.filter((f) => selectedSet.has(f.id)).length;
-    const usedFresh = catFresh.filter((f) => selectedSet.has(f.id)).length;
+      const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map(
+        (rankNum, idx) => {
+          const picked = autoPicked[idx] || null;
+          const defaults = extractDefaultRankFields(picked);
+          return {
+            rank: rankNum,
+            footageId: picked ? picked.id : null,
+            rankTitle: defaults.rankTitle,
+            punchlineNote: defaults.punchlineNote,
+            mascotScript: picked
+              ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
+              : '',
+            snapshotNote: picked
+              ? picked.cooldownStatus === 'NEW_UNTOUCHED'
+                ? 'ฟุตใหม่แกะกล่อง'
+                : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
+              : '',
+          };
+        }
+      );
 
-    return {
-      totalNew: catNew.length,
-      usedNew,
-      remainingNew: Math.max(0, catNew.length - usedNew),
-      totalFresh: catFresh.length,
-      usedFresh,
-      remainingFresh: Math.max(0, catFresh.length - usedFresh),
-    };
-  }, [activeCategoryStat, selectedFootageIds]);
+      setRankings(nextRankings);
+    },
+    [allowCrossCategory, computedFootage, scopeMatchMode, selectedFacetTagIds]
+  );
 
-  // Helper to populate rankings 1..5 using a recipe and category
-  const applyRecipeForCategory = (tagId: string, recipeId: MixRecipeId) => {
-    setActiveRecipe(recipeId);
-    const targetTags = allowCrossCategory ? [] : [tagId];
-    const autoPicked = generateSmartMixByRecipe(computedFootage, recipeId, targetTags);
-
-    const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map((rankNum, idx) => {
-      const picked = autoPicked[idx] || null;
-      return {
-        rank: rankNum,
-        footageId: picked ? picked.id : null,
-        mascotScript: picked
-          ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
-          : '',
-        snapshotNote: picked
-          ? picked.cooldownStatus === 'NEW_UNTOUCHED'
-            ? 'ฟุตใหม่แกะกล่อง'
-            : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
-          : '',
-      };
-    });
-
-    setRankings(nextRankings);
-  };
-
-  // Handle Step 1 Tier 1 Category Selection
+  // Select Primary Series Tag (works for Tier 1, Tier 2, or Tier 3)
   const handleSelectCategory = (tagId: string, autoFillWithRecipe = false) => {
     const tagObj = tagMap[tagId];
     if (tagObj) {
-      const grpId = resolveTagGroupId(tagObj);
-      setSelectedGroupId(grpId);
+      setSelectedGroupId(resolveTagGroupId(tagObj));
     }
     setMainCategoryTagId(tagId);
+    const nextFacets = selectedFacetTagIds.filter((id) => id !== tagId);
+    setSelectedFacetTagIds(nextFacets);
     setPoolSubcategoryFilterId(null);
     setProductionTarget('MAIN_CATEGORY_VARIETY');
     setTargetSubcategoryId(null);
     setAllowCrossCategory(false);
     setPickerPage(1);
-    if (tagObj) {
-      const catEpNo = episodes.filter((e) => e.mainCategoryTagId === tagId).length + 1;
-      setTitle(
-        `5 อันดับ ${tagObj.name} EP.${catEpNo} - จังหวะพีคคัดเน้นๆ`
-      );
-    }
+    setTitle(buildEpisodeAutoTitle(tagId, nextFacets));
+
     if (autoFillWithRecipe) {
-      applyRecipeForCategory(tagId, activeRecipe);
+      applyRecipeForCategory(tagId, activeRecipe, nextFacets);
     }
   };
 
-  // Handle Step 1 Tier 0 Group Selection
+  // Toggle an additional Facet Tag across Tier 1 / Tier 2 / Tier 3
+  const handleToggleFacetTag = (tagId: string) => {
+    if (tagId === mainCategoryTagId) return;
+    setSelectedFacetTagIds((prev) => {
+      const exists = prev.includes(tagId);
+      const next = exists
+        ? prev.filter((id) => id !== tagId)
+        : [...prev, tagId];
+      setTitle(buildEpisodeAutoTitle(mainCategoryTagId, next));
+      if (next.length === 1 && !exists) {
+        setTargetSubcategoryId(tagId);
+        setProductionTarget('SINGLE_SUBCATEGORY_SPECIAL');
+      } else if (next.length === 0) {
+        setTargetSubcategoryId(null);
+        setProductionTarget('MAIN_CATEGORY_VARIETY');
+      }
+      return next;
+    });
+    setPickerPage(1);
+  };
+
+  const handleClearFacetTags = () => {
+    setSelectedFacetTagIds([]);
+    setTargetSubcategoryId(null);
+    setProductionTarget('MAIN_CATEGORY_VARIETY');
+    setTitle(buildEpisodeAutoTitle(mainCategoryTagId, []));
+    setPickerPage(1);
+  };
+
   const handleSelectGroup = (groupId: string) => {
     setSelectedGroupId(groupId);
     const groupCategories = sortedCategories.filter(
@@ -378,27 +409,12 @@ export function useEpisodeBuilder() {
       (stat) => stat.tag.id === mainCategoryTagId
     );
     if (!isCurrentInGroup && groupCategories.length > 0) {
-      const firstCat = groupCategories[0].tag;
-      setMainCategoryTagId(firstCat.id);
-      setProductionTarget('MAIN_CATEGORY_VARIETY');
-      setTargetSubcategoryId(null);
-      setAllowCrossCategory(false);
-      setPickerPage(1);
-      setTitle(
-        `5 อันดับ ${firstCat.name} จังหวะพีคคัดเน้นๆ #${episodes.length + 1}`
-      );
-      applyRecipeForCategory(firstCat.id, activeRecipe);
+      handleSelectCategory(groupCategories[0].tag.id, true);
     }
   };
 
-  // Handle Tier 2 Production Target Switcher
   const handleSelectVarietyMode = () => {
-    setProductionTarget('MAIN_CATEGORY_VARIETY');
-    setTargetSubcategoryId(null);
-    const currentMain = tagMap[mainCategoryTagId];
-    if (currentMain) {
-      setTitle(`5 อันดับ ${currentMain.name} จังหวะพีคคัดเน้นๆ #${episodes.length + 1}`);
-    }
+    handleClearFacetTags();
   };
 
   const handleSelectSoloMode = () => {
@@ -406,17 +422,39 @@ export function useEpisodeBuilder() {
     const firstSub = currentSubcategories[0];
     if (firstSub) {
       setTargetSubcategoryId(firstSub.id);
-      setTitle(`5 อันดับ ${firstSub.name} ช็อตเด็ดโดนใจ #${episodes.length + 1}`);
+      setSelectedFacetTagIds([firstSub.id]);
+      setTitle(buildEpisodeAutoTitle(mainCategoryTagId, [firstSub.id]));
     }
   };
 
-  const handleSelectSubcategory = (subId: string, subName: string) => {
+  const handleSelectSubcategory = (subId: string) => {
     setTargetSubcategoryId(subId);
-    setTitle(`5 อันดับ ${subName} ช็อตเด็ดโดนใจ #${episodes.length + 1}`);
+    setSelectedFacetTagIds([subId]);
+    setProductionTarget('SINGLE_SUBCATEGORY_SPECIAL');
+    setTitle(buildEpisodeAutoTitle(mainCategoryTagId, [subId]));
     setPickerPage(1);
   };
 
-  // Handle cross-view category pre-selection from E2E Pipeline, Footage Library, or Source Mining Studio
+  const handleToggleEpisodeScope = (
+    scope: 'MAIN_CATEGORY' | 'SUBCATEGORY'
+  ) => {
+    setCategoryEpisodeScope(scope);
+    if (
+      scope === 'SUBCATEGORY' &&
+      targetSubcategoryId &&
+      tagMap[targetSubcategoryId]
+    ) {
+      const subName = tagMap[targetSubcategoryId].name;
+      const subEpNo =
+        episodes.filter((e) => e.targetSubcategoryId === targetSubcategoryId)
+          .length + 1;
+      setTitle(`5 อันดับ ${subName} EP.${subEpNo} - จังหวะพีคคัดเน้นๆ`);
+    } else {
+      setTitle(buildEpisodeAutoTitle(mainCategoryTagId, selectedFacetTagIds));
+    }
+  };
+
+  // Handle cross-view category pre-selection from Footage Vault or Source Mining Studio
   useEffect(() => {
     if (!builderPreselectRequest) return;
     const {
@@ -427,11 +465,14 @@ export function useEpisodeBuilder() {
       customFootageIds,
       customEpisodeTitle,
     } = builderPreselectRequest;
+
     const targetTag = tagMap[tagId];
     if (targetTag) {
       setSelectedGroupId(resolveTagGroupId(targetTag));
     }
     setMainCategoryTagId(tagId);
+    const nextFacets = reqSubId && reqSubId !== tagId ? [reqSubId] : [];
+    setSelectedFacetTagIds(nextFacets);
     setProductionTarget(reqTarget || 'MAIN_CATEGORY_VARIETY');
     setTargetSubcategoryId(reqSubId || null);
     setAllowCrossCategory(false);
@@ -439,18 +480,11 @@ export function useEpisodeBuilder() {
 
     if (customEpisodeTitle) {
       setTitle(customEpisodeTitle);
-    } else if (reqTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && reqSubId && tagMap[reqSubId]) {
-      setTitle(
-        `5 อันดับ ${tagMap[reqSubId].name} ช็อตเด็ดโดนใจ #${episodes.length + 1}`
-      );
-    } else if (targetTag) {
-      setTitle(
-        `5 อันดับ ${targetTag.name} จังหวะพีคคัดเน้นๆ #${episodes.length + 1}`
-      );
+    } else {
+      setTitle(buildEpisodeAutoTitle(tagId, nextFacets));
     }
 
-    const filterTagId =
-      reqTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && reqSubId ? reqSubId : tagId;
+    const filterTagIds = [tagId, ...nextFacets];
 
     if (customFootageIds && customFootageIds.length > 0) {
       const customPicked = customFootageIds
@@ -460,27 +494,34 @@ export function useEpisodeBuilder() {
       const fallbackPicked = generateSmartMixByRecipe(
         computedFootage.filter((f) => !customFootageIds.includes(f.id)),
         recipeId,
-        [filterTagId]
+        filterTagIds,
+        false,
+        'AND'
       );
 
       const combinedPicked = [...customPicked, ...fallbackPicked].slice(0, 5);
-      const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map((rankNum, idx) => {
-        const picked = combinedPicked[idx] || null;
-        return {
-          rank: rankNum,
-          footageId: picked ? picked.id : null,
-          mascotScript: picked
-            ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
-            : '',
-          snapshotNote: picked
-            ? customFootageIds.includes(picked.id)
-              ? 'คัดตรงจากสตูดิโอหั่นไลฟ์สด (1:N)'
-              : picked.cooldownStatus === 'NEW_UNTOUCHED'
-              ? 'ฟุตใหม่แกะกล่อง'
-              : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
-            : '',
-        };
-      });
+      const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map(
+        (rankNum, idx) => {
+          const picked = combinedPicked[idx] || null;
+          const defaults = extractDefaultRankFields(picked);
+          return {
+            rank: rankNum,
+            footageId: picked ? picked.id : null,
+            rankTitle: defaults.rankTitle,
+            punchlineNote: defaults.punchlineNote,
+            mascotScript: picked
+              ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
+              : '',
+            snapshotNote: picked
+              ? customFootageIds.includes(picked.id)
+                ? 'คัดตรงจากสตูดิโอหั่นไลฟ์สด (1:N)'
+                : picked.cooldownStatus === 'NEW_UNTOUCHED'
+                ? 'ฟุตใหม่แกะกล่อง'
+                : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
+              : '',
+          };
+        }
+      );
       setRankings(nextRankings);
       setActiveBuilderStep(2);
       setPreselectNotice(
@@ -490,22 +531,33 @@ export function useEpisodeBuilder() {
       return;
     }
 
-    const autoPicked = generateSmartMixByRecipe(computedFootage, recipeId, [filterTagId]);
-    const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map((rankNum, idx) => {
-      const picked = autoPicked[idx] || null;
-      return {
-        rank: rankNum,
-        footageId: picked ? picked.id : null,
-        mascotScript: picked
-          ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
-          : '',
-        snapshotNote: picked
-          ? picked.cooldownStatus === 'NEW_UNTOUCHED'
-            ? 'ฟุตใหม่แกะกล่อง'
-            : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
-          : '',
-      };
-    });
+    const autoPicked = generateSmartMixByRecipe(
+      computedFootage,
+      recipeId,
+      filterTagIds,
+      false,
+      'AND'
+    );
+    const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map(
+      (rankNum, idx) => {
+        const picked = autoPicked[idx] || null;
+        const defaults = extractDefaultRankFields(picked);
+        return {
+          rank: rankNum,
+          footageId: picked ? picked.id : null,
+          rankTitle: defaults.rankTitle,
+          punchlineNote: defaults.punchlineNote,
+          mascotScript: picked
+            ? `อันดับที่ ${rankNum}: ${picked.mascotNotes || picked.title}`
+            : '',
+          snapshotNote: picked
+            ? picked.cooldownStatus === 'NEW_UNTOUCHED'
+              ? 'ฟุตใหม่แกะกล่อง'
+              : `วนใช้หลังพัก ${picked.daysSinceLastUsed ?? 0} วัน`
+            : '',
+        };
+      }
+    );
     setRankings(nextRankings);
     setActiveBuilderStep(2);
     setPreselectNotice(
@@ -518,9 +570,9 @@ export function useEpisodeBuilder() {
     builderPreselectRequest,
     tagMap,
     computedFootage,
-    episodes.length,
     clearBuilderPreselectRequest,
     resolveTagGroupId,
+    buildEpisodeAutoTitle,
   ]);
 
   useEffect(() => {
@@ -528,6 +580,8 @@ export function useEpisodeBuilder() {
   }, [
     selectedGroupId,
     mainCategoryTagId,
+    selectedFacetTagIds,
+    scopeMatchMode,
     allowCrossCategory,
     poolFilterGroupId,
     poolSubcategoryFilterId,
@@ -543,13 +597,11 @@ export function useEpisodeBuilder() {
     title
   );
 
-  // High-performance O(1) Inverted Index for fast scaling
   const footageToEpisodeIndex = useMemo(
     () => buildFootageToEpisodeIndex(episodes),
     [episodes]
   );
 
-  // Real-time Collision, Cooldown & Episode Similarity Validation Report
   const validationReport = useMemo(
     () =>
       analyzeEpisodeCollisions(
@@ -562,9 +614,9 @@ export function useEpisodeBuilder() {
     [rankings, computedFootageMap, episodes, footageToEpisodeIndex]
   );
 
-  // Assign a footage directly to a specific rank (1, 2, 3, 4, or 5)
   const assignFootageToRank = (targetRank: RankNumber, footageId: string) => {
     const ft = computedFootageMap[footageId];
+    const defaults = extractDefaultRankFields(ft);
     const snapText =
       ft?.cooldownStatus === 'NEW_UNTOUCHED'
         ? 'ฟุตใหม่แกะกล่อง (NEW)'
@@ -573,16 +625,24 @@ export function useEpisodeBuilder() {
     setRankings((prev) =>
       prev.map((slot) => {
         if (slot.footageId === footageId && slot.rank !== targetRank) {
-          return { ...slot, footageId: null, mascotScript: '', snapshotNote: '' };
+          return {
+            ...slot,
+            footageId: null,
+            rankTitle: '',
+            punchlineNote: '',
+            mascotScript: '',
+            snapshotNote: '',
+          };
         }
         if (slot.rank !== targetRank) return slot;
         return {
           ...slot,
           footageId,
-          mascotScript:
-            ft?.mascotNotes
-              ? `อันดับที่ ${slot.rank}: ${ft.mascotNotes}`
-              : `มาต่อกันที่อันดับ ${slot.rank} ช็อตนี้บอกเลยว่าพีคจัด!`,
+          rankTitle: defaults.rankTitle,
+          punchlineNote: defaults.punchlineNote,
+          mascotScript: ft?.mascotNotes
+            ? `อันดับที่ ${slot.rank}: ${ft.mascotNotes}`
+            : `มาต่อกันที่อันดับ ${slot.rank} ช็อตนี้บอกเลยว่าพีคจัด!`,
           snapshotNote: snapText,
         };
       })
@@ -598,7 +658,6 @@ export function useEpisodeBuilder() {
     }
   };
 
-  // Swap two rank slots (via Drag & Drop or Up/Down arrows)
   const swapRankSlots = (fromRank: RankNumber, toRank: RankNumber) => {
     if (fromRank === toRank) return;
     setRankings((prev) => {
@@ -611,6 +670,9 @@ export function useEpisodeBuilder() {
           return {
             ...s,
             footageId: toSlot.footageId,
+            rankTitle: toSlot.rankTitle,
+            punchlineNote: toSlot.punchlineNote,
+            isCustomOverride: toSlot.isCustomOverride,
             mascotScript: toSlot.mascotScript,
             snapshotNote: toSlot.snapshotNote,
           };
@@ -619,6 +681,9 @@ export function useEpisodeBuilder() {
           return {
             ...s,
             footageId: fromSlot.footageId,
+            rankTitle: fromSlot.rankTitle,
+            punchlineNote: fromSlot.punchlineNote,
+            isCustomOverride: fromSlot.isCustomOverride,
             mascotScript: fromSlot.mascotScript,
             snapshotNote: fromSlot.snapshotNote,
           };
@@ -628,7 +693,10 @@ export function useEpisodeBuilder() {
     });
   };
 
-  const handleDropItemOnSlot = (targetRank: RankNumber, payload: SlotDropPayload) => {
+  const handleDropItemOnSlot = (
+    targetRank: RankNumber,
+    payload: SlotDropPayload
+  ) => {
     if (payload.type === 'SLOT') {
       swapRankSlots(payload.fromRank, targetRank);
     } else if (payload.type === 'FOOTAGE') {
@@ -646,7 +714,15 @@ export function useEpisodeBuilder() {
     setRankings((prev) =>
       prev.map((s) =>
         s.rank === rank
-          ? { ...s, footageId: null, mascotScript: '', snapshotNote: '' }
+          ? {
+              ...s,
+              footageId: null,
+              rankTitle: '',
+              punchlineNote: '',
+              isCustomOverride: false,
+              mascotScript: '',
+              snapshotNote: '',
+            }
           : s
       )
     );
@@ -662,7 +738,36 @@ export function useEpisodeBuilder() {
     );
   };
 
-  // Map footageId -> rank number (1..5) if currently selected
+  const updateSlotRankFields = (
+    rank: RankNumber,
+    field: 'rankTitle' | 'punchlineNote' | 'mascotScript' | 'isCustomOverride',
+    value: string | boolean
+  ) => {
+    setRankings((prev) =>
+      prev.map((s) => {
+        if (s.rank !== rank) return s;
+        const ft = s.footageId ? computedFootageMap[s.footageId] : null;
+        const defaults = extractDefaultRankFields(ft);
+
+        if (field === 'isCustomOverride') {
+          const nextCustom = Boolean(value);
+          return {
+            ...s,
+            isCustomOverride: nextCustom,
+            rankTitle: nextCustom
+              ? s.rankTitle || defaults.rankTitle
+              : defaults.rankTitle,
+            punchlineNote: nextCustom
+              ? s.punchlineNote ?? defaults.punchlineNote
+              : defaults.punchlineNote,
+          };
+        }
+
+        return { ...s, [field]: String(value) };
+      })
+    );
+  };
+
   const footageToAssignedRankMap = useMemo(() => {
     const map: Record<string, RankNumber> = {};
     for (const slot of rankings) {
@@ -673,25 +778,13 @@ export function useEpisodeBuilder() {
     return map;
   }, [rankings]);
 
-  // Filtered & Sorted candidate footages in right-hand pool
+  // Filtered & Sorted candidate footages in right-hand pool based on 3-Tier Scope
   const pickerCandidates = useMemo(() => {
     const selectedSet = new Set(selectedFootageIds);
+    const basePool = allowCrossCategory ? computedFootage : scopedFootages;
 
-    const filtered = computedFootage.filter((ft) => {
-      if (!allowCrossCategory) {
-        if (productionTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && targetSubcategoryId) {
-          if (!ft.tags.includes(targetSubcategoryId)) {
-            return false;
-          }
-        } else {
-          const childIds = currentSubcategories.map((c) => c.id);
-          const inMainOrChild =
-            ft.tags.includes(mainCategoryTagId) ||
-            ft.tags.some((tid) => childIds.includes(tid));
-          if (!inMainOrChild) return false;
-        }
-      } else if (poolFilterGroupId !== 'ALL') {
-        // When cross-category is enabled and user filters by Tier 0 CategoryGroup
+    const filtered = basePool.filter((ft) => {
+      if (allowCrossCategory && poolFilterGroupId !== 'ALL') {
         const belongsToSelectedPoolGroup = ft.tags.some((tid) => {
           const t = tagMap[tid];
           return t && resolveTagGroupId(t) === poolFilterGroupId;
@@ -699,14 +792,14 @@ export function useEpisodeBuilder() {
         if (!belongsToSelectedPoolGroup) return false;
       }
 
-      // Quick subcategory chip filter (e.g. ตำรวจ, ทหาร, นักเรียน)
       if (poolSubcategoryFilterId) {
         if (!ft.tags.includes(poolSubcategoryFilterId)) return false;
       }
 
       if (poolQuickFilter === 'AVAILABLE_USABLE') {
         const isUsable =
-          ft.cooldownStatus === 'NEW_UNTOUCHED' || ft.cooldownStatus === 'READY_FRESH';
+          ft.cooldownStatus === 'NEW_UNTOUCHED' ||
+          ft.cooldownStatus === 'READY_FRESH';
         if (!isUsable || selectedSet.has(ft.id)) return false;
       } else if (poolQuickFilter === 'ONLY_NEW') {
         if (ft.cooldownStatus !== 'NEW_UNTOUCHED' || selectedSet.has(ft.id)) {
@@ -733,8 +826,10 @@ export function useEpisodeBuilder() {
 
     return [...filtered].sort((a, b) => {
       if (pickerSortBy === 'REST_DAYS_DESC') {
-        const daysA = a.daysSinceLastUsed === null ? 9999 : a.daysSinceLastUsed;
-        const daysB = b.daysSinceLastUsed === null ? 9999 : b.daysSinceLastUsed;
+        const daysA =
+          a.daysSinceLastUsed === null ? 9999 : a.daysSinceLastUsed;
+        const daysB =
+          b.daysSinceLastUsed === null ? 9999 : b.daysSinceLastUsed;
         if (daysB !== daysA) return daysB - daysA;
         return a.usageLast90Days - b.usageLast90Days;
       }
@@ -744,14 +839,11 @@ export function useEpisodeBuilder() {
       return a.totalUsageCount - b.totalUsageCount;
     });
   }, [
-    computedFootage,
     allowCrossCategory,
+    computedFootage,
+    scopedFootages,
     poolFilterGroupId,
     poolSubcategoryFilterId,
-    productionTarget,
-    targetSubcategoryId,
-    currentSubcategories,
-    mainCategoryTagId,
     poolQuickFilter,
     selectedFootageIds,
     pickerSearch,
@@ -769,7 +861,9 @@ export function useEpisodeBuilder() {
     if (!title.trim() || selectedFootageIds.length < 5) return;
 
     const effectiveSeriesTitle =
-      categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId && tagMap[targetSubcategoryId]
+      categoryEpisodeScope === 'SUBCATEGORY' &&
+      targetSubcategoryId &&
+      tagMap[targetSubcategoryId]
         ? `5 อันดับ ${tagMap[targetSubcategoryId].name}`
         : `5 อันดับ ${tagMap[mainCategoryTagId]?.name || ''}`;
 
@@ -777,6 +871,18 @@ export function useEpisodeBuilder() {
       categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId
         ? targetSubcategoryId
         : mainCategoryTagId;
+
+    const resolvedRankings: EpisodeRankingSlot[] = rankings.map((slot) => {
+      const ft = slot.footageId ? computedFootageMap[slot.footageId] : null;
+      const defaults = extractDefaultRankFields(ft);
+      const isCustom = Boolean(slot.isCustomOverride);
+      return {
+        ...slot,
+        isCustomOverride: isCustom,
+        rankTitle: isCustom ? slot.rankTitle : defaults.rankTitle,
+        punchlineNote: isCustom ? slot.punchlineNote : defaults.punchlineNote,
+      };
+    });
 
     const created = saveEpisode({
       title: title.trim(),
@@ -788,13 +894,15 @@ export function useEpisodeBuilder() {
       seriesTitle: effectiveSeriesTitle,
       productionTarget,
       targetSubcategoryId:
-        productionTarget === 'SINGLE_SUBCATEGORY_SPECIAL' ? targetSubcategoryId : null,
+        productionTarget === 'SINGLE_SUBCATEGORY_SPECIAL'
+          ? targetSubcategoryId
+          : null,
       publishDate,
       publishSlot,
       workflowStage,
       introMascotScript,
       outroMascotScript,
-      rankings,
+      rankings: resolvedRankings,
       masterVideoInfo: {
         masterFileName: previewMasterFileName,
         masterDriveUrl:
@@ -811,7 +919,9 @@ export function useEpisodeBuilder() {
 
     setNewlyCreatedEpisode(created);
     setSavedBannerMessage(
-      `บันทึกคลิป 5 อันดับ ${created.id} (EP.${created.categoryEpisodeNo || nextCategoryEpisodeNo} · ${created.title}) เข้าสู่คลังเรียบร้อยแล้ว!`
+      `บันทึกคลิป 5 อันดับ ${created.id} (EP.${
+        created.categoryEpisodeNo || nextCategoryEpisodeNo
+      } · ${created.title}) เข้าสู่คลังเรียบร้อยแล้ว!`
     );
     setPreselectNotice(null);
     setMasterDriveUrl('');
@@ -825,9 +935,7 @@ export function useEpisodeBuilder() {
   const handleContinueNextEpisodeInCategory = () => {
     setNewlyCreatedEpisode(null);
     clearAllSlots();
-    const nextNo = episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId).length + 1;
-    const catName = tagMap[mainCategoryTagId]?.name || '';
-    setTitle(`5 อันดับ ${catName} EP.${nextNo} - จังหวะพีคคัดเน้นๆ`);
+    setTitle(buildEpisodeAutoTitle(mainCategoryTagId, selectedFacetTagIds));
     setActiveBuilderStep(2);
     applyRecipeForCategory(mainCategoryTagId, activeRecipe);
   };
@@ -848,7 +956,6 @@ export function useEpisodeBuilder() {
   };
 
   return {
-    // Context & Shared Data
     categoryGroups,
     categoryGroupMap,
     tagMap,
@@ -859,7 +966,6 @@ export function useEpisodeBuilder() {
     setIsStatusRuleModalOpen,
     setIsThreeTierManagerOpen,
 
-    // Identifiers & Notices
     nextEpisodeId,
     activeBuilderStep,
     setActiveBuilderStep,
@@ -867,7 +973,22 @@ export function useEpisodeBuilder() {
     setPreselectNotice,
     savedBannerMessage,
 
-    // Step 1: 3-Tier State & Actions
+    // Step 1: 3-Tier Independent Scope & Actions
+    tagStockMap,
+    tier1Groups,
+    tier2Groups,
+    tier3Groups,
+    selectedFacetTagIds,
+    scopeMatchMode,
+    setScopeMatchMode,
+    step1SearchQuery,
+    setStep1SearchQuery,
+    tagClickMode,
+    setTagClickMode,
+    activeScopeTagIds,
+    handleToggleFacetTag,
+    handleClearFacetTags,
+
     groupStockStats,
     selectedGroupId,
     activeGroup,
@@ -886,18 +1007,15 @@ export function useEpisodeBuilder() {
     handleSelectSoloMode,
     handleSelectSubcategory,
 
-    // Step 2 State & Actions
     activeRecipe,
     selectedFootageObjects,
     applyRecipeForCategory,
 
-    // Collision & Diversity Validation
     duplicateSubcategories,
     validationReport,
     duplicateConfirmModalOpen,
     setDuplicateConfirmModalOpen,
 
-    // Step 3 Rankings & Pool State/Actions
     rankings,
     selectedFootageIds,
     activeSlotRank,
@@ -908,6 +1026,7 @@ export function useEpisodeBuilder() {
     clearSlotByRank,
     clearAllSlots,
     updateSlotScript,
+    updateSlotRankFields,
     footageToAssignedRankMap,
     allowCrossCategory,
     setAllowCrossCategory,
@@ -928,7 +1047,6 @@ export function useEpisodeBuilder() {
     pickerCandidates,
     paginatedPickerCandidates,
 
-    // Step 4 Metadata Form State & Actions
     title,
     setTitle,
     publishDate,
@@ -955,7 +1073,6 @@ export function useEpisodeBuilder() {
     handleSaveEpisode,
     performActualSave,
 
-    // Series Episode Numbering & Post-Save State
     categoryEpisodeNo: nextCategoryEpisodeNo,
     existingCategoryEpisodesCount: categoryEpisodeCount,
     categoryEpisodeScope,

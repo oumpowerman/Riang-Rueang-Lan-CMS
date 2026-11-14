@@ -1,10 +1,29 @@
 import { SavedDriveFolderPreset } from './driveSync.types';
 
 export type TagGroupType = 'THEME' | 'PERSON' | 'ACTION' | 'GENERAL' | string;
-export type CategoryTier = 1 | 2;
+export type CategoryTier = 1 | 2 | 3;
 export type EntitySubtype = 'PERSON' | 'ANIMAL' | 'TOPIC' | 'ACTION' | 'GENERAL';
 
-// Level 1: กลุ่มหมวดหมู่ (Cluster Group)
+export interface TierSubCategoriesConfig {
+  tier1: string[];
+  tier2: string[];
+  tier3: string[];
+}
+
+export const DEFAULT_UNCLASSIFIED_SUBCATEGORY = 'รอคัดแยก';
+
+export const DEFAULT_TIER_SUBCATEGORIES: TierSubCategoriesConfig = {
+  tier1: [DEFAULT_UNCLASSIFIED_SUBCATEGORY, 'วงการ/หมวดหลัก'],
+  tier2: [
+    'กลุ่ม A: สถานการณ์ / อาการ',
+    'กลุ่ม B: เหตุการณ์ / เทศกาล',
+    'กลุ่ม C: วิธีการนำเสนอ',
+    'กลุ่ม D: ความขลัง',
+  ],
+  tier3: ['สายตลก/ดารา', 'สายอินฟลู/ไวรัล', 'ชื่อรายการ/ผลงาน'],
+};
+
+// Level 1: กลุ่มหมวดหมู่ (Cluster Group - Legacy compatibility)
 export interface CategoryGroup {
   id: string;
   name: string;
@@ -15,20 +34,57 @@ export interface CategoryGroup {
   createdAt: string;
 }
 
-// Level 2 & 3: หมวดหมู่หลัก (Tier 1) และ หมวดหมู่ย่อย/บุคคล (Tier 2)
+// ระบบ Tag 3 ชั้นอิสระ (3-Tier Independent Faceted Taxonomy)
+// Tier 1 = มิติปลายทาง / หมวดกว้าง (เช่น #คนมีชื่อเสียง, #วิถีชาวบ้าน, #สัตว์โลก, #อาชีพ)
+// Tier 2 = บริบท / สไตล์คลิป (เช่น #พูดผิด, #ช็อตฟีล, #ไลฟ์สด, #สัมภาษณ์ข่าว)
+// Tier 3 = บุคคลเจาะจง / รายการ (เช่น #พี่แจ๊ส, #พี่เสก, #เซียนหรั่ง, #โหนกระแส)
 export interface CategoryTag {
   id: string;
   name: string;
   color: string;
   groupType: TagGroupType;
-  groupId?: string; // References CategoryGroup.id for Level 2
+  groupId?: string;
   description?: string;
   createdAt: string;
-  // 2-Tier Hierarchical Taxonomy
-  tier: CategoryTier; // 1 = Main Category (เช่น ดาราฮาๆ), 2 = Subcategory/Entity (เช่น พี่แจ๊ส)
-  parentId?: string | null; // ID of Tier 1 Parent if tier === 2
-  entityType?: EntitySubtype; // Specific entity identifier (👤 Person, 🐾 Animal, 🎯 Topic)
+  tier: CategoryTier; // 1 | 2 | 3
+  subCategory?: string; // หมวดหมู่ย่อยภายใน Tier นั้นๆ เช่น 'รอคัดแยก', 'สถานการณ์', 'วิธีการนำเสนอ'
+  parentId?: string | null; // Deprecated in 3-tier independent system (always null for independent tags)
+  entityType?: EntitySubtype;
 }
+
+export interface ArchiveSeriesCategory {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export const DEFAULT_ARCHIVE_SERIES_CATEGORIES: ArchiveSeriesCategory[] = [
+  {
+    id: 'ARC-CAT-CELEB',
+    name: 'คนดัง / สตรีมเมอร์ / รายการ',
+    color: 'blue',
+  },
+  {
+    id: 'ARC-CAT-LOCAL',
+    name: 'คนไทยสายฮา / วิถีชาวบ้าน',
+    color: 'emerald',
+  },
+  {
+    id: 'ARC-CAT-CHAOS',
+    name: 'สายเมา / หลุดโลก / ตำนานฮา',
+    color: 'amber',
+  },
+  {
+    id: 'ARC-CAT-ROLE',
+    name: 'อาชีพ / เหตุการณ์ / ข่าวดัง',
+    color: 'purple',
+  },
+  {
+    id: 'ARC-CAT-OTHER',
+    name: 'สัตว์โลก / ทั่วไป / อื่นๆ',
+    color: 'rose',
+  },
+];
 
 export interface SystemSettings {
   // 🔴 เกณฑ์สีแดง (RECENT_COOLDOWN — ห้ามใช้ซ้ำ)
@@ -46,4 +102,9 @@ export interface SystemSettings {
   driveRootFolderUrl: string;
   driveApiKey?: string;
   savedDriveFolders?: SavedDriveFolderPreset[];
+  tierSubCategories?: TierSubCategoriesConfig;
+  archiveSeriesCategories?: ArchiveSeriesCategory[];
+  seriesToArchiveCategoryMap?: Record<string, string>;
+  seriesToTagIdsMap?: Record<string, string[]>;
 }
+

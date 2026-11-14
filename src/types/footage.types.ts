@@ -31,6 +31,8 @@ export interface Footage {
   driveFileUrl: string;
   thumbnailUrl?: string; // Optional direct thumbnail URL from Google Drive API or YouTube
   standardFileName: string; // e.g., FT-0003_ชื่อคลิป.mp4
+  rankTitle?: string; // ชื่อฟุตที่ใช้ในสคริปต์ (ถ้าไม่ระบุจะใช้ title)
+  punchlineNote?: string; // คำสร้อยประจำฟุตเทจ (ซิงก์แบบ Realtime ไปยังทุก EP ที่ไม่ได้ล็อกค่า)
   mascotNotes: string; // Punchline / reaction guidance for the mascot narrator
   createdAt: string; // YYYY-MM-DD
 }

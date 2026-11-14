@@ -14,6 +14,7 @@ import {
   DiscoveredDriveVideo,
   RecursiveScanResult,
 } from '../../../services/driveScannerService';
+import { hasLeadingRankPrefix } from '../../../utils/fileNameGenerator';
 import { ReconciledCategoryResult } from '../../../utils/tagReconciler';
 import { DriveClipIdPrefix } from './driveImport.types';
 
@@ -246,6 +247,14 @@ export const DriveDiscoveredVideosTable: React.FC<DriveDiscoveredVideosTableProp
                           </span>
                         )}
                         <span className="truncate">{video.cleanTitle}</span>
+                        {hasLeadingRankPrefix(video.name) && (
+                          <span
+                            className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-mono"
+                            title={`ตัดเลขลำดับข้างหน้าออกอัตโนมัติ (ชื่อไฟล์เดิม: ${video.name})`}
+                          >
+                            ตัดเลขหน้าแล้ว
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-1.5 px-3 font-sans text-slate-600 truncate max-w-[130px]">

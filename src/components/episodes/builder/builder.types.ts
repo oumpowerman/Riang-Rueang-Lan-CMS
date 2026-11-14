@@ -47,3 +47,21 @@ export interface DuplicateSubcategoryWarning {
 export type SlotDropPayload =
   | { type: 'SLOT'; fromRank: RankNumber }
   | { type: 'FOOTAGE'; footageId: string };
+
+export type BuilderScopeMatchMode = 'AND' | 'OR';
+
+export type BuilderTagClickActionMode = 'SET_PRIMARY' | 'TOGGLE_FACET';
+
+export interface TagLiveStockSummary {
+  total: number;
+  usable: number;
+  newCount: number;
+  freshCount: number;
+  producibleEpisodes: number;
+}
+
+export interface TierSubCategoryGroup {
+  subCategory: string;
+  tags: CategoryTag[];
+}
+

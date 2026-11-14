@@ -91,7 +91,7 @@ export const VideoPreviewModal: React.FC = () => {
             {inStaging ? (
               <TagPill tag={tagMap[STAGING_TAG_ID]} />
             ) : (
-              itemTags.map((tid) => <TagPill key={tid} tag={tagMap[tid]} />)
+              Array.from(new Set(itemTags || [])).map((tid) => <TagPill key={tid} tag={tagMap[tid]} />)
             )}
             {durationBadge && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#fdfbf7] border border-[#e2d8cb] text-xs font-mono font-bold text-[#4d4740]">
@@ -129,6 +129,34 @@ export const VideoPreviewModal: React.FC = () => {
               allowFullScreen
               className="w-full h-full border-0"
             />
+          ) : preview.thumbnailUrl ? (
+            <div className="w-full h-full relative flex flex-col items-center justify-center bg-[#f4eee4]">
+              <img
+                src={preview.thumbnailUrl}
+                alt={previewTarget.title}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover opacity-90"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/15 flex flex-col items-center justify-center p-6 text-center gap-3">
+                <span className="px-3 py-1 rounded-lg bg-white/95 text-[#2d2926] text-xs font-extrabold shadow-xs">
+                  พรีวิวจาก {preview.providerLabel}
+                </span>
+                <p className="text-sm font-bold text-white max-w-md drop-shadow-xs">
+                  {previewTarget.title}
+                </p>
+                {preview.externalUrl && (
+                  <a
+                    href={preview.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#3b6845] hover:bg-[#2c5234] text-white text-xs font-bold transition-colors shadow-sm"
+                  >
+                    <span>เปิดดูคลิปบน {preview.providerLabel}</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-[#fdfbf7] via-[#f4eee4] to-[#edf4ed]/70 flex flex-col items-center justify-center p-6 text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] border border-[#e2d8cb] shadow-2xs flex items-center justify-center text-[#3b6845]">
@@ -136,10 +164,10 @@ export const VideoPreviewModal: React.FC = () => {
               </div>
               <div className="space-y-1 max-w-md">
                 <p className="text-sm font-bold text-[#2d2926]">
-                  ยังไม่มีลิงก์วิดีโอ Google Drive หรือ YouTube ที่พร้อมเล่น
+                  ยังไม่มีลิงก์วิดีโอ Google Drive หรือ Social ที่พร้อมเล่น
                 </p>
                 <p className="text-xs text-[#787066]">
-                  คุณสามารถเพิ่มหรือแก้ไขลิงก์ Google Drive / YouTube ของรายการนี้ได้ในหน้ารายละเอียด
+                  คุณสามารถเพิ่มหรือแก้ไขลิงก์ Google Drive / Social ของรายการนี้ได้ในหน้ารายละเอียด
                 </p>
               </div>
               {(footage || fallbackChildFootage) && (
@@ -167,7 +195,7 @@ export const VideoPreviewModal: React.FC = () => {
 
         {/* Bottom Actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#e8dfd3]">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {preview.externalUrl && (
               <a
                 href={preview.externalUrl}
@@ -186,8 +214,20 @@ export const VideoPreviewModal: React.FC = () => {
                     <span>เปิดใน YouTube</span>
                   </>
                 ) : (
-                  <span>เปิดลิงก์ต้นทาง</span>
+                  <span>เปิดใน {preview.providerLabel}</span>
                 )}
+                <ExternalLink className="w-3.5 h-3.5 text-[#8c8275]" />
+              </a>
+            )}
+
+            {preview.secondarySocialUrl && (
+              <a
+                href={preview.secondarySocialUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#fdfbf7] hover:bg-[#f4eee4] text-[#4d4740] border border-[#e2d8cb] text-xs font-bold transition-colors shadow-2xs"
+              >
+                <span>เปิดลิงก์ต้นทาง (Social)</span>
                 <ExternalLink className="w-3.5 h-3.5 text-[#8c8275]" />
               </a>
             )}

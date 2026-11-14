@@ -1,11 +1,29 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, FolderOpen, Rocket, RotateCcw } from 'lucide-react';
-import { isStagingGroupId, isStagingTagId } from '../../../services/seedData';
+import {
+  Check,
+  ChevronDown,
+  FolderOpen,
+  Rocket,
+  RotateCcw,
+  Search,
+  Settings,
+  Sparkles,
+  X,
+} from 'lucide-react';
+import { isStagingTagId } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
+import {
+  CategoryTag,
+  CategoryTier,
+  DEFAULT_TIER_SUBCATEGORIES,
+  DEFAULT_UNCLASSIFIED_SUBCATEGORY,
+  TierSubCategoriesConfig,
+} from '../../../types/tag.types';
 import { MixRecipeId } from '../../../utils/collisionDetector';
-import { CategoryGroupIcon } from '../../ui/CategoryGroupIcon';
-import { TagPill } from '../../ui/TagPill';
+import { TIER_THEME_CONFIGS } from '../../tags/three-tier/IndependentTierColumn';
+import { TagPill, getEntityIcon } from '../../ui/TagPill';
+import { TagFilterMatchMode } from './useFootageVault';
 import {
   CategoryGroupOverviewItem,
   MainCategoryOverviewItem,
@@ -14,6 +32,10 @@ import {
 export interface VaultThreeTierExplorerProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
+  tags?: CategoryTag[];
+  tierSubCategories?: TierSubCategoriesConfig;
+  tagMatchMode?: TagFilterMatchMode;
+  onChangeTagMatchMode?: (mode: TagFilterMatchMode) => void;
   categoryGroupsOverview: CategoryGroupOverviewItem[];
   mainCategoriesCount: number;
   selectedGroupId: string | null;
@@ -22,42 +44,84 @@ export interface VaultThreeTierExplorerProps {
   activeMainCategory: MainCategoryOverviewItem | null;
   hasHierarchySelection: boolean;
   computedFootage: ComputedFootage[];
+  scopedFootageCount?: number;
+  scopedUsableCount?: number;
   activeDragFootageIds: string[];
   onQuickAssignCategory: (footageIds: string[], targetTagId: string) => void;
   onSelectGroup: (groupId: string) => void;
   onSelectMainCategory: (mainTagId: string) => void;
   onSelectSubcategory: (subTagId: string, mainTagId: string) => void;
+  onToggleFacetTag?: (tagId: string) => void;
   onClearMainCategoryFilter: () => void;
   onSelectAllInMainCategory: (mainTagId: string) => void;
   onClearHierarchySelection: () => void;
   onOpenThreeTierManager: () => void;
   onLaunchEpisodeBuilder: (categoryId: string, formula: MixRecipeId) => void;
+  onLaunchEpisodeFromCurrentFilter?: () => void;
 }
 
 export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
   isExpanded,
   onToggleExpand,
-  categoryGroupsOverview,
-  mainCategoriesCount,
-  selectedGroupId,
+  tags = [],
+  tierSubCategories = DEFAULT_TIER_SUBCATEGORIES,
+  tagMatchMode = 'AND',
+  onChangeTagMatchMode,
   selectedTagFilter,
-  activeGroupOverview,
-  activeMainCategory,
   hasHierarchySelection,
   computedFootage,
+  scopedFootageCount = 0,
+  scopedUsableCount = 0,
   activeDragFootageIds,
   onQuickAssignCategory,
-  onSelectGroup,
   onSelectMainCategory,
-  onSelectSubcategory,
-  onClearMainCategoryFilter,
-  onSelectAllInMainCategory,
+  onToggleFacetTag,
   onClearHierarchySelection,
   onOpenThreeTierManager,
   onLaunchEpisodeBuilder,
+  onLaunchEpisodeFromCurrentFilter,
 }) => {
   const [dragOverTagId, setDragOverTagId] = useState<string | null>(null);
-  const isDragging = activeDragFootageIds.length > 0;
+  const [explorerSearch, setExplorerSearch] = useState('');
+  const [collapsedSubKeys, setCollapsedSubKeys] = useState<
+    Record<string, boolean>
+  >(() => ({
+    [`1__${DEFAULT_UNCLASSIFIED_SUBCATEGORY}`]: true,
+  }));
+
+  const realTags = useMemo(
+    () => tags.filter((t) => !isStagingTagId(t.id)),
+    [tags]
+  );
+
+  const tagMap = useMemo(() => {
+    const map: Record<string, CategoryTag> = {};
+    realTags.forEach((t) => {
+      map[t.id] = t;
+    });
+    return map;
+  }, [realTags]);
+
+  const realSelectedTagIds = useMemo(
+    () => selectedTagFilter.filter((tid) => Boolean(tid) && !isStagingTagId(tid)),
+    [selectedTagFilter]
+  );
+
+  // Count how many clips carry each tag
+  const clipCountByTagId = useMemo(() => {
+    const counts: Record<string, { total: number; usable: number }> = {};
+    computedFootage.forEach((ft) => {
+      const isUsable =
+        ft.cooldownStatus === 'NEW_UNTOUCHED' ||
+        ft.cooldownStatus === 'READY_FRESH';
+      ft.tags.forEach((tid) => {
+        if (!counts[tid]) counts[tid] = { total: 0, usable: 0 };
+        counts[tid].total += 1;
+        if (isUsable) counts[tid].usable += 1;
+      });
+    });
+    return counts;
+  }, [computedFootage]);
 
   const extractDraggedFootageIds = (e: React.DragEvent): string[] => {
     try {
@@ -103,26 +167,245 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
     }
   };
 
-  return (
-    <div className="bg-[#faf8f5] border border-[#e5ded4] rounded-2xl shadow-2xs overflow-hidden">
-      {/* Compact Explorer Header */}
+  const handleClickTag = (tagId: string) => {
+    if (onToggleFacetTag) {
+      onToggleFacetTag(tagId);
+    } else {
+      onSelectMainCategory(tagId);
+    }
+  };
+
+  const buildTierGroups = (tier: CategoryTier, subList: string[]) => {
+    const q = explorerSearch.trim().toLowerCase();
+    const tierTags = realTags.filter((t) => {
+      const tTier = t.tier === 2 || t.tier === 3 ? t.tier : 1;
+      if (tTier !== tier) return false;
+      if (!q) return true;
+      return (
+        t.name.toLowerCase().includes(q) ||
+        (t.subCategory || '').toLowerCase().includes(q)
+      );
+    });
+
+    const map: Record<string, CategoryTag[]> = {};
+    subList.forEach((sc) => {
+      map[sc] = [];
+    });
+
+    tierTags.forEach((t) => {
+      const sub = (t.subCategory || DEFAULT_UNCLASSIFIED_SUBCATEGORY).trim();
+      if (!map[sub]) {
+        map[sub] = [];
+      }
+      map[sub].push(t);
+    });
+
+    const keys = Array.from(new Set([...subList, ...Object.keys(map)]));
+    return keys
+      .map((subCategory) => ({
+        subCategory,
+        tags: (map[subCategory] || []).sort((a, b) => {
+          const countA = clipCountByTagId[a.id]?.total || 0;
+          const countB = clipCountByTagId[b.id]?.total || 0;
+          return countB - countA;
+        }),
+      }))
+      .filter((g) => !q || g.tags.length > 0);
+  };
+
+  const tier1Groups = useMemo(
+    () => buildTierGroups(1, tierSubCategories.tier1),
+    [realTags, tierSubCategories.tier1, explorerSearch, clipCountByTagId]
+  );
+  const tier2Groups = useMemo(
+    () => buildTierGroups(2, tierSubCategories.tier2),
+    [realTags, tierSubCategories.tier2, explorerSearch, clipCountByTagId]
+  );
+  const tier3Groups = useMemo(
+    () => buildTierGroups(3, tierSubCategories.tier3),
+    [realTags, tierSubCategories.tier3, explorerSearch, clipCountByTagId]
+  );
+
+  const producibleEpisodesFromCombo = Math.floor(scopedUsableCount / 5);
+
+  const renderTierColumn = (
+    tier: CategoryTier,
+    groups: { subCategory: string; tags: CategoryTag[] }[]
+  ) => {
+    const theme = TIER_THEME_CONFIGS[tier];
+    const totalInTier = groups.reduce((acc, g) => acc + g.tags.length, 0);
+
+    return (
       <div
-        onClick={onToggleExpand}
-        className="px-4 py-3 bg-[#faf7f2] hover:bg-[#f3ece0] transition-colors cursor-pointer flex flex-wrap items-center justify-between gap-2"
+        key={`vault-tier-${tier}`}
+        className="flex flex-col rounded-2xl border border-[#E5DED4] bg-white overflow-hidden shadow-2xs"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-[#eedbc0] text-[#523715] border border-[#dfc6a3] flex items-center justify-center shrink-0">
-            <FolderOpen className="w-3.5 h-3.5 text-[#6e491c]" />
+        {/* Column Header */}
+        <div
+          className={`px-3 py-2 border-b ${theme.headerBorder} ${theme.headerBg} flex items-center justify-between gap-1.5 sm:gap-2`}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold whitespace-nowrap shrink-0 ${theme.badgeBg} ${theme.badgeTextCls}`}
+              >
+                <span className="md:hidden">T{tier}</span>
+                <span className="hidden md:inline">{theme.badgeText}</span>
+              </span>
+              <span className={`text-xs font-extrabold ${theme.accentText} truncate min-w-0`}>
+                {theme.title}
+              </span>
+            </div>
+            <p className="text-[10px] text-[#5C5042] truncate mt-0.5 hidden md:block">
+              {theme.subtitle}
+            </p>
           </div>
-          <span className="text-sm font-extrabold text-[#3d3326]">
-            สำรวจมิติกลุ่มแท็ก (Multi-Dimensional Explorer)
-          </span>
-          <span className="text-xs font-mono text-[#786b5c] tabular-nums">
-            {categoryGroupsOverview.length} มิติ · {mainCategoriesCount} แท็กหลัก
+          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/80 text-[#524538] border border-black/5 tabular-nums shrink-0">
+            {totalInTier} แท็ก
           </span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Sub-category Frames inside Column */}
+        <div className="p-2.5 space-y-2 max-h-72 overflow-y-auto scrollbar-thin bg-[#FAF8F5]">
+          {groups.map(({ subCategory, tags: subTags }) => {
+            const subKey = `${tier}__${subCategory}`;
+            const isSearching = explorerSearch.trim().length > 0;
+            const isCollapsed = !isSearching && Boolean(collapsedSubKeys[subKey]);
+            const isUnclassified =
+              subCategory === DEFAULT_UNCLASSIFIED_SUBCATEGORY;
+
+            return (
+              <div
+                key={subKey}
+                className={`rounded-xl border overflow-hidden ${
+                  isUnclassified
+                    ? 'bg-[#FFFDF8] border-[#E8D2AE]'
+                    : 'bg-white border-[#E5DED4]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsedSubKeys((prev) => ({
+                      ...prev,
+                      [subKey]: !prev[subKey],
+                    }))
+                  }
+                  className={`w-full px-2.5 py-1.5 border-b flex items-center justify-between gap-1.5 text-left cursor-pointer ${
+                    isUnclassified
+                      ? 'bg-[#FEF6E6] border-[#E8D2AE]'
+                      : `${theme.subHeaderBg} ${theme.subHeaderBorder}`
+                  }`}
+                >
+                  <div className="flex items-center gap-1 min-w-0">
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[#524538] transition-transform shrink-0 ${
+                        isCollapsed ? '-rotate-90' : ''
+                      }`}
+                    />
+                    <span className="text-[11px] font-extrabold text-[#3D332A] truncate">
+                      {subCategory}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-white text-[#6E5F52] border border-black/10 tabular-nums shrink-0">
+                    {subTags.length}
+                  </span>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="p-2">
+                    {subTags.length === 0 ? (
+                      <p className="text-[11px] text-[#8C7B6C] italic text-center py-1">
+                        ยังไม่มีแท็กในหมวดนี้
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {subTags.map((tag) => {
+                          const isSelected = selectedTagFilter.includes(tag.id);
+                          const isDropHover = dragOverTagId === tag.id;
+                          const counts = clipCountByTagId[tag.id] || {
+                            total: 0,
+                            usable: 0,
+                          };
+
+                          return (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              onClick={() => handleClickTag(tag.id)}
+                              onDragOver={(e) => handleDragOverTag(e, tag.id)}
+                              onDragLeave={(e) => handleDragLeaveTag(e, tag.id)}
+                              onDrop={(e) => handleDropOnTag(e, tag.id)}
+                              className={`text-xs px-2.5 py-1 rounded-xl font-semibold inline-flex items-center gap-1 transition-all cursor-pointer ${
+                                isDropHover
+                                  ? 'bg-[#EDF6EF] border-2 border-[#549364] text-[#164121] scale-105'
+                                  : isSelected
+                                  ? 'bg-[#D5EBDA] text-[#144220] font-bold border border-[#AED7B7] shadow-2xs ring-1 ring-[#C5E6CD]'
+                                  : 'bg-[#FAF8F5] text-[#4A3F31] border border-[#DFD7CA] hover:bg-[#EDF6F0] hover:border-[#C5DFCC]'
+                              }`}
+                              title={`#${tag.name} — พร้อมใช้ ${counts.usable} คลิป จากทั้งหมด ${counts.total} คลิป (คลิกเพื่อกรองผสม / ลากคลิปมาหย่อนเพื่อติดแท็ก)`}
+                            >
+                              {isSelected && (
+                                <Check className="w-3 h-3 text-[#1B572A] shrink-0" />
+                              )}
+                              <span className="text-xs shrink-0">
+                                {getEntityIcon(tag)}
+                              </span>
+                              <span>#{tag.name}</span>
+                              <span
+                                className={`text-[10px] font-mono px-1 rounded tabular-nums ${
+                                  isSelected
+                                    ? 'bg-[#BFE0C8] text-[#144220]'
+                                    : counts.usable >= 5
+                                    ? 'bg-[#EAF5ED] text-[#245233]'
+                                    : 'bg-[#EFECE6] text-[#786B5C]'
+                                }`}
+                              >
+                                {counts.total}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-[#FAF8F5] border border-[#E5DED4] rounded-2xl shadow-2xs overflow-hidden">
+      {/* Compact Explorer Header */}
+      <div
+        onClick={onToggleExpand}
+        className="px-4 py-3 bg-[#FAF7F2] hover:bg-[#F3ECE0] transition-colors cursor-pointer flex items-center justify-between gap-2"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-[#EEDBC0] text-[#523715] border border-[#DFC6A3] flex items-center justify-center shrink-0">
+            <FolderOpen className="w-3.5 h-3.5 text-[#6E491C]" />
+          </div>
+          <span className="text-xs sm:text-sm font-extrabold text-[#3D3326] truncate">
+            <span className="md:hidden">ผสมแท็ก 3 ชั้น</span>
+            <span className="hidden md:inline">
+              สำรวจและผสมแท็ก 3 ชั้นอิสระ (3-Tier Tag Combiner)
+            </span>
+          </span>
+          {realSelectedTagIds.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-[#3B6845] text-white text-[11px] font-mono font-bold tabular-nums shrink-0">
+              {realSelectedTagIds.length}
+            </span>
+          )}
+          <span className="hidden lg:inline text-xs font-mono text-[#786B5C] tabular-nums truncate">
+            คลิกผสมแท็กข้ามคอลัมน์เพื่อค้นหาคลิปจัด 5 อันดับ
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
           {hasHierarchySelection && (
             <button
               type="button"
@@ -130,10 +413,11 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                 e.stopPropagation();
                 onClearHierarchySelection();
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#35593c] bg-[#eef6f0] border border-[#cbe3cf] rounded-lg hover:bg-[#dfefe3] cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#35593C] bg-[#EEF6F0] border border-[#CBE3CF] rounded-lg hover:bg-[#DFEFE3] cursor-pointer transition-colors whitespace-nowrap"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>ล้างตัวกรอง</span>
+              <span className="hidden sm:inline">ล้างตัวกรอง</span>
+              <span className="sm:hidden">ล้าง</span>
             </button>
           )}
 
@@ -141,11 +425,25 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              onOpenThreeTierManager();
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-[#5C4426] bg-[#F2EBD9] hover:bg-[#EAE0CB] border border-[#DFD4BE] cursor-pointer transition-colors whitespace-nowrap"
+            title="จัดการแท็ก 3 ชั้น"
+          >
+            <Settings className="w-3.5 h-3.5 text-[#7D5630] shrink-0" />
+            <span className="hidden sm:inline">จัดการแท็ก 3 ชั้น</span>
+            <span className="sm:hidden">จัดการแท็ก</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
               onToggleExpand();
             }}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer whitespace-nowrap"
           >
-            <span>{isExpanded ? 'ซ่อน' : 'กางดู'}</span>
+            <span>{isExpanded ? 'ซ่อน' : 'เลือกแท็ก'}</span>
             <motion.span
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
@@ -157,6 +455,67 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
         </div>
       </div>
 
+      {/* Active Multi-Tag Combination Strip (Visible even when collapsed if tags are selected) */}
+      {realSelectedTagIds.length > 0 && (
+        <div className="px-4 py-2.5 bg-[#EEF6F0] border-t border-[#CBE3CF] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-extrabold text-[#1F4828] flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-[#2D623C]" />
+              <span className="hidden sm:inline">ป้ายที่กำลังผสม ({realSelectedTagIds.length}):</span>
+              <span className="sm:hidden font-mono font-bold">({realSelectedTagIds.length})</span>
+            </span>
+
+            {realSelectedTagIds.map((tid, idx) => {
+              const t = tagMap[tid];
+              if (!t) return null;
+              return (
+                <React.Fragment key={tid}>
+                  {idx > 0 && (
+                    <span className="text-[11px] font-mono font-extrabold text-[#2D623C] px-0.5">
+                      {tagMatchMode === 'AND' ? '+' : 'หรือ'}
+                    </span>
+                  )}
+                  <TagPill
+                    tag={t}
+                    showEntityIcon={true}
+                    onRemove={() => handleClickTag(tid)}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-[#1F4828] bg-white px-2.5 py-1 rounded-xl border border-[#BFE0C8] tabular-nums">
+              <span className="hidden sm:inline">พบ {scopedFootageCount} คลิป · พร้อมใช้ {scopedUsableCount} คลิป</span>
+              <span className="sm:hidden">{scopedFootageCount} คลิป (พร้อมใช้ {scopedUsableCount})</span>
+              {producibleEpisodesFromCombo > 0
+                ? ` (${producibleEpisodesFromCombo} EP)`
+                : ''}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (onLaunchEpisodeFromCurrentFilter) {
+                  onLaunchEpisodeFromCurrentFilter();
+                } else if (realSelectedTagIds[0]) {
+                  onLaunchEpisodeBuilder(
+                    realSelectedTagIds[0],
+                    'FORMULA_2_NEW_3_FRESH'
+                  );
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#3B6845] hover:bg-[#2C5235] rounded-xl shadow-2xs whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+            >
+              <Rocket className="w-3.5 h-3.5 text-white" />
+              <span className="hidden sm:inline">จัด 5 อันดับจากชุดนี้ →</span>
+              <span className="sm:hidden">จัด 5 อันดับ</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
@@ -166,322 +525,34 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="border-t border-[#e5ded4] p-4 space-y-3.5 bg-[#faf8f5]">
-              {/* STAGE 1: Category Groups / Dimensions */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#3e3427] flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-[#eedbc0] text-[#523715] text-[10px] font-mono font-bold flex items-center justify-center">
-                      1
-                    </span>
-                    <span>มิติกลุ่มแท็ก (Dimensions)</span>
-                  </span>
-                </div>
-
-                {categoryGroupsOverview.length === 0 ? (
-                  <div className="p-4 bg-white rounded-xl border border-dashed border-[#dfd7ca] text-center space-y-2">
-                    <p className="text-xs text-[#7d7162]">ยังไม่มีมิติกลุ่มแท็ก</p>
-                    <button
-                      type="button"
-                      onClick={onOpenThreeTierManager}
-                      className="px-3 py-1.5 bg-[#78593a] text-white text-xs font-bold rounded-lg hover:bg-[#62462a] cursor-pointer transition-colors"
-                    >
-                      + จัดการมิติกลุ่มแท็ก
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                    {categoryGroupsOverview.map((groupItem) => {
-                      const isGroupSelected = selectedGroupId === groupItem.group.id;
-                      const isStagingGrp = isStagingGroupId(groupItem.group.id);
-
-                      return (
-                        <motion.button
-                          key={groupItem.group.id}
-                          type="button"
-                          whileHover={{ y: -1.5 }}
-                          whileTap={{ scale: 0.98 }}
-                          transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                          onClick={() => onSelectGroup(groupItem.group.id)}
-                          onDragEnter={() => {
-                            if (
-                              isDragging &&
-                              !isStagingGrp &&
-                              selectedGroupId !== groupItem.group.id
-                            ) {
-                              onSelectGroup(groupItem.group.id);
-                            }
-                          }}
-                          className={`relative text-left p-3 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-2 overflow-hidden ${
-                            isGroupSelected
-                              ? 'bg-[#f0e4d2] text-[#3d2912] border-[#dcbe93] shadow-2xs font-semibold ring-1 ring-[#e5cdab]'
-                              : isStagingGrp
-                              ? 'bg-[#fef8ed] hover:bg-[#faedd8] border-[#ebd6b2] text-[#63421b]'
-                              : 'bg-white hover:bg-[#faf7f2] border-[#e8e2d8] text-[#4d4133]'
-                          }`}
-                        >
-                          <div className="relative z-10 flex items-center justify-between gap-1.5">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <CategoryGroupIcon
-                                icon={groupItem.group.icon}
-                                className={`w-3.5 h-3.5 shrink-0 ${
-                                  isGroupSelected
-                                    ? 'text-[#6e491c]'
-                                    : isStagingGrp
-                                    ? 'text-[#a16828]'
-                                    : 'text-[#6e491c]'
-                                }`}
-                              />
-                              <span className="text-xs font-bold truncate">
-                                {isStagingGrp ? 'ไม่มีหมวดหมู่' : groupItem.group.name}
-                              </span>
-                            </div>
-                            {!isStagingGrp && (
-                              <span
-                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums ${
-                                  isGroupSelected
-                                    ? 'bg-[#dfc5a0] text-[#3d2912]'
-                                    : 'bg-[#eee7dc] text-[#695d4f]'
-                                }`}
-                              >
-                                {groupItem.mainCatCount}
-                              </span>
-                            )}
-                          </div>
-
-                          <div
-                            className={`relative z-10 flex items-baseline justify-between pt-1.5 border-t text-[11px] font-mono tabular-nums ${
-                              isGroupSelected
-                                ? 'border-[#dfc8a7] text-[#614524]'
-                                : 'border-[#eee8de] text-[#786b5c]'
-                            }`}
-                          >
-                            <span>{groupItem.totalCount} คลิป</span>
-                            {!isStagingGrp && (
-                              <span
-                                className={`font-bold ${
-                                  isGroupSelected
-                                    ? 'text-[#1e502a]'
-                                    : groupItem.usableCount > 0
-                                    ? 'text-[#285734]'
-                                    : 'text-[#9c9182]'
-                                }`}
-                              >
-                                พร้อม {groupItem.usableCount}
-                              </span>
-                            )}
-                          </div>
-                        </motion.button>
-                      );
-                    })}
-                  </div>
+            <div className="border-t border-[#E5DED4] p-3.5 space-y-3 bg-[#FAF8F5]">
+              {/* Quick Search inside 3-Tier Explorer */}
+              <div className="relative max-w-md">
+                <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={explorerSearch}
+                  onChange={(e) => setExplorerSearch(e.target.value)}
+                  placeholder="ค้นหาแท็ก (เช่น พูดผิด, พี่แจ๊ส)..."
+                  className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#DED3C5] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#78593A]"
+                />
+                {explorerSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setExplorerSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
 
-              {/* STAGE 2: Main Categories under Selected Group */}
-              <AnimatePresence initial={false}>
-                {activeGroupOverview && !isStagingGroupId(activeGroupOverview.group.id) && (
-                  <motion.div
-                    key="vault-tier2-main-cats"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-3 rounded-xl bg-[#faf7f2] border border-[#e8dfd3] space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-[#3e3427] flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-[#dce9f4] text-[#1b3d5b] text-[10px] font-mono font-bold flex items-center justify-center">
-                            2
-                          </span>
-                          <span>ป้ายแท็กหลักในมิติ: {activeGroupOverview.group.name}</span>
-                        </span>
-
-                        {activeMainCategory && (
-                          <button
-                            type="button"
-                            onClick={onClearMainCategoryFilter}
-                            className="text-[11px] font-semibold text-[#24496b] hover:text-[#14324d] cursor-pointer"
-                          >
-                            ดูทั้งมิติ ({activeGroupOverview.totalCount})
-                          </button>
-                        )}
-                      </div>
-
-                      {activeGroupOverview.mainCategories.length === 0 ? (
-                        <div className="p-3 text-center text-xs text-[#7d7162] bg-white rounded-lg border border-dashed border-[#dfd7ca]">
-                          ยังไม่มีป้ายแท็กหลักในมิตินี้
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                          {activeGroupOverview.mainCategories.map((item) => {
-                            const isSelected =
-                              activeMainCategory?.mainTag.id === item.mainTag.id;
-                            const isStaging = isStagingTagId(item.mainTag.id);
-                            const isReady5 = !isStaging && item.usableCount >= 5;
-                            const isDropHover =
-                              !isStaging && dragOverTagId === item.mainTag.id;
-
-                            return (
-                              <motion.button
-                                key={item.mainTag.id}
-                                type="button"
-                                whileHover={{ y: -1 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => onSelectMainCategory(item.mainTag.id)}
-                                onDragOver={(e) => handleDragOverTag(e, item.mainTag.id)}
-                                onDragLeave={(e) => handleDragLeaveTag(e, item.mainTag.id)}
-                                onDrop={(e) => handleDropOnTag(e, item.mainTag.id)}
-                                className={`relative text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 overflow-hidden ${
-                                  isDropHover
-                                    ? 'bg-[#edf6ef] border-2 border-[#549364] text-[#164121] scale-[1.02]'
-                                    : isSelected
-                                    ? 'bg-[#d8eaf6] text-[#143e62] border-[#a8cde8] ring-1 ring-[#bad7ee] shadow-2xs font-semibold'
-                                    : 'bg-white hover:border-[#b8cfe3] border-[#e8e2d8] text-[#4d4133]'
-                                }`}
-                              >
-                                <div className="relative z-10 flex items-center justify-between gap-1.5">
-                                  <span className="text-xs font-bold truncate">
-                                    #{item.mainTag.name}
-                                  </span>
-                                  {isReady5 && (
-                                    <span
-                                      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums ${
-                                        isSelected
-                                          ? 'bg-[#cce5f7] text-[#14395a]'
-                                          : 'bg-[#eaf5ed] text-[#245233] border border-[#c5e1cb]'
-                                      }`}
-                                    >
-                                      {item.producibleEpisodes} EP
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div
-                                  className={`relative z-10 flex items-baseline justify-between pt-1 border-t text-[11px] font-mono tabular-nums ${
-                                    isSelected
-                                      ? 'border-[#bcdbee] text-[#2c5378]'
-                                      : 'border-[#eee8de] text-[#786b5c]'
-                                  }`}
-                                >
-                                  <span>{item.totalCount} คลิป</span>
-                                  <span
-                                    className={`font-bold ${
-                                      isSelected
-                                        ? 'text-[#1d4f29]'
-                                        : isReady5
-                                        ? 'text-[#245233]'
-                                        : 'text-[#9c9182]'
-                                    }`}
-                                  >
-                                    พร้อม {item.usableCount}
-                                  </span>
-                                </div>
-                              </motion.button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* STAGE 3: Subcategories under Selected Main Category */}
-              <AnimatePresence initial={false}>
-                {activeMainCategory && !isStagingTagId(activeMainCategory.mainTag.id) && (
-                  <motion.div
-                    key="vault-tier3-subcats"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-[#eef6f0] p-3 rounded-xl border border-[#cbe3cf]">
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-[#d8eedc] text-[#194523] text-[10px] font-mono font-bold flex items-center justify-center">
-                            3
-                          </span>
-                          <span className="text-xs font-bold text-[#1f4828]">
-                            ป้ายแท็กย่อย / คุณลักษณะใน #{activeMainCategory.mainTag.name}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onSelectAllInMainCategory(activeMainCategory.mainTag.id)
-                            }
-                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
-                              selectedTagFilter.length === 1 &&
-                              selectedTagFilter[0] === activeMainCategory.mainTag.id
-                                ? 'bg-[#2d5d39] text-white border-[#2d5d39]'
-                                : 'bg-white text-[#4d4133] border-[#dfd7ca] hover:border-[#b8d6be]'
-                            }`}
-                          >
-                            ทั้งหมด ({activeMainCategory.totalCount})
-                          </button>
-
-                          {activeMainCategory.subTags.map((sub) => {
-                            const subCount = computedFootage.filter((ft) =>
-                              ft.tags.includes(sub.id)
-                            ).length;
-                            const isSubSelected = selectedTagFilter.includes(sub.id);
-                            const isSubDropHover = dragOverTagId === sub.id;
-
-                            return (
-                              <div
-                                key={sub.id}
-                                onDragOver={(e) => handleDragOverTag(e, sub.id)}
-                                onDragLeave={(e) => handleDragLeaveTag(e, sub.id)}
-                                onDrop={(e) => handleDropOnTag(e, sub.id)}
-                                className={`inline-flex rounded-lg transition-transform ${
-                                  isSubDropHover
-                                    ? 'ring-2 ring-[#4d8f5d] scale-105 bg-[#d8eedc]'
-                                    : ''
-                                }`}
-                              >
-                                <TagPill
-                                  tag={sub}
-                                  selected={isSubSelected}
-                                  activeLayoutId="vault-active-subcat-pill"
-                                  onClick={() =>
-                                    onSelectSubcategory(
-                                      sub.id,
-                                      activeMainCategory.mainTag.id
-                                    )
-                                  }
-                                  count={subCount}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onLaunchEpisodeBuilder(
-                            activeMainCategory.mainTag.id,
-                            activeMainCategory.newCount >= 5
-                              ? 'FORMULA_ALL_NEW'
-                              : 'FORMULA_2_NEW_3_FRESH'
-                          )
-                        }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#78593a] hover:bg-[#62462a] rounded-xl shadow-2xs whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-                      >
-                        <Rocket className="w-3.5 h-3.5 text-white" />
-                        <span>จัด 5 อันดับ →</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* 3 Parallel Columns (Tier 1 | Tier 2 | Tier 3) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                {renderTierColumn(1, tier1Groups)}
+                {renderTierColumn(2, tier2Groups)}
+                {renderTierColumn(3, tier3Groups)}
+              </div>
             </div>
           </motion.div>
         )}

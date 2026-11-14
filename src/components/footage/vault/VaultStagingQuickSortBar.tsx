@@ -68,8 +68,7 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
 
   const isDragging = activeDragFootageIds.length > 0;
   const selectedCount = selectedFootageIds.length;
-  const shouldShowWorkspace =
-    isStagingFilterActive || selectedCount > 0 || isDragging;
+  const shouldShowWorkspace = isStagingFilterActive || isDragging;
 
   useEffect(() => {
     if (isDragging) {

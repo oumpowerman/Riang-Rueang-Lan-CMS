@@ -1,5 +1,6 @@
 import React from 'react';
 import { FileText, FolderTree } from 'lucide-react';
+import { CleanPrefixedTitlesButton } from '../CleanPrefixedTitlesButton';
 import { DriveClipIdPrefix, DriveImportMode } from './driveImport.types';
 
 interface DriveImportModeBarProps {
@@ -16,32 +17,36 @@ export const DriveImportModeBar: React.FC<DriveImportModeBarProps> = ({
   onIdPrefixChange,
 }) => {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
-        <button
-          type="button"
-          onClick={() => onModeChange('RECURSIVE')}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeImportMode === 'RECURSIVE'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <FolderTree className="w-3.5 h-3.5 text-indigo-600" />
-          <span>สแกนโฟลเดอร์อัตโนมัติ (Recursive)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onModeChange('PASTE')}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeImportMode === 'PASTE'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <FileText className="w-3.5 h-3.5 text-sky-600" />
-          <span>วางข้อความรายชื่อ (Manual Paste)</span>
-        </button>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+          <button
+            type="button"
+            onClick={() => onModeChange('RECURSIVE')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeImportMode === 'RECURSIVE'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FolderTree className="w-3.5 h-3.5 text-indigo-600" />
+            <span>สแกนโฟลเดอร์อัตโนมัติ (Recursive)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange('PASTE')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeImportMode === 'PASTE'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 text-sky-600" />
+            <span>วางข้อความรายชื่อ (Manual Paste)</span>
+          </button>
+        </div>
+
+        <CleanPrefixedTitlesButton compact />
       </div>
 
       <div className="flex items-center gap-2">
@@ -60,3 +65,4 @@ export const DriveImportModeBar: React.FC<DriveImportModeBarProps> = ({
     </div>
   );
 };
+

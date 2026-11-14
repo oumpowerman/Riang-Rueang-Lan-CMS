@@ -57,10 +57,11 @@ export function useCMSFootageActions({
     durationSec?: number;
   }): Footage => {
     const nextId = generateNextId('FT', footageRef.current.map((f) => f.id));
-    const standardFileName = generateStandardFileName(nextId, payload.title);
+    const cleanedTitle = cleanFootageTitle(payload.title);
+    const standardFileName = generateStandardFileName(nextId, cleanedTitle);
     const newFootage: Footage = {
       id: nextId,
-      title: payload.title.trim(),
+      title: cleanedTitle,
       ingestionFlow: 'DIRECT_1_TO_1',
       sourceId: null,
       originalUrl: payload.originalUrl.trim(),
@@ -91,6 +92,7 @@ export function useCMSFootageActions({
       channelOrCreator: string;
       totalDuration?: string;
       tags: string[];
+      driveFolderUrl?: string;
       notes: string;
     },
     clips: SplitClipDraft[]
@@ -131,6 +133,7 @@ export function useCMSFootageActions({
       channelOrCreator: sourcePayload.channelOrCreator.trim() || 'ไม่ระบุช่องต้นทาง',
       totalDuration: sourcePayload.totalDuration?.trim() || '01:00:00',
       tags: sourcePayload.tags,
+      driveFolderUrl: sourcePayload.driveFolderUrl?.trim() || '',
       notes: sourcePayload.notes.trim(),
       createdAt: getReferenceTodayDate(),
       splitFootageIds: createdFootage.map((f) => f.id),
@@ -412,6 +415,7 @@ export function useCMSFootageActions({
         channelOrCreator: string;
         totalDuration?: string;
         tags: string[];
+        driveFolderUrl?: string;
         notes: string;
       };
       clips: SplitClipDraft[];
@@ -464,6 +468,7 @@ export function useCMSFootageActions({
         channelOrCreator: sourcePayload.channelOrCreator.trim() || 'ไม่ระบุช่องต้นทาง',
         totalDuration: sourcePayload.totalDuration?.trim() || '01:00:00',
         tags: sourcePayload.tags,
+        driveFolderUrl: sourcePayload.driveFolderUrl?.trim() || '',
         notes: sourcePayload.notes.trim(),
         createdAt: getReferenceTodayDate(),
         splitFootageIds: groupFootage.map((f) => f.id),
@@ -590,31 +595,44 @@ export function useCMSFootageActions({
     setLastQuickSortUndoRecord(null);
   };
 
-  // Batch Sync Individual Footage Tags Map in a single atomic state + Firestore batch
+  // Batch Sync Individual Footage Tags & Mascot Notes Map in a single atomic state + Firestore batch
   const batchSyncFootageTagsByMap = async (
     tagsByFootageId: Record<string, string[]>,
     mode: 'REPLACE' | 'APPEND' = 'APPEND',
-    onChunkProgress?: (progress: BatchChunkProgress) => void
+    onChunkProgress?: (progress: BatchChunkProgress) => void,
+    mascotNotesByFootageId?: Record<string, string>
   ): Promise<void> => {
-    const targetIds = Object.keys(tagsByFootageId);
-    if (targetIds.length === 0) return;
+    const targetIds = new Set([
+      ...Object.keys(tagsByFootageId),
+      ...Object.keys(mascotNotesByFootageId || {}),
+    ]);
+    if (targetIds.size === 0) return;
 
     const updatedFootages: Footage[] = [];
     const nextList = footageRef.current.map((ft) => {
-      const incomingTags = tagsByFootageId[ft.id];
-      if (!incomingTags) return ft;
+      if (!targetIds.has(ft.id)) return ft;
 
-      let mergedTags: string[];
-      if (mode === 'REPLACE') {
-        mergedTags = normalizeFootageTags(incomingTags);
-      } else {
-        const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
-        mergedTags = normalizeFootageTags([...existingReal, ...incomingTags]);
+      const incomingTags = tagsByFootageId[ft.id];
+      let mergedTags = ft.tags;
+      if (incomingTags) {
+        if (mode === 'REPLACE') {
+          mergedTags = normalizeFootageTags(incomingTags);
+        } else {
+          const existingReal = ft.tags.filter((t) => !isStagingTagId(t));
+          mergedTags = normalizeFootageTags([...existingReal, ...incomingTags]);
+        }
       }
+
+      const incomingNote = mascotNotesByFootageId?.[ft.id];
+      const nextMascotNotes =
+        incomingNote !== undefined && incomingNote.trim().length > 0
+          ? incomingNote.trim()
+          : ft.mascotNotes;
 
       const updatedFt: Footage = {
         ...ft,
         tags: mergedTags,
+        mascotNotes: nextMascotNotes,
       };
       updatedFootages.push(updatedFt);
       return updatedFt;
@@ -667,6 +685,37 @@ export function useCMSFootageActions({
     return updatedFootages.length;
   };
 
+  // Batch Clean Leading Rank Prefixes (e.g. "1. ", "2. ", "1) ") from existing vault footages
+  const batchCleanExistingFootageTitles = async (
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ): Promise<number> => {
+    const updatedFootages: Footage[] = [];
+    const nextList = footageRef.current.map((ft) => {
+      const cleaned = cleanFootageTitle(ft.title);
+      if (!cleaned || cleaned === ft.title.trim()) return ft;
+      const updatedFt: Footage = {
+        ...ft,
+        title: cleaned,
+        standardFileName: generateStandardFileName(ft.id, cleaned),
+      };
+      updatedFootages.push(updatedFt);
+      return updatedFt;
+    });
+
+    if (updatedFootages.length === 0) return 0;
+
+    footageRef.current = nextList;
+    setFootage(nextList);
+
+    try {
+      await firestoreService.batchSaveFootages(updatedFootages, onChunkProgress);
+    } catch (err) {
+      console.warn('Firestore batchCleanExistingFootageTitles error:', err);
+    }
+
+    return updatedFootages.length;
+  };
+
   return {
     addDirectFootage,
     createSourceWithSplitFootage,
@@ -678,6 +727,7 @@ export function useCMSFootageActions({
     batchUpdateFootageTags,
     batchSyncFootageTagsByMap,
     batchSyncFootageCreatedAtByMap,
+    batchCleanExistingFootageTitles,
     batchDeleteFootage,
     lastQuickSortUndoRecord,
     quickAssignCategoryToFootage,

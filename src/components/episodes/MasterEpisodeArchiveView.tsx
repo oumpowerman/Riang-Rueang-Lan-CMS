@@ -1,40 +1,154 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
+import {
+  buildFixedFiveRankEpisode,
+  validateEpisodeStandard,
+} from '../../utils/episodeValidator';
+import {
+  DEFAULT_TEMPLATE_OPTIONS,
+  formatEpisodeToStandardTemplate,
+} from '../../utils/episodeTemplateStandardizer';
 import { useMasterArchiveMetrics } from './archive/hooks/useMasterArchiveMetrics';
 import { useMasterArchiveFilter } from './archive/hooks/useMasterArchiveFilter';
 import { ArchiveOverviewHeader } from './archive/components/ArchiveOverviewHeader';
+import {
+  EpisodeQualityWarningBanner,
+  Non5RankFixPreviewItem,
+} from './archive/components/EpisodeQualityWarningBanner';
 import { CategoryUtilizationDrawer } from './archive/components/CategoryUtilizationDrawer';
 import { SeriesNavigationFilterBar } from './archive/components/SeriesNavigationFilterBar';
+import { ArchiveThreeTierTagDrawer } from './archive/components/ArchiveThreeTierTagDrawer';
+import { ArchiveSeriesCategoryModal } from './archive/components/ArchiveSeriesCategoryModal';
+import { TemplateStandardizerModal } from './archive/components/TemplateStandardizerModal';
+import { SeriesTagBindingModal } from './archive/components/SeriesTagBindingModal';
 import { SeriesShelfView } from './archive/components/SeriesShelfView';
 import { EpisodeFilterControls } from './archive/components/EpisodeFilterControls';
 import { EpisodeCardGrid } from './archive/components/EpisodeCardGrid';
 import { EpisodeTableView } from './archive/components/EpisodeTableView';
+import type { Episode } from '../../types/episode.types';
 
 /**
  * MasterEpisodeArchiveView
- * Refactored modular coordinator for the master episode archive,
- * delegating O(1) business logic to custom hooks and UI rendering to sub-components.
+ * Modular coordinator for the Master Episode Archive:
+ * - Smart "5 อันดับ [ชื่อรายการ]" Series extraction & episode counting
+ * - Custom Master Archive Categories (independent from footage tags)
+ * - 3-Tier Footage Tag Filter Drawer (AND / OR matching)
  */
 export const MasterEpisodeArchiveView: React.FC = () => {
   const {
+    episodes,
+    tags,
+    computedFootage,
+    batchUpsertEpisodes,
     setSelectedEpisodeDetailId,
     launchEpisodeBuilderForCategory,
     setIsSupabaseSyncModalOpen,
-    setIsYouTubeDateSyncModalOpen,
   } = useCMS();
 
-  // 1. Metrics & Precomputed O(1) Maps Hook
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [bindingTargetSeriesKey, setBindingTargetSeriesKey] = useState<string | null>(
+    null
+  );
+  const [isBatchFixing, setIsBatchFixing] = useState(false);
+  const [batchFixResultCount, setBatchFixResultCount] = useState<number | null>(
+    null
+  );
+
+  // Count how many episodes do not yet conform to "5 อันดับ ... สุดฮา! EP.n" (with exemptions)
+  const templateNeedsUpdateCount = useMemo(() => {
+    let count = 0;
+    for (const ep of episodes) {
+      if (formatEpisodeToStandardTemplate(ep, DEFAULT_TEMPLATE_OPTIONS).needsUpdate) {
+        count++;
+      }
+    }
+    return count;
+  }, [episodes]);
+
+  // Compute all episodes flagged as NON_5_RANK (or missing 5 อันดับ in title)
+  const { non5RankFixedEpisodes, non5RankPreviews } = useMemo(() => {
+    const fixedList: typeof episodes = [];
+    const previews: Non5RankFixPreviewItem[] = [];
+
+    for (const ep of episodes) {
+      const val = validateEpisodeStandard(ep);
+      if (val.hasNon5Rank) {
+        const fixed = buildFixedFiveRankEpisode(ep);
+        fixedList.push(fixed);
+        previews.push({
+          id: ep.id,
+          beforeTitle: ep.title,
+          afterTitle: fixed.title,
+          afterSeriesTitle: fixed.seriesTitle || '',
+        });
+      }
+    }
+
+    return {
+      non5RankFixedEpisodes: fixedList,
+      non5RankPreviews: previews,
+    };
+  }, [episodes]);
+
+  const handleBatchFixNon5Rank = async () => {
+    if (non5RankFixedEpisodes.length === 0 || isBatchFixing) return;
+    setIsBatchFixing(true);
+    try {
+      const count = non5RankFixedEpisodes.length;
+      await batchUpsertEpisodes(non5RankFixedEpisodes);
+      setBatchFixResultCount(count);
+      setTimeout(() => {
+        setBatchFixResultCount(null);
+      }, 5000);
+    } finally {
+      setIsBatchFixing(false);
+    }
+  };
+
+  const handleApplyBatchTemplateStandardize = async (
+    updatedEpisodes: Episode[]
+  ) => {
+    if (updatedEpisodes.length === 0) return;
+    await batchUpsertEpisodes(updatedEpisodes);
+    setBatchFixResultCount(updatedEpisodes.length);
+    setTimeout(() => {
+      setBatchFixResultCount(null);
+    }, 5000);
+  };
+
+  // 1. Metrics, Smart "5 อันดับ" Series Ranking & Custom Archive Categories Hook
   const {
     categoryRanking,
+    unproducedSeriesRanking,
     maxEpisodesInAnyCategory,
     overviewMetrics,
     getEpisodeFootageMix,
-    resolveTagGroupId,
-    groupEpisodeCounts,
     latestEpisodeByCategoryMap,
+    episodeSeriesKeyMap,
+    episodeFootageTagsMap,
+    tagEpisodeCounts,
+    archiveCategories,
+    archiveCategoryMap,
+    archiveCategoryStats,
+    seriesToTagIdsMap,
+    handleAssignSeriesToArchiveCategory,
+    handleAddArchiveCategory,
+    handleRenameArchiveCategory,
+    handleDeleteArchiveCategory,
+    handleBindSeriesToTags,
   } = useMasterArchiveMetrics();
 
-  // 2. Filters, Search, Sort & Pagination Hook (Scalable to 1,000+ Episodes)
+  const bindingTargetSeries = useMemo(
+    () =>
+      bindingTargetSeriesKey
+        ? categoryRanking.find((c) => c.seriesKey === bindingTargetSeriesKey) ||
+          null
+        : null,
+    [bindingTargetSeriesKey, categoryRanking]
+  );
+
+  // 2. Filters, Search, 3-Tier Footage Tags, Sort & Pagination Hook
   const {
     archiveTab,
     setArchiveTab,
@@ -52,8 +166,20 @@ export const MasterEpisodeArchiveView: React.FC = () => {
     workflowFilter,
     setWorkflowFilter,
     workflowStageCounts,
+    issueFilterOnly,
+    setIssueFilterOnly,
+    auditSummary,
+    selectedFootageTagIds,
+    handleToggleFootageTag,
+    handleClearFootageTags,
+    footageTagMatchMode,
+    setFootageTagMatchMode,
+    showUnproducedSeries,
+    setShowUnproducedSeries,
+    shelfSeriesItems,
     sortBy,
     setSortBy,
+    onToggleSortColumn,
     viewMode,
     setViewMode,
     currentPage,
@@ -68,7 +194,9 @@ export const MasterEpisodeArchiveView: React.FC = () => {
     resetFilters,
   } = useMasterArchiveFilter({
     categoryRanking,
-    resolveTagGroupId,
+    unproducedSeriesRanking,
+    episodeSeriesKeyMap,
+    episodeFootageTagsMap,
     getEpisodeFootageMix,
   });
 
@@ -84,44 +212,81 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         onCategoryFilterChange={setCategoryFilter}
         sortedEpisodesCount={sortedEpisodes.length}
         onOpenSupabaseSync={() => setIsSupabaseSyncModalOpen(true)}
-        onOpenYouTubeDateSync={() => setIsYouTubeDateSyncModalOpen(true)}
+        onOpenManageCategories={() => setIsCategoryModalOpen(true)}
+        onOpenTemplateStandardizer={() => setIsTemplateModalOpen(true)}
+        templateNeedsUpdateCount={templateNeedsUpdateCount}
       />
 
-      {/* 2. Category Distribution & Footage Utilization Drawer */}
+      {/* 1.5 Quality Audit Warning Banner for Incomplete or Non-5-Rank Episodes */}
+      <EpisodeQualityWarningBanner
+        auditSummary={auditSummary}
+        issueFilterOnly={issueFilterOnly}
+        onToggleIssueFilter={() => setIssueFilterOnly((prev) => !prev)}
+        non5RankPreviews={non5RankPreviews}
+        onBatchFixNon5Rank={handleBatchFixNon5Rank}
+        isBatchFixing={isBatchFixing}
+        batchFixResultCount={batchFixResultCount}
+      />
+
+      {/* 2. "5 อันดับ [ชื่อรายการ]" Ranking & Footage Utilization Drawer */}
       <CategoryUtilizationDrawer
         categoryRanking={categoryRanking}
         maxEpisodesInAnyCategory={maxEpisodesInAnyCategory}
         categoryFilter={categoryFilter}
         onCategoryFilterChange={setCategoryFilter}
         launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
+        archiveCategoryMap={archiveCategoryMap}
+        onOpenTagBinding={(row) => setBindingTargetSeriesKey(row.seriesKey)}
       />
 
-      {/* 3. 2-Tier Hierarchical Series Navigation Bar */}
+      {/* 3. 2-Level Master Archive Categories & Smart "5 อันดับ" Series Bar */}
       <SeriesNavigationFilterBar
         selectedGroupId={selectedGroupId}
         onSelectGroup={setSelectedGroupId}
         categoryFilter={categoryFilter}
         onSelectCategory={setCategoryFilter}
         categoriesInGroup={categoriesInGroup}
-        groupEpisodeCounts={groupEpisodeCounts}
+        archiveCategoryStats={archiveCategoryStats}
+        totalDistinctSeriesCount={categoryRanking.length}
+        onOpenManageCategories={() => setIsCategoryModalOpen(true)}
       />
 
-      {/* 4. Tab Views: Series Shelf vs Episodes List */}
+      {/* 4. Collapsible 3-Tier Footage Tag Filter Drawer (AND / OR) */}
+      <ArchiveThreeTierTagDrawer
+        selectedFootageTagIds={selectedFootageTagIds}
+        onToggleFootageTag={handleToggleFootageTag}
+        onClearFootageTags={handleClearFootageTags}
+        footageTagMatchMode={footageTagMatchMode}
+        onChangeFootageTagMatchMode={setFootageTagMatchMode}
+        tagEpisodeCounts={tagEpisodeCounts}
+        matchedEpisodesCount={sortedEpisodes.length}
+      />
+
+      {/* 5. Tab Views: Series Shelf vs Episodes List */}
       {archiveTab === 'SERIES_SHELF' ? (
         <SeriesShelfView
-          categoriesInGroup={categoriesInGroup}
+          shelfSeriesItems={shelfSeriesItems}
+          activeSeriesCount={categoryRanking.length}
+          unproducedSeriesCount={unproducedSeriesRanking.length}
+          showUnproducedSeries={showUnproducedSeries}
+          onToggleShowUnproducedSeries={() =>
+            setShowUnproducedSeries((prev) => !prev)
+          }
           selectedGroupId={selectedGroupId}
-          resolveTagGroupId={resolveTagGroupId}
+          archiveCategories={archiveCategories}
+          archiveCategoryMap={archiveCategoryMap}
+          onAssignSeriesToCategory={handleAssignSeriesToArchiveCategory}
           latestEpisodeByCategoryMap={latestEpisodeByCategoryMap}
-          onViewCategoryEpisodes={(catId) => {
-            setCategoryFilter(catId);
+          onViewCategoryEpisodes={(seriesKey) => {
+            setCategoryFilter(seriesKey);
             setArchiveTab('EPISODES');
           }}
           launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
+          onOpenManageCategories={() => setIsCategoryModalOpen(true)}
         />
       ) : (
         <div className="space-y-3.5">
-          {/* Precision Filter Controls Bar (Search, Subcategory, Target, Workflow, Sort, View mode) */}
+          {/* Precision Filter Controls Bar */}
           <EpisodeFilterControls
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -145,6 +310,13 @@ export const MasterEpisodeArchiveView: React.FC = () => {
             totalCount={totalEpisodesCount}
             hasActiveFilters={hasActiveFilters}
             onResetFilters={resetFilters}
+            archiveCategoryMap={archiveCategoryMap}
+            categoryRanking={categoryRanking}
+            selectedFootageTagIds={selectedFootageTagIds}
+            onToggleFootageTag={handleToggleFootageTag}
+            issueFilterOnly={issueFilterOnly}
+            onToggleIssueFilter={() => setIssueFilterOnly((prev) => !prev)}
+            issueCount={auditSummary.issueCount}
           />
 
           {/* Cards or Table View with Jump-to-Page Pagination */}
@@ -169,10 +341,50 @@ export const MasterEpisodeArchiveView: React.FC = () => {
               onPageSizeChange={setPageSize}
               getEpisodeFootageMix={getEpisodeFootageMix}
               onSelectEpisode={setSelectedEpisodeDetailId}
+              sortBy={sortBy}
+              onToggleSortColumn={onToggleSortColumn}
             />
           )}
         </div>
       )}
+
+      {/* 6. Custom Master Archive Category & Series Organizer Modal (via BaseModal Portal) */}
+      <ArchiveSeriesCategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        archiveCategories={archiveCategories}
+        archiveCategoryStats={archiveCategoryStats}
+        seriesRanking={categoryRanking}
+        onAssignSeriesToCategory={handleAssignSeriesToArchiveCategory}
+        onAddCategory={handleAddArchiveCategory}
+        onRenameCategory={handleRenameArchiveCategory}
+        onDeleteCategory={handleDeleteArchiveCategory}
+      />
+
+      {/* 7. Batch Template Title Standardizer Modal (via BaseModal Portal) */}
+      <TemplateStandardizerModal
+        isOpen={isTemplateModalOpen}
+        onClose={() => setIsTemplateModalOpen(false)}
+        episodes={episodes}
+        onApplyBatchStandardize={handleApplyBatchTemplateStandardize}
+      />
+
+      {/* 8. Series-to-3-Tier-Tag Binding Modal (via BaseModal Portal) */}
+      <SeriesTagBindingModal
+        isOpen={Boolean(bindingTargetSeries)}
+        onClose={() => setBindingTargetSeriesKey(null)}
+        seriesItem={bindingTargetSeries}
+        tags={tags}
+        computedFootage={computedFootage}
+        episodes={episodes}
+        episodeSeriesKeyMap={episodeSeriesKeyMap}
+        customBoundTagIds={
+          bindingTargetSeries
+            ? seriesToTagIdsMap[bindingTargetSeries.seriesKey] || []
+            : []
+        }
+        onSaveBinding={handleBindSeriesToTags}
+      />
     </div>
   );
 };

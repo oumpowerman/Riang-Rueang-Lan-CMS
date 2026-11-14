@@ -1,11 +1,26 @@
 import React from 'react';
-import { Sparkles, CheckCircle2, ChevronRight, Sun, Moon } from 'lucide-react';
+import {
+  Sparkles,
+  CheckCircle2,
+  ChevronRight,
+  Sun,
+  Moon,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Play,
+  Film,
+} from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
+import { extractEpisodeSeriesInfo } from '../../../../utils/seriesExtractor';
+import { validateEpisodeStandard } from '../../../../utils/episodeValidator';
 import { TagPill } from '../../../ui/TagPill';
 import { PaginationBar } from '../../../ui/PaginationBar';
+import { VideoThumbnailPreview } from '../../../footage/VideoThumbnailPreview';
 import type { Episode, EpisodeWorkflowStage } from '../../../../types/episode.types';
 import type { EpisodeFootageMix } from '../hooks/useMasterArchiveMetrics';
+import type { SortOption } from '../hooks/useMasterArchiveFilter';
 
 interface EpisodeTableViewProps {
   paginatedEpisodes: Episode[];
@@ -16,6 +31,8 @@ interface EpisodeTableViewProps {
   onPageSizeChange: (size: number) => void;
   getEpisodeFootageMix: (ep: Episode) => EpisodeFootageMix;
   onSelectEpisode: (episodeId: string) => void;
+  sortBy?: SortOption;
+  onToggleSortColumn?: (column: 'TITLE' | 'ID' | 'DATE') => void;
 }
 
 const WORKFLOW_BADGE_MAP: Record<
@@ -49,8 +66,10 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
   onPageSizeChange,
   getEpisodeFootageMix,
   onSelectEpisode,
+  sortBy = 'DATE_DESC',
+  onToggleSortColumn,
 }) => {
-  const { tagMap, computedFootageMap } = useCMS();
+  const { tagMap, computedFootageMap, setPreviewFootageId } = useCMS();
 
   if (paginatedEpisodes.length === 0) {
     return (
@@ -72,18 +91,99 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#FAF6F0] border-b border-[#E8DFD3] text-xs font-bold text-[#5C544C]">
-                <th className="py-2.5 px-3.5 w-36">รหัส & ซีรีส์ EP</th>
-                <th className="py-2.5 px-3.5">ชื่อคลิปหลัก & 5 อันดับฟุตเทจ</th>
+                {/* 1. ID Column */}
+                <th
+                  onClick={() => onToggleSortColumn?.('ID')}
+                  className="py-2.5 px-3.5 w-40 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th"
+                  title="คลิกเพื่อสลับเรียงลำดับรหัส EP (ใหม่ ⇄ เก่า)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>รหัส & ซีรีส์ EP</span>
+                    {sortBy === 'ID_ASC' ? (
+                      <span className="inline-flex items-center gap-0.5 text-[#244B2F] bg-[#E2EFE2] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#C5DEC5]">
+                        <span>เก่า→ใหม่</span>
+                        <ArrowUp className="w-3 h-3 text-[#244B2F]" />
+                      </span>
+                    ) : sortBy === 'ID_DESC' ? (
+                      <span className="inline-flex items-center gap-0.5 text-[#6B4616] bg-[#FAF0DE] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#E8D4BA]">
+                        <span>ใหม่→เก่า</span>
+                        <ArrowDown className="w-3 h-3 text-[#6B4616]" />
+                      </span>
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-40 group-hover/th:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 2. Main Title Column (A:Z / Z:A) */}
+                <th
+                  onClick={() => onToggleSortColumn?.('TITLE')}
+                  className="py-2.5 px-3.5 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th"
+                  title="คลิกเพื่อสลับเรียงลำดับชื่อคลิป ก-ฮ (A:Z) หรือ ฮ-ก (Z:A)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>ชื่อคลิปหลัก & 5 อันดับฟุตเทจ</span>
+                    {sortBy === 'TITLE_ASC' ? (
+                      <span className="inline-flex items-center gap-0.5 text-[#1B4B67] bg-[#E3EFF6] px-1.5 py-0.2 rounded text-[10px] font-bold border border-[#C3DEEC]">
+                        <span>A:Z (ก-ฮ)</span>
+                        <ArrowUp className="w-3 h-3 text-[#1B4B67]" />
+                      </span>
+                    ) : sortBy === 'TITLE_DESC' ? (
+                      <span className="inline-flex items-center gap-0.5 text-[#1B4B67] bg-[#E3EFF6] px-1.5 py-0.2 rounded text-[10px] font-bold border border-[#C3DEEC]">
+                        <span>Z:A (ฮ-ก)</span>
+                        <ArrowDown className="w-3 h-3 text-[#1B4B67]" />
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[#8A7E70] text-[10px] font-normal group-hover/th:text-[#2D2926] bg-[#F4EFE6] px-1.5 py-0.2 rounded border border-transparent group-hover/th:border-[#DECDB8]">
+                        <span>Sort A:Z</span>
+                        <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-50 group-hover/th:opacity-100" />
+                      </span>
+                    )}
+                  </div>
+                </th>
+
+                {/* 3. Category */}
                 <th className="py-2.5 px-3.5 w-44">หมวดหมู่</th>
+
+                {/* 4. Workflow Stage */}
                 <th className="py-2.5 px-3.5 w-36">สถานะงาน</th>
+
+                {/* 5. Footage Proportion */}
                 <th className="py-2.5 px-3.5 w-40">สัดส่วนฟุตเทจ</th>
-                <th className="py-2.5 px-3.5 w-32">วันที่สร้าง</th>
+
+                {/* 6. Date Column */}
+                <th
+                  onClick={() => onToggleSortColumn?.('DATE')}
+                  className="py-2.5 px-3.5 w-36 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th"
+                  title="คลิกเพื่อสลับเรียงลำดับวันที่สร้าง (ล่าสุด ⇄ เก่าสุด)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>วันที่สร้าง</span>
+                    {sortBy === 'DATE_DESC' ? (
+                      <span className="inline-flex items-center gap-0.5 text-[#6B4616] bg-[#FAF0DE] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#E8D4BA]">
+                        <span>ล่าสุด</span>
+                        <ArrowDown className="w-3 h-3 text-[#6B4616]" />
+                      </span>
+                    ) : sortBy === 'DATE_ASC' ? (
+                      <span className="inline-flex items-center gap-0.5 text-[#244B2F] bg-[#E2EFE2] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#C5DEC5]">
+                        <span>เก่าสุด</span>
+                        <ArrowUp className="w-3 h-3 text-[#244B2F]" />
+                      </span>
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-40 group-hover/th:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 7. Action */}
                 <th className="py-2.5 px-3.5 w-24 text-right">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EDE5D8] text-xs">
               {paginatedEpisodes.map((ep) => {
                 const mix = getEpisodeFootageMix(ep);
+                const seriesInfo = extractEpisodeSeriesInfo(ep, tagMap);
+                const validation = validateEpisodeStandard(ep);
                 const wfBadge =
                   WORKFLOW_BADGE_MAP[ep.workflowStage] || WORKFLOW_BADGE_MAP['1_MIXING'];
 
@@ -91,7 +191,11 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                   <tr
                     key={ep.id}
                     onClick={() => onSelectEpisode(ep.id)}
-                    className="hover:bg-[#FAF3E6]/70 cursor-pointer transition-colors group"
+                    className={`cursor-pointer transition-colors group ${
+                      !validation.isStandard
+                        ? 'hover:bg-[#FAF0E6]/70 bg-[#FFFDF9]'
+                        : 'hover:bg-[#FAF3E6]/70'
+                    }`}
                   >
                     <td className="py-2.5 px-3.5 font-mono whitespace-nowrap">
                       <div className="font-bold text-[#6B4616] tabular-nums">
@@ -100,34 +204,80 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                       <div className="text-[11px] font-sans font-semibold text-[#244B2F] bg-[#EBF3EB] px-1.5 py-0.5 rounded-md border border-[#BBD6B9] inline-flex items-center gap-1 mt-0.5">
                         <Sparkles className="w-2.5 h-2.5 text-[#386B46]" />
                         <span>
-                          {tagMap[ep.mainCategoryTagId]?.name || 'หมวด'} · EP.
-                          {ep.categoryEpisodeNo || 1}
+                          5 อันดับ {seriesInfo.seriesName} · EP.
+                          {seriesInfo.parsedEpisodeNo}
                         </span>
                       </div>
                     </td>
 
                     <td className="py-2.5 px-3.5 min-w-[260px]">
-                      <div className="font-bold text-[#2D2926] text-xs sm:text-sm line-clamp-1 group-hover:text-[#6B4616]">
-                        {ep.title}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-[#2D2926] text-xs sm:text-sm line-clamp-1 group-hover:text-[#6B4616]">
+                          {ep.title}
+                        </span>
+
+                        {validation.hasMissingTitle && (
+                          <span className="px-1.5 py-0.2 rounded bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold">
+                            ยังไม่ตั้งชื่อ
+                          </span>
+                        )}
+
+                        {validation.hasNon5Rank && !validation.hasMissingTitle && (
+                          <span className="px-1.5 py-0.2 rounded bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold">
+                            ไม่ใช่ 5 อันดับ
+                          </span>
+                        )}
+
+                        {validation.hasIncompleteSlots && (
+                          <span className="px-1.5 py-0.2 rounded bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold">
+                            ฟุตไม่ครบ ({validation.filledSlotCount}/5)
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 flex-wrap mt-1">
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                         {ep.rankings.map((slot) => {
                           const ft = slot.footageId
                             ? computedFootageMap[slot.footageId]
                             : null;
                           return (
-                            <span
+                            <div
                               key={slot.rank}
+                              onClick={(e) => {
+                                if (ft) {
+                                  e.stopPropagation();
+                                  setPreviewFootageId(ft.id);
+                                }
+                              }}
                               title={
                                 ft
-                                  ? `อันดับ #${slot.rank}: ${ft.id} — ${ft.title}`
+                                  ? `อันดับ #${slot.rank}: ${ft.id} — ${ft.title} (คลิกเพื่อดูวิดีโอตัวเต็ม)`
                                   : `อันดับ #${slot.rank}: ${slot.footageId || 'ว่าง'}`
                               }
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-[#F5EFE6] border border-[#E4DDD3] text-[10px] font-mono tabular-nums text-[#5C544C]"
+                              className={`group/thumb inline-flex items-center gap-1 px-1 py-0.5 rounded-lg border transition-all ${
+                                ft
+                                  ? 'bg-[#FAF6F0] hover:bg-[#F2ECE0] border-[#E4DDD3] hover:border-[#DEC5A0] cursor-pointer shadow-2xs hover:shadow-xs'
+                                  : 'bg-[#F7F3EC] border-[#E8DFD3] text-[#A69B8D] cursor-default'
+                              }`}
                             >
-                              <strong className="text-[#8A5A22]">#{slot.rank}</strong>
-                              <span>{slot.footageId || '—'}</span>
-                            </span>
+                              <div className="relative w-7 h-5 rounded overflow-hidden bg-slate-900/10 shrink-0 border border-black/5 flex items-center justify-center">
+                                {ft ? (
+                                  <>
+                                    <VideoThumbnailPreview footage={ft} size="xs" />
+                                    <div className="absolute inset-0 bg-black/15 group-hover/thumb:bg-black/0 transition-colors flex items-center justify-center pointer-events-none">
+                                      <Play className="w-2 h-2 text-white drop-shadow-xs opacity-75 group-hover/thumb:opacity-100 group-hover/thumb:scale-110" />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <Film className="w-2.5 h-2.5 text-[#A69B8D]" />
+                                )}
+                                <span className="absolute top-0.2 left-0.2 px-0.5 rounded bg-black/75 text-white font-mono font-black text-[7px] leading-none pointer-events-none">
+                                  #{slot.rank}
+                                </span>
+                              </div>
+                              <span className="font-mono text-[10px] font-bold text-[#6B4616] tabular-nums">
+                                {slot.footageId || '—'}
+                              </span>
+                            </div>
                           );
                         })}
                       </div>

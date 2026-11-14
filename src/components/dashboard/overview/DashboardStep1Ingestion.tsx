@@ -15,6 +15,7 @@ import {
 import { ActiveNavTab, useCMS } from '../../../context/CMSContext';
 import { ComputedFootage } from '../../../types/footage.types';
 import { RawSource } from '../../../types/source.types';
+import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 import {
   DashboardMetrics,
@@ -57,7 +58,11 @@ export const DashboardStep1Ingestion: React.FC<DashboardStep1IngestionProps> = (
   setIsDirectFootageModalOpen,
   setActiveTab,
 }) => {
-  const { setIsGoogleDriveBatchModalOpen } = useCMS();
+  const {
+    setIsGoogleDriveBatchModalOpen,
+    computedFootageMap,
+    setPreviewFootageId,
+  } = useCMS();
 
   return (
     <motion.section
@@ -235,32 +240,58 @@ export const DashboardStep1Ingestion: React.FC<DashboardStep1IngestionProps> = (
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-          {filteredSources.slice(0, 6).map((src) => (
-            <div
-              key={src.id}
-              className="p-3 bg-slate-50/70 hover:bg-white border border-slate-200/80 rounded-xl flex items-center justify-between gap-2 transition-all"
-            >
-              <div className="min-w-0 space-y-0.5">
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
-                  <span className="font-bold text-slate-900">{src.id}</span>
-                  <span>·</span>
-                  <span className="text-indigo-700 font-semibold">{src.platform}</span>
-                  <span>·</span>
-                  <span className="tabular-nums">{src.splitFootageIds.length} คลิป</span>
-                </div>
-                <div className="text-xs font-bold text-slate-900 truncate">{src.title}</div>
-              </div>
+          {filteredSources.slice(0, 6).map((src) => {
+            const firstChildFootage = src.splitFootageIds
+              .map((fid) => computedFootageMap[fid])
+              .find(Boolean);
+            const sourcePreviewTarget = {
+              id: src.id,
+              title: src.title,
+              originalUrl: src.originalUrl || '',
+              driveFileUrl: firstChildFootage?.driveFileUrl || '',
+              thumbnailUrl: firstChildFootage?.thumbnailUrl || '',
+              timestampRange: src.totalDuration || null,
+              durationSec: undefined,
+            };
 
-              <button
-                type="button"
-                onClick={() => openSourceSplitterFor(src)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-600 hover:text-white border border-indigo-200 rounded-lg shrink-0 transition-colors cursor-pointer"
+            return (
+              <div
+                key={src.id}
+                className="p-2.5 bg-slate-50/70 hover:bg-white border border-slate-200/80 rounded-xl flex items-center justify-between gap-2.5 transition-all"
               >
-                <Scissors className="w-3 h-3" />
-                <span>หั่นคลิป</span>
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <VideoThumbnailPreview
+                    footage={sourcePreviewTarget}
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewFootageId(src.id);
+                    }}
+                  />
+
+                  <div className="min-w-0 space-y-0.5 flex-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
+                      <span className="font-bold text-slate-900">{src.id}</span>
+                      <span>·</span>
+                      <span className="text-indigo-700 font-semibold">{src.platform}</span>
+                      <span>·</span>
+                      <span className="tabular-nums">{src.splitFootageIds.length} คลิป</span>
+                    </div>
+                    <div className="text-xs font-bold text-slate-900 truncate">{src.title}</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => openSourceSplitterFor(src)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-600 hover:text-white border border-indigo-200 rounded-lg shrink-0 transition-colors cursor-pointer"
+                >
+                  <Scissors className="w-3 h-3" />
+                  <span>หั่นคลิป</span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </motion.section>

@@ -82,7 +82,7 @@ export const BatchCategorizeFloatingBar: React.FC = () => {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.95 }}
         transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-        className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-white/95 text-slate-900 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-xl border border-slate-200/90 flex flex-col gap-2 max-w-2xl w-[94%]"
+        className="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 z-40 bg-white/95 text-slate-900 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-xl border border-slate-200/90 flex flex-col gap-2 max-w-2xl w-[94%]"
       >
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">

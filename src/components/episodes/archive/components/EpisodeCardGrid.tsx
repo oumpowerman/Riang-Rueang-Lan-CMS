@@ -1,9 +1,24 @@
 import React from 'react';
-import { Sparkles, CheckCircle2, ChevronRight, Sun, Moon } from 'lucide-react';
+import {
+  Sparkles,
+  CheckCircle2,
+  ChevronRight,
+  Sun,
+  Moon,
+  Play,
+  Film,
+  AlertTriangle,
+  FileQuestion,
+  HelpCircle,
+  Layers,
+} from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
+import { extractEpisodeSeriesInfo } from '../../../../utils/seriesExtractor';
+import { validateEpisodeStandard } from '../../../../utils/episodeValidator';
 import { TagPill } from '../../../ui/TagPill';
 import { PaginationBar } from '../../../ui/PaginationBar';
+import { VideoThumbnailPreview } from '../../../footage/VideoThumbnailPreview';
 import type { Episode, EpisodeWorkflowStage } from '../../../../types/episode.types';
 import type { EpisodeFootageMix } from '../hooks/useMasterArchiveMetrics';
 
@@ -50,7 +65,7 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
   getEpisodeFootageMix,
   onSelectEpisode,
 }) => {
-  const { tagMap, computedFootageMap } = useCMS();
+  const { tagMap, computedFootageMap, setPreviewFootageId } = useCMS();
 
   if (paginatedEpisodes.length === 0) {
     return (
@@ -59,7 +74,7 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
           ไม่พบคลิปหลักที่ตรงกับเงื่อนไขการค้นหา
         </p>
         <p className="text-xs text-[#787066]">
-          ลองปรับตัวกรองหมวดหมู่ หมวดย่อย สถานะ หรือล้างคำค้นหา
+          ลองปรับตัวกรองหมวดคลังคลิป รายการ 5 อันดับ แท็กฟุตเทจ หรือล้างคำค้นหา
         </p>
       </div>
     );
@@ -70,6 +85,8 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {paginatedEpisodes.map((ep) => {
           const mix = getEpisodeFootageMix(ep);
+          const seriesInfo = extractEpisodeSeriesInfo(ep, tagMap);
+          const validation = validateEpisodeStandard(ep);
           const wfBadge =
             WORKFLOW_BADGE_MAP[ep.workflowStage] || WORKFLOW_BADGE_MAP['1_MIXING'];
 
@@ -77,17 +94,21 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
             <div
               key={ep.id}
               onClick={() => onSelectEpisode(ep.id)}
-              className="group bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl p-4 hover:bg-white hover:border-[#CFB58C] hover:shadow-2xs transition-all cursor-pointer flex flex-col justify-between gap-3"
+              className={`group bg-[#FDFBF7] border rounded-2xl p-4 hover:bg-white hover:shadow-2xs transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                !validation.isStandard
+                  ? 'border-[#E6CDB7] hover:border-[#D9A87E]'
+                  : 'border-[#E8DFD3] hover:border-[#CFB58C]'
+              }`}
             >
               <div className="space-y-2">
-                {/* Top Row: Series Category EP Pill + Global ID + Workflow Stage */}
+                {/* Top Row: Series Category EP Pill + Global ID + Workflow Stage + Warning Badges */}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="px-2 py-0.5 rounded-lg bg-[#EBF3EB] text-[#244B2F] border border-[#BBD6B9] font-bold text-xs flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-[#386B46] shrink-0" />
                       <span>
-                        {tagMap[ep.mainCategoryTagId]?.name || 'หมวด'} · EP.
-                        {ep.categoryEpisodeNo || 1}
+                        5 อันดับ {seriesInfo.seriesName} · EP.
+                        {seriesInfo.parsedEpisodeNo}
                       </span>
                     </span>
                     <span className="px-2 py-0.5 rounded-md bg-[#F4EEE4] text-[#6B4616] border border-[#E2D5C3] font-mono font-bold text-[11px] tabular-nums">
@@ -101,6 +122,28 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
                       )}
                       <span>{formatThaiDate(ep.publishDate)}</span>
                     </span>
+
+                    {/* Warning Badges if episode has standard issues */}
+                    {validation.hasMissingTitle && (
+                      <span className="px-2 py-0.5 rounded-md bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold inline-flex items-center gap-1">
+                        <FileQuestion className="w-3 h-3 text-[#A85822]" />
+                        <span>ยังไม่ตั้งชื่อ</span>
+                      </span>
+                    )}
+
+                    {validation.hasNon5Rank && !validation.hasMissingTitle && (
+                      <span className="px-2 py-0.5 rounded-md bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold inline-flex items-center gap-1">
+                        <HelpCircle className="w-3 h-3 text-[#A85822]" />
+                        <span>ไม่ใช่ 5 อันดับ</span>
+                      </span>
+                    )}
+
+                    {validation.hasIncompleteSlots && (
+                      <span className="px-2 py-0.5 rounded-md bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold inline-flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-[#A85822]" />
+                        <span>ฟุตไม่ครบ ({validation.filledSlotCount}/5)</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Workflow Stage Badge */}
@@ -116,25 +159,60 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
                   {ep.title}
                 </h2>
 
-                {/* 5-Rank Mini Footage Strip for Instant Verification */}
-                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                {/* 5-Rank Mini Footage Strip with Image Previews */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                   {ep.rankings.map((slot) => {
                     const ft = slot.footageId
                       ? computedFootageMap[slot.footageId]
                       : null;
                     return (
-                      <span
+                      <div
                         key={slot.rank}
+                        onClick={(e) => {
+                          if (ft) {
+                            e.stopPropagation();
+                            setPreviewFootageId(ft.id);
+                          }
+                        }}
                         title={
                           ft
-                            ? `อันดับ #${slot.rank}: ${ft.id} — ${ft.title}`
+                            ? `อันดับ #${slot.rank}: ${ft.id} — ${ft.title} (คลิกดูวิดีโอตัวเต็ม)`
                             : `อันดับ #${slot.rank}: ${slot.footageId || 'ว่าง'}`
                         }
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#FAF6F0] border border-[#E6DDD0] text-[10px] font-mono tabular-nums text-[#5C544C]"
+                        className={`group/thumb inline-flex items-center gap-1.5 p-1 rounded-lg border transition-all ${
+                          ft
+                            ? 'bg-[#FAF6F0] hover:bg-[#F2ECE0] border-[#E6DDD0] hover:border-[#DEC5A0] cursor-pointer shadow-2xs hover:shadow-xs'
+                            : 'bg-[#F7F3EC] border-[#E8DFD3] text-[#A69B8D] cursor-default'
+                        }`}
                       >
-                        <strong className="text-[#8A5A22]">#{slot.rank}</strong>
-                        <span>{slot.footageId || '—'}</span>
-                      </span>
+                        {/* Mini Thumbnail or Rank Placeholder */}
+                        <div className="relative w-9 h-6 rounded overflow-hidden bg-slate-900/10 shrink-0 border border-black/5 flex items-center justify-center">
+                          {ft ? (
+                            <>
+                              <VideoThumbnailPreview footage={ft} size="xs" />
+                              <div className="absolute inset-0 bg-black/15 group-hover/thumb:bg-black/0 transition-colors flex items-center justify-center pointer-events-none">
+                                <Play className="w-2.5 h-2.5 text-white drop-shadow-xs opacity-75 group-hover/thumb:opacity-100 group-hover/thumb:scale-110 transition-transform" />
+                              </div>
+                            </>
+                          ) : (
+                            <Film className="w-3 h-3 text-[#A69B8D]" />
+                          )}
+                          <span className="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-black/70 text-white font-mono font-black text-[8px] leading-none pointer-events-none">
+                            #{slot.rank}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col text-left">
+                          <span className="text-[10px] font-mono font-bold text-[#6B4616] tabular-nums leading-tight">
+                            {slot.footageId || '—'}
+                          </span>
+                          {ft && (
+                            <span className="text-[9px] text-[#787066] max-w-[85px] truncate leading-tight">
+                              {ft.title}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

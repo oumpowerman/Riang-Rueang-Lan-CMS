@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCMS } from '../../../context/CMSContext';
+import { buildFootageCatchphraseUpdate } from '../../../utils/episodeScriptGenerator';
 import { generateStandardFileName } from '../../../utils/fileNameGenerator';
 import { CoUsedPartnerEntry, TraceabilityTabId } from './traceability.types';
 
@@ -92,9 +93,22 @@ export function useFootageTraceability() {
     });
   };
 
+  const handleUpdatePunchlineNote = (punchlineNote: string) => {
+    if (!footage) return;
+    const synced = buildFootageCatchphraseUpdate(footage, { punchlineNote });
+    updateFootage(footage.id, synced);
+  };
+
+  const handleUpdateRankTitle = (rankTitle: string) => {
+    if (!footage) return;
+    const synced = buildFootageCatchphraseUpdate(footage, { rankTitle });
+    updateFootage(footage.id, synced);
+  };
+
   const handleUpdateMascotNotes = (mascotNotes: string) => {
     if (!footage) return;
-    updateFootage(footage.id, { mascotNotes });
+    const synced = buildFootageCatchphraseUpdate(footage, { mascotNotes });
+    updateFootage(footage.id, synced);
   };
 
   const handleUpdateOriginalUrl = (originalUrl: string) => {
@@ -127,6 +141,8 @@ export function useFootageTraceability() {
     handleSelectPartnerFootage,
     handleCopyFileName,
     handleUpdateTitle,
+    handleUpdatePunchlineNote,
+    handleUpdateRankTitle,
     handleUpdateMascotNotes,
     handleUpdateOriginalUrl,
     handleUpdateDriveFileUrl,

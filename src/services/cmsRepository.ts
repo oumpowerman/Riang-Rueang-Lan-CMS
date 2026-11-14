@@ -1,16 +1,25 @@
 import { Episode } from '../types/episode.types';
 import { Footage } from '../types/footage.types';
 import { RawSource } from '../types/source.types';
-import { CategoryGroup, CategoryTag, SystemSettings } from '../types/tag.types';
+import {
+  CategoryGroup,
+  CategoryTag,
+  CategoryTier,
+  DEFAULT_TIER_SUBCATEGORIES,
+  DEFAULT_UNCLASSIFIED_SUBCATEGORY,
+  SystemSettings,
+} from '../types/tag.types';
 import {
   INITIAL_CATEGORY_GROUPS,
   INITIAL_SETTINGS,
   INITIAL_TAGS,
+  isStagingTagId,
   STAGING_CATEGORY_GROUP,
   STAGING_CATEGORY_TAG,
   STAGING_GROUP_ID,
   STAGING_TAG_ID,
 } from './seedData';
+import { normalizeLegacySubCategory } from '../utils/reorganizeTagsToDictionary';
 
 const STORAGE_KEYS = {
   GROUPS: 'rrl_cms_category_groups_v1',
@@ -27,7 +36,48 @@ const STORAGE_KEYS = {
 };
 
 /**
- * Enterprise Repository Pattern for Riang-Rueang-Lan CMS (v2 E2E Schema - Production Clean Slate)
+ * Normalizes a single CategoryTag into the 3-Tier Independent Faceted Tag schema.
+ * Any existing tag that has not yet been assigned a 3-Tier `subCategory` is placed
+ * in Tier 1 under `รอคัดแยก` (`parentId: null`) so the team can drag/batch-move it freely.
+ */
+export function normalizeSingle3TierTag(t: CategoryTag): CategoryTag {
+  if (t.id === STAGING_TAG_ID || t.id === 'cat_staging') {
+    return {
+      ...t,
+      name: t.name === 'พื้นที่พักรอจัดหมวดหมู่' ? 'ไม่มีหมวดหมู่' : t.name,
+      tier: 1,
+      parentId: null,
+      groupId: t.groupId || STAGING_GROUP_ID,
+    };
+  }
+
+  const hasExplicitSubCategory =
+    typeof t.subCategory === 'string' && t.subCategory.trim().length > 0;
+
+  if (!hasExplicitSubCategory) {
+    return {
+      ...t,
+      tier: 1,
+      subCategory: DEFAULT_UNCLASSIFIED_SUBCATEGORY,
+      parentId: null,
+      groupId: t.groupId || `GRP-${t.groupType || 'GENERAL'}`,
+    };
+  }
+
+  const validTier: CategoryTier =
+    t.tier === 1 || t.tier === 2 || t.tier === 3 ? t.tier : 1;
+
+  return {
+    ...t,
+    tier: validTier,
+    subCategory: normalizeLegacySubCategory(validTier, t.subCategory),
+    parentId: null,
+    groupId: t.groupId || `GRP-${t.groupType || 'GENERAL'}`,
+  };
+}
+
+/**
+ * Enterprise Repository Pattern for Riang-Rueang-Lan CMS (v3 3-Tier Faceted Tag Schema)
  */
 export const cmsRepository = {
   /**
@@ -128,37 +178,15 @@ export const cmsRepository = {
   },
 
   /**
-   * Normalizes and repairs a list of CategoryTags so tier, parentId, and groupId are always intact.
+   * Normalizes and repairs a list of CategoryTags into the 3-Tier Independent Tag System.
    */
   normalizeAndRepairTags(rawTags: CategoryTag[], includeMissingSeeds: boolean): CategoryTag[] {
     const deletedIds = this.getDeletedTagIds();
 
-    // 1. Migrate existing tags if missing tier
+    // 1. Migrate existing tags into 3-Tier independent schema (legacy tags without subCategory go to Tier 1 'รอคัดแยก')
     const migratedTier = rawTags
       .filter((t) => t && t.id && !deletedIds.has(t.id))
-      .map((t) => {
-        if (!t.tier) {
-          if (t.id === 'TAG-0003') {
-            return {
-              ...t,
-              name: t.name || 'พี่แจ๊ส ชวนชื่น',
-              tier: 2 as const,
-              parentId: 'TAG-0004',
-              entityType: t.entityType || ('PERSON' as const),
-            };
-          }
-          return {
-            ...t,
-            tier: (t.parentId ? 2 : 1) as 1 | 2,
-            parentId: t.parentId || null,
-          };
-        }
-        return {
-          ...t,
-          tier: (t.tier === 2 || !!t.parentId ? 2 : 1) as 1 | 2,
-          parentId: t.tier === 2 || !!t.parentId ? t.parentId || null : null,
-        };
-      });
+      .map((t) => normalizeSingle3TierTag(t));
 
     // 2. Deduplicate by id
     const seenIds = new Set<string>();
@@ -172,59 +200,24 @@ export const cmsRepository = {
     // 3. Always ensure system staging category is present (unless all categories are wiped)
     if (!this.isCategoriesWiped() && !seenIds.has(STAGING_TAG_ID)) {
       seenIds.add(STAGING_TAG_ID);
-      deduped.unshift({ ...STAGING_CATEGORY_TAG });
+      deduped.unshift(normalizeSingle3TierTag({ ...STAGING_CATEGORY_TAG }));
     }
 
-    // 3b. Merge missing Tier 1/2 seed tags if not intentionally wiped/deleted
+    // 3b. Merge missing seed tags if not intentionally wiped/deleted
     if (includeMissingSeeds && !this.isCategoriesWiped()) {
       for (const seed of INITIAL_TAGS) {
         if (!seenIds.has(seed.id) && !deletedIds.has(seed.id)) {
           seenIds.add(seed.id);
-          deduped.push({ ...seed });
+          deduped.push(normalizeSingle3TierTag({ ...seed }));
         }
       }
     }
 
-    // 4. Ensure any Tier 2 subcategory whose parent Tier 1 category is missing (and wasn't deleted)
-    // gets its parent Tier 1 category restored if it's a known seed category
-    const seedLookup = new Map(INITIAL_TAGS.map((s) => [s.id, s]));
-    for (const t of [...deduped]) {
-      if (t.tier === 2 && t.parentId && !seenIds.has(t.parentId) && !deletedIds.has(t.parentId)) {
-        const parentSeed = seedLookup.get(t.parentId);
-        if (parentSeed) {
-          seenIds.add(parentSeed.id);
-          deduped.unshift({ ...parentSeed });
-        }
-      }
-    }
-
-    // 5. Backfill groupId for Tier 1 and Tier 2 tags
-    const parentGroupMap: Record<string, string> = {};
-    for (const t of deduped) {
-      if (t.tier === 1 || !t.parentId) {
-        parentGroupMap[t.id] = t.groupId || `GRP-${t.groupType || 'GENERAL'}`;
-      }
-    }
-
-    return deduped.map((t) => {
-      const expectedGroupId =
-        t.groupId ||
-        (t.parentId ? parentGroupMap[t.parentId] : undefined) ||
-        `GRP-${t.groupType || 'GENERAL'}`;
-      const normalizedName =
-        t.id === STAGING_TAG_ID && t.name === 'พื้นที่พักรอจัดหมวดหมู่'
-          ? 'ไม่มีหมวดหมู่'
-          : t.name;
-      return t.groupId === expectedGroupId && t.name === normalizedName
-        ? t
-        : { ...t, groupId: expectedGroupId, name: normalizedName };
-    });
+    return deduped;
   },
 
   /**
-   * Reconciles a cloud snapshot of CategoryTags with current local CategoryTags so that
-   * partial cloud snapshots (e.g. when editing a single Tier 3 item while Firestore lacked the rest)
-   * never wipe out Tier 2 or Tier 3 items.
+   * Reconciles a cloud snapshot of CategoryTags with current local CategoryTags.
    */
   reconcileTagsWithHierarchy(
     cloudTags: CategoryTag[],
@@ -237,30 +230,26 @@ export const cmsRepository = {
     const deletedIds = this.getDeletedTagIds();
     const mergedMap = new Map<string, CategoryTag>();
 
-    // Start with local tags (excluding explicitly deleted ones)
     for (const lt of localTags) {
       if (!deletedIds.has(lt.id)) {
-        mergedMap.set(lt.id, lt);
+        mergedMap.set(lt.id, normalizeSingle3TierTag(lt));
       }
     }
 
-    // Overlay cloud tags (cloud updates win for matching IDs, while preserving tier/parentId if cloud lacked them)
     for (const ct of cloudTags) {
       if (deletedIds.has(ct.id)) continue;
       const existing = mergedMap.get(ct.id);
       if (existing) {
-        const resolvedTier: 1 | 2 = ct.tier || existing.tier || (ct.parentId || existing.parentId ? 2 : 1);
-        const resolvedParentId =
-          resolvedTier === 2 ? ct.parentId ?? existing.parentId ?? null : null;
-        mergedMap.set(ct.id, {
-          ...existing,
-          ...ct,
-          tier: resolvedTier,
-          parentId: resolvedParentId,
-          groupId: ct.groupId || existing.groupId,
-        });
+        mergedMap.set(
+          ct.id,
+          normalizeSingle3TierTag({
+            ...existing,
+            ...ct,
+            subCategory: ct.subCategory ?? existing.subCategory,
+          })
+        );
       } else {
-        mergedMap.set(ct.id, ct);
+        mergedMap.set(ct.id, normalizeSingle3TierTag(ct));
       }
     }
 
@@ -334,9 +323,15 @@ export const cmsRepository = {
         return initial;
       }
       const parsed: CategoryTag[] = JSON.parse(raw);
-      return parsed;
+      const repaired = this.normalizeAndRepairTags(parsed, false);
+      if (repaired.filter((t) => !isStagingTagId(t.id)).length === 0) {
+        const initial = this.normalizeAndRepairTags(INITIAL_TAGS, true);
+        localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(initial));
+        return initial;
+      }
+      return repaired;
     } catch {
-      return INITIAL_TAGS;
+      return this.normalizeAndRepairTags(INITIAL_TAGS, true);
     }
   },
 

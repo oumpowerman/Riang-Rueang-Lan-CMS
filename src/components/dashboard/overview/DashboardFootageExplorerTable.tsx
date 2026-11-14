@@ -16,6 +16,7 @@ import { isFootageInStaging, isStagingTagId } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryTag } from '../../../types/tag.types';
 import { hasRealDriveLink } from '../../../utils/fileNameGenerator';
+import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { GoogleDriveIcon } from '../../ui/GoogleDriveIcon';
 import { StatusBadge } from '../../ui/StatusBadge';
 import {
@@ -61,6 +62,7 @@ export const DashboardFootageExplorerTable: React.FC<
     setSelectedFootageIdsForBatch,
     setIsGoogleDriveBatchModalOpen,
     setIsBatchAssignCategoryModalOpen,
+    setPreviewFootageId,
   } = useCMS();
 
   const visibleFootages = filteredFootages.slice(0, footageLimit);
@@ -228,7 +230,7 @@ export const DashboardFootageExplorerTable: React.FC<
                     title="เลือกหน้านี้"
                   />
                 </th>
-                <th className="py-2.5 px-3">คลิป</th>
+                <th className="py-2.5 px-3">คลิป & พรีวิว</th>
                 <th className="py-2.5 px-3">สถานะ</th>
                 <th className="py-2.5 px-3">การใช้งาน</th>
                 <th className="py-2.5 px-3 hidden md:table-cell">หมวดหมู่</th>
@@ -250,7 +252,7 @@ export const DashboardFootageExplorerTable: React.FC<
                     }`}
                   >
                     <td
-                      className="py-3 px-3 w-10 text-center"
+                      className="py-2.5 px-3 w-10 text-center"
                       onClick={(e) => handleToggleSelectOne(ft.id, e)}
                     >
                       <input
@@ -260,34 +262,47 @@ export const DashboardFootageExplorerTable: React.FC<
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
                       />
                     </td>
-                    <td className="py-3 px-3 min-w-[210px]">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-indigo-700 shrink-0">
-                          {ft.id}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-mono shrink-0">
-                          {ft.ingestionFlow === 'DIRECT_1_TO_1' ? (
-                            <>
-                              <Video className="w-3 h-3 text-slate-400" />
-                              <span>1:1</span>
-                            </>
-                          ) : (
-                            <>
-                              <Scissors className="w-3 h-3 text-indigo-500" />
-                              <span>1:N</span>
-                            </>
+                    <td className="py-2.5 px-3 min-w-[260px]">
+                      <div className="flex items-center gap-2.5">
+                        <VideoThumbnailPreview
+                          footage={ft}
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewFootageId(ft.id);
+                          }}
+                        />
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-indigo-700 shrink-0">
+                              {ft.id}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-mono shrink-0">
+                              {ft.ingestionFlow === 'DIRECT_1_TO_1' ? (
+                                <>
+                                  <Video className="w-3 h-3 text-slate-400" />
+                                  <span>1:1</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Scissors className="w-3 h-3 text-indigo-500" />
+                                  <span>1:N</span>
+                                </>
+                              )}
+                            </span>
+                            <span className="font-bold text-slate-900 truncate max-w-[240px]">
+                              {ft.title}
+                            </span>
+                          </div>
+                          {ft.mascotNotes && (
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate max-w-[290px] mt-0.5">
+                              <MessageSquareQuote className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{ft.mascotNotes}</span>
+                            </div>
                           )}
-                        </span>
-                        <span className="font-bold text-slate-900 truncate max-w-[260px]">
-                          {ft.title}
-                        </span>
-                      </div>
-                      {ft.mascotNotes && (
-                        <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate max-w-[320px] mt-0.5">
-                          <MessageSquareQuote className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="truncate">{ft.mascotNotes}</span>
                         </div>
-                      )}
+                      </div>
                     </td>
 
                     <td className="py-3 px-3 whitespace-nowrap">
@@ -316,11 +331,11 @@ export const DashboardFootageExplorerTable: React.FC<
 
                     <td className="py-3 px-3 hidden md:table-cell">
                       <div className="flex flex-wrap items-center gap-1">
-                        {ft.tags.map((tid) => {
+                        {ft.tags.map((tid, idx) => {
                           const isStaging = isStagingTagId(tid);
                           return (
                             <button
-                              key={tid}
+                              key={`${ft.id}-${tid}-${idx}`}
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();

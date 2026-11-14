@@ -16,7 +16,6 @@ import {
   CornerDownRight,
   Maximize2,
   Minimize2,
-  PencilLine,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { BatchTagMoveDestination } from '../../../context/cms/cms.types';
@@ -271,7 +270,7 @@ export const Tier2SubcategoryColumn: React.FC<Tier2SubcategoryColumnProps> = ({
               }`}
               title={
                 isExpandedGrid
-                  ? 'ย่อกลับเป็นคอลัมน์ปกติ'
+                  ? 'ย่อคอลัมน์นี้กลับเป็นขนาดปกติ'
                   : 'กางคอลัมน์ป้ายแท็กย่อยเป็นตารางหลายคอลัมน์'
               }
             >
@@ -671,22 +670,11 @@ export const Tier2SubcategoryColumn: React.FC<Tier2SubcategoryColumnProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
-                        {onStartInlineRename && !isInlineEditing && (
-                          <button
-                            type="button"
-                            onClick={(e) => onStartInlineRename(sub, e)}
-                            className="p-1 rounded-md text-[#7D6E61] hover:text-[#1A4725] hover:bg-[#EDF6EF] transition-colors cursor-pointer"
-                            title="เปลี่ยนชื่อแท็กย่อยด่วนบนการ์ด (หรือดับเบิลคลิกที่ชื่อ)"
-                          >
-                            <PencilLine className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-
                         <button
                           type="button"
                           onClick={(e) => onOpenEditSubCat(sub, e)}
                           className="p-1 rounded-md text-[#7D6E61] hover:text-[#1A4725] hover:bg-[#EDF6EF] transition-colors cursor-pointer"
-                          title="แก้ไขประเภทและรายละเอียดแท็กย่อย"
+                          title="แก้ไขชื่อ ประเภท และรายละเอียดแท็กย่อย (หรือดับเบิลคลิกที่ชื่อเพื่อแก้ชื่อด่วน)"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>

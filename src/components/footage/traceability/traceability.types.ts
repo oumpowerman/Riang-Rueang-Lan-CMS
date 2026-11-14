@@ -29,6 +29,8 @@ export interface TraceabilityDetailsTabProps {
   copiedFileName: boolean;
   onCopyFileName: () => void;
   onUpdateTitle: (title: string) => void;
+  onUpdatePunchlineNote: (punchlineNote: string) => void;
+  onUpdateRankTitle?: (rankTitle: string) => void;
   onUpdateMascotNotes: (mascotNotes: string) => void;
   onUpdateOriginalUrl: (originalUrl: string) => void;
   onUpdateDriveFileUrl: (driveFileUrl: string) => void;

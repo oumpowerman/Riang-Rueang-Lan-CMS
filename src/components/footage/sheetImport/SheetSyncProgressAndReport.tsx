@@ -38,20 +38,20 @@ export const SheetPasteAnalyzingView: React.FC<
     {
       idx: 0,
       icon: FileSpreadsheet,
-      label: `อ่านข้อมูลจากชีท ${detectedLineCount.toLocaleString()} แถว`,
+      label: `อ่านข้อมูลตารางหลัก 10 คอลัมน์ ${detectedLineCount.toLocaleString()} แถว`,
     },
     {
       idx: 1,
       icon: Tag,
-      label: `จับคู่คลิปในคลังสำเร็จ ${matchedCount.toLocaleString()} รายการ`,
+      label: `จับคู่คลิปในคลัง ${matchedCount.toLocaleString()} รายการ & แยกแท็ก 3 ชั้น (Tier 1–3)`,
     },
     {
       idx: 2,
       icon: Film,
       label:
         episodeGroupsCount > 0
-          ? `จัดกลุ่มคลิปหลักได้ ${episodeGroupsCount.toLocaleString()} EP`
-          : 'เตรียมตารางตรวจสอบฟุตเทจ & แท็ก',
+          ? `จัดกลุ่มคลิปหลักได้ ${episodeGroupsCount.toLocaleString()} EP พร้อมชื่ออันดับ & คำสร้อย`
+          : 'เตรียมตารางตรวจสอบฟุตเทจ & แท็ก 3 ชั้น',
     },
   ];
 
@@ -79,10 +79,10 @@ export const SheetPasteAnalyzingView: React.FC<
 
         <div className="space-y-1">
           <h4 className="text-base font-extrabold text-[#3D332A]">
-            กำลังซิงค์และจัดระเบียบตารางพรีวิว...
+            กำลังแยกคอลัมน์ A–J และจับคู่ระบบแท็ก 3 ชั้น...
           </h4>
           <p className="text-xs text-[#7D6E61]">
-            ระบบกำลังเทียบชื่อฟุตเทจ แท็กหมวดหมู่ และจัดลำดับ EP อัตโนมัติ
+            ระบบกำลังเทียบชื่อฟุตเทจ แยกแท็ก Tier 1/2/3 จัดอันดับ EP และอ่านวันที่เผยแพร่
           </p>
         </div>
 
@@ -148,10 +148,10 @@ export const SheetSyncProgressView: React.FC<SheetSyncProgressViewProps> = ({
   progress,
 }) => {
   const phases = [
-    { idx: 1, label: '1. สร้างแท็กหมวดหมู่ใหม่' },
-    { idx: 2, label: '2. สร้างฟุตเทจใหม่เข้าคลัง' },
-    { idx: 3, label: '3. ผสานแท็กให้ฟุตเทจในคลัง' },
-    { idx: 4, label: '4. บันทึกจัดอันดับคลังคลิปหลัก (EP)' },
+    { idx: 1, label: '1. สร้างแท็กใหม่แยกตาม Tier 1 / 2 / 3' },
+    { idx: 2, label: '2. สร้างฟุตเทจใหม่พร้อมชื่ออันดับ/คำสร้อย' },
+    { idx: 3, label: '3. ผสานแท็ก 3 ชั้นให้ฟุตเทจในคลัง' },
+    { idx: 4, label: '4. บันทึกคลังคลิปหลัก (EP) & คำนวณวันพักฟุต' },
   ];
 
   return (
@@ -166,7 +166,7 @@ export const SheetSyncProgressView: React.FC<SheetSyncProgressViewProps> = ({
 
       <div className="space-y-1.5">
         <h4 className="text-lg font-extrabold text-[#3D332A]">
-          กำลังซิงค์ข้อมูลแบบแบ่งชุด (Batch Chunking)...
+          กำลังซิงค์ตารางหลัก 10 คอลัมน์ขึ้น Cloud...
         </h4>
         <p className="text-xs text-[#6E5F52]">{progress.phaseLabel}</p>
       </div>
@@ -242,17 +242,17 @@ export const SheetSyncSuccessReportView: React.FC<
         <CheckCircle2 className="w-9 h-9" />
       </div>
 
-      <div className="space-y-1.5 max-w-lg mx-auto">
+      <div className="space-y-1.5 max-w-xl mx-auto">
         <h4 className="text-xl font-extrabold text-[#3D332A]">
-          ขั้นที่ 1: ซิงค์ฐานข้อมูลฟุตเทจและจัดอันดับ EP สำเร็จ!
+          ซิงก์ตารางหลัก 10 คอลัมน์ (ฟุตเทจ + แท็ก 3 ชั้น + EP + วันที่) สำเร็จ!
         </h4>
         <p className="text-xs sm:text-sm text-[#6E5F52] leading-relaxed">
-          ระบบได้จับคู่แท็ก ย้ายฟุตเทจออกจากพื้นที่พัก และจัดชุดคลิปหลัก 5 อันดับลงฐานข้อมูลเรียบร้อยแล้ว
+          ระบบได้ผูกแท็ก 3 ชั้น บันทึกชื่ออันดับ/คำสร้อย จัดชุดคลิปหลัก 5 อันดับ และคำนวณวันพักฟุตเทจ (Cooldown) เรียบร้อยแล้ว
         </p>
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto text-left">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl mx-auto text-left">
         <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3]">
           <span className="text-xs text-[#7D6E61] block">อัปเดตฟุตเทจในคลัง</span>
           <span className="text-lg font-extrabold font-mono text-[#1C4824]">
@@ -273,17 +273,17 @@ export const SheetSyncSuccessReportView: React.FC<
           <span className="text-xs text-[#8C7B6C] block mt-0.5">
             {report.skippedRowsCount > 0
               ? `ข้าม ${report.skippedRowsCount.toLocaleString()} แถว`
-              : 'ตั้งฐานข้อมูลฟุตเทจใหม่'}
+              : 'พร้อมชื่ออันดับและคำสร้อย'}
           </span>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3]">
-          <span className="text-xs text-[#7D6E61] block">สร้างแท็กหมวดหมู่ใหม่</span>
-          <span className="text-lg font-extrabold font-mono text-[#734B17]">
+          <span className="text-xs text-[#7D6E61] block">สร้างแท็ก 3 ชั้นใหม่</span>
+          <span className="text-lg font-extrabold font-mono text-[#1E40AF]">
             {report.createdTagsCount.toLocaleString()} แท็ก
           </span>
-          <span className="text-xs text-[#8C7B6C] block mt-0.5">
-            พร้อมใช้งานในคลังทันที
+          <span className="text-[11px] text-[#6E5F52] block mt-0.5 font-mono">
+            T1:{report.createdTier1TagsCount} · T2:{report.createdTier2TagsCount} · T3:{report.createdTier3TagsCount}
           </span>
         </div>
 
@@ -302,15 +302,15 @@ export const SheetSyncSuccessReportView: React.FC<
       </div>
 
       {report.syncedEpisodeTitles.length > 0 && (
-        <div className="max-w-2xl mx-auto p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3] text-left">
+        <div className="max-w-3xl mx-auto p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3] text-left">
           <span className="text-xs font-bold text-[#3D332A] block mb-2">
             รายการคลิปหลัก (Master Episodes) ที่จัดอันดับเสร็จสิ้น (
             {report.syncedEpisodeTitles.length.toLocaleString()} ตอน):
           </span>
           <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto scrollbar-thin">
-            {report.syncedEpisodeTitles.slice(0, 40).map((epTitle) => (
+            {report.syncedEpisodeTitles.slice(0, 40).map((epTitle, idx) => (
               <span
-                key={epTitle}
+                key={`${epTitle}-${idx}`}
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]"
               >
                 <Film className="w-3.5 h-3.5 text-[#3B6845]" />
@@ -327,7 +327,7 @@ export const SheetSyncSuccessReportView: React.FC<
       )}
 
       {report.createdTagNames.length > 0 && (
-        <div className="max-w-2xl mx-auto p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3] text-left">
+        <div className="max-w-3xl mx-auto p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E8DFD3] text-left">
           <span className="text-xs font-bold text-[#3D332A] block mb-1.5">
             แท็กใหม่ที่ถูกสร้างขึ้นในระบบ ({report.createdTagNames.length.toLocaleString()} แท็ก):
           </span>
@@ -358,25 +358,25 @@ export const SheetSyncSuccessReportView: React.FC<
           กลับไปหน้าคลังฟุตเทจ
         </button>
 
-        {onGoToYouTubeDateSyncTab && (
-          <button
-            type="button"
-            onClick={onGoToYouTubeDateSyncTab}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-[#3B6845] hover:bg-[#2C5235] text-white shadow-xs transition-colors cursor-pointer"
-          >
-            <CalendarClock className="w-4 h-4" />
-            <span>ไปขั้นที่ 2: ซิงก์วันที่เผยแพร่จริงจาก YouTube ต่อทันที ➔</span>
-          </button>
-        )}
-
         {report.syncedEpisodeTitles.length > 0 && (
           <button
             type="button"
             onClick={onGoToMasterEpisodes}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#FEF8ED] hover:bg-[#FAEED6] text-[#734B17] border border-[#EDD7AF] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-[#3B6845] hover:bg-[#2C5235] text-white shadow-xs transition-colors cursor-pointer"
           >
             <Film className="w-4 h-4" />
             <span>เปิดดูคลังคลิปหลักที่จัดอันดับแล้ว ➔</span>
+          </button>
+        )}
+
+        {onGoToYouTubeDateSyncTab && (
+          <button
+            type="button"
+            onClick={onGoToYouTubeDateSyncTab}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#FEF6E8] hover:bg-[#FAEBD0] text-[#734B17] border border-[#EAD5AE] transition-colors cursor-pointer"
+          >
+            <CalendarClock className="w-4 h-4" />
+            <span>อัปเดตเฉพาะวันที่เพิ่มเติม (2 คอลัมน์)</span>
           </button>
         )}
       </div>

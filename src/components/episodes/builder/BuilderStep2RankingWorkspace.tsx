@@ -58,6 +58,11 @@ interface BuilderStep2RankingWorkspaceProps {
   onClearAllSlots: () => void;
   onMoveSlotByIndex: (index: number, direction: 'UP' | 'DOWN') => void;
   onUpdateSlotScript: (rank: RankNumber, script: string) => void;
+  onUpdateSlotRankFields?: (
+    rank: RankNumber,
+    field: 'rankTitle' | 'punchlineNote' | 'mascotScript' | 'isCustomOverride',
+    value: string | boolean
+  ) => void;
   onDropItemOnSlot: (targetRank: RankNumber, payload: SlotDropPayload) => void;
   onAssignFootageToRank: (targetRank: RankNumber, footageId: string) => void;
   footageToAssignedRankMap: Record<string, RankNumber>;
@@ -156,6 +161,7 @@ export const BuilderStep2RankingWorkspace: React.FC<
   onClearAllSlots,
   onMoveSlotByIndex,
   onUpdateSlotScript,
+  onUpdateSlotRankFields,
   onDropItemOnSlot,
   onAssignFootageToRank,
   footageToAssignedRankMap,
@@ -212,14 +218,14 @@ export const BuilderStep2RankingWorkspace: React.FC<
 
   return (
     <section
-      className={`rounded-2xl border p-4 transition-colors duration-200 ${
+      className={`rounded-2xl border p-3.5 sm:p-4 transition-colors duration-200 ${
         isOpen
           ? 'border-[#bad8b9] bg-[#f9fbf8]'
           : 'border-[#e8dfd3] bg-[#fdfbf7] shadow-xs hover:border-[#bad8b9]'
       }`}
     >
       {/* Persistent Accordion Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div
           onClick={!isOpen ? onToggle : undefined}
           className={`flex flex-wrap items-center gap-2 text-xs ${
@@ -233,7 +239,7 @@ export const BuilderStep2RankingWorkspace: React.FC<
                 : 'bg-[#edf4ed] text-[#2b5435]'
             }`}
           >
-            {isOpen ? 'ขั้นที่ 2' : 'ขั้นที่ 2 · จัด 5 อันดับ & คัดคลิป'}
+            ขั้นที่ 2
           </span>
 
           {isOpen ? (
@@ -241,8 +247,8 @@ export const BuilderStep2RankingWorkspace: React.FC<
               <h2 className="text-sm font-bold text-[#2d2926]">
                 จัดเรียง 5 อันดับ & คัดคลิป
               </h2>
-              <span className="text-xs text-[#716960] hidden sm:inline">
-                (สไลด์สลับซ้าย-ขวาระหว่าง สูตรผสมด่วนอัตโนมัติ กับ เลือกเองจากคลัง)
+              <span className="text-xs text-[#716960] hidden lg:inline">
+                (สไลด์สลับซ้าย-ขวาระหว่าง สูตรผสมด่วน กับ เลือกเองจากคลัง)
               </span>
             </div>
           ) : (
@@ -259,7 +265,7 @@ export const BuilderStep2RankingWorkspace: React.FC<
                     : 'bg-[#fef8ed] text-[#7d5622] border-[#f0e2ca]'
                 }`}
               >
-                เลือกแล้ว {selectedFootageIds.length}/5 อันดับ
+                {selectedFootageIds.length}/5 อันดับ
               </span>
               {selectedFootageIds.length > 0 && (
                 <div className="hidden sm:flex flex-wrap items-center gap-1 font-mono text-[11px] text-[#716960]">
@@ -288,10 +294,11 @@ export const BuilderStep2RankingWorkspace: React.FC<
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={onClearAllSlots}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-[#8e4537] bg-[#fdf3ec] border border-[#f5d7cf] hover:bg-[#fae6de] rounded-xl transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-[#8e4537] bg-[#fdf3ec] border border-[#f5d7cf] hover:bg-[#fae6de] rounded-xl transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>ล้างทั้ง 5 อันดับ</span>
+                  <span className="sm:hidden">ล้าง 5 อันดับ</span>
+                  <span className="hidden sm:inline">ล้างทั้ง 5 อันดับ</span>
                 </motion.button>
               )}
 
@@ -300,13 +307,14 @@ export const BuilderStep2RankingWorkspace: React.FC<
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={onNextStep}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer border ${
+                className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer border ${
                   selectedFootageIds.length === 5
                     ? 'bg-[#3b6845] hover:bg-[#2c5234] text-white border-[#3b6845] shadow-xs'
                     : 'bg-[#faf7f2] hover:bg-white text-[#4d4740] border-[#e8dfd3]'
                 }`}
               >
-                <span>ไปขั้นที่ 3: ข้อมูลตอน & บันทึก</span>
+                <span className="sm:hidden">ไปขั้นที่ 3</span>
+                <span className="hidden sm:inline">ไปขั้นที่ 3: บันทึกตอน</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </motion.button>
             </>
@@ -316,7 +324,7 @@ export const BuilderStep2RankingWorkspace: React.FC<
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               onClick={onToggle}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#f4eee4] hover:bg-[#eae1d4] text-[#4d4740] text-xs font-bold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#f4eee4] hover:bg-[#eae1d4] text-[#4d4740] text-xs font-bold transition-colors cursor-pointer"
             >
               <span>เปิดจัดอันดับ</span>
               <motion.span
@@ -343,16 +351,211 @@ export const BuilderStep2RankingWorkspace: React.FC<
             className="overflow-hidden"
           >
             <LayoutGroup id="step2-sliding-workspace">
-              <div className="pt-4 space-y-3.5">
+              <div className="pt-3.5 space-y-3">
+                {/* MOBILE & TABLET (< lg): Full-Screen 2-Tab Segmented Switcher */}
+                <div className="lg:hidden space-y-3">
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#f3ede3] border border-[#e2d8cb]">
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceMode('FORMULA_FOCUSED')}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                        isFormulaFocused
+                          ? 'bg-[#3b6845] text-white shadow-xs'
+                          : 'text-[#554d44] hover:text-[#2d2926]'
+                      }`}
+                    >
+                      <ListOrdered className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        บอร์ด 5 อันดับ ({selectedFootageIds.length}/5)
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceMode('MANUAL_BROWSE')}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                        !isFormulaFocused
+                          ? 'bg-[#3b6845] text-white shadow-xs'
+                          : 'text-[#554d44] hover:text-[#2d2926]'
+                      }`}
+                    >
+                      <Film className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        คลังฟุตเทจ ({pickerCandidatesCount})
+                      </span>
+                    </button>
+                  </div>
+
+                  {isFormulaFocused ? (
+                    <div className="space-y-3 w-full">
+                      {/* Mobile Quick Recipe Box */}
+                      <div className="bg-[#fdfbf7] border border-[#e8dfd3] rounded-2xl p-3 space-y-2.5 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-[#2d2926]">
+                            <Shuffle className="w-3.5 h-3.5 text-[#3b6845]" />
+                            <span>เลือกสูตรผสมด่วน</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#faf7f2] border border-[#e8dfd3] text-[11px] font-mono tabular-nums">
+                            <span className="text-[#855621] font-bold">
+                              ใหม่ {selectedNewCount}/5
+                            </span>
+                            <span className="text-[#d5cbc0]">·</span>
+                            <span className="text-[#2b5435] font-bold">
+                              สด {selectedFreshCount}/5
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {RECIPES.map((rec) => {
+                            const Icon = rec.icon;
+                            const isRecActive = activeRecipe === rec.id;
+                            return (
+                              <button
+                                key={rec.id}
+                                type="button"
+                                onClick={() =>
+                                  onApplyRecipe && onApplyRecipe(rec.id)
+                                }
+                                className={`px-2.5 py-2 rounded-xl text-left border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                                  isRecActive
+                                    ? 'bg-[#edf4ed] text-[#244b2f] border-[#bad8b9] ring-1 ring-[#a4c5a1]/50 shadow-2xs'
+                                    : 'bg-[#faf7f2] hover:bg-white text-[#4d4740] border-[#e8dfd3]'
+                                }`}
+                                title={rec.hint}
+                              >
+                                <Icon className="w-3.5 h-3.5 shrink-0 text-[#3b6845]" />
+                                <span className="text-xs font-bold truncate">
+                                  {rec.title}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Mobile Full 5 Rank Slot Cards */}
+                      <div className="space-y-2">
+                        {rankings.map((slot, index) => (
+                          <div key={slot.rank}>
+                            <RankSlotCard
+                              slot={slot}
+                              footage={
+                                slot.footageId
+                                  ? computedFootageMap[slot.footageId]
+                                  : null
+                              }
+                              isActivePickerSlot={
+                                activeSlotRank === slot.rank
+                              }
+                              onActivatePicker={() => {
+                                onActivatePickerSlot(slot.rank);
+                                setWorkspaceMode('MANUAL_BROWSE');
+                              }}
+                              onClearSlot={() =>
+                                onClearSlotByRank(slot.rank)
+                              }
+                              onMoveRank={(dir) =>
+                                onMoveSlotByIndex(index, dir)
+                              }
+                              onScriptChange={(script) =>
+                                onUpdateSlotScript(slot.rank, script)
+                              }
+                              onRankFieldChange={(field, val) =>
+                                onUpdateSlotRankFields?.(slot.rank, field, val)
+                              }
+                              canMoveUp={index > 0}
+                              canMoveDown={index < rankings.length - 1}
+                              onSlotDragStart={(rank) =>
+                                onActivatePickerSlot(rank)
+                              }
+                              onDropItemOnSlot={onDropItemOnSlot}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 w-full">
+                      {/* Compact Mini Rank Strip on Mobile when browsing Pool */}
+                      <div className="flex items-center justify-between gap-1.5 p-2 rounded-xl bg-[#fdfbf7] border border-[#e8dfd3]">
+                        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                          {rankings.map((slot) => {
+                            const hasClip = Boolean(slot.footageId);
+                            const isActive = activeSlotRank === slot.rank;
+                            return (
+                              <button
+                                key={slot.rank}
+                                type="button"
+                                onClick={() => onActivatePickerSlot(slot.rank)}
+                                className={`px-2 py-1 rounded-lg text-[11px] font-mono font-bold transition-colors cursor-pointer shrink-0 border ${
+                                  isActive
+                                    ? 'bg-[#3b6845] text-white border-[#3b6845]'
+                                    : hasClip
+                                    ? 'bg-[#edf4ed] text-[#244b2f] border-[#bad8b9]'
+                                    : 'bg-[#faf7f2] text-[#787066] border-dashed border-[#d5cbc0]'
+                                }`}
+                              >
+                                #{slot.rank} {slot.footageId || 'ว่าง'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <CandidateFootagePool
+                        className="w-full"
+                        isExpanded={false}
+                        categoryGroups={categoryGroups}
+                        activeGroup={activeGroup}
+                        activeCategoryStat={activeCategoryStat}
+                        productionTarget={productionTarget}
+                        activeSubcategory={activeSubcategory}
+                        currentSubcategories={currentSubcategories}
+                        poolSubcategoryFilterId={poolSubcategoryFilterId}
+                        onChangePoolSubcategoryFilterId={
+                          onChangePoolSubcategoryFilterId
+                        }
+                        computedFootage={computedFootage}
+                        liveCategoryStock={liveCategoryStock}
+                        allowCrossCategory={allowCrossCategory}
+                        onToggleCrossCategory={onToggleCrossCategory}
+                        onEnableCrossCategory={onEnableCrossCategory}
+                        poolFilterGroupId={poolFilterGroupId}
+                        onChangePoolFilterGroupId={
+                          onChangePoolFilterGroupId
+                        }
+                        poolQuickFilter={poolQuickFilter}
+                        onChangePoolQuickFilter={onChangePoolQuickFilter}
+                        pickerSearch={pickerSearch}
+                        onChangePickerSearch={onChangePickerSearch}
+                        pickerSortBy={pickerSortBy}
+                        onChangePickerSortBy={onChangePickerSortBy}
+                        pickerCandidatesCount={pickerCandidatesCount}
+                        paginatedPickerCandidates={
+                          paginatedPickerCandidates
+                        }
+                        pickerPage={pickerPage}
+                        pickerPageSize={pickerPageSize}
+                        onPageChange={onPageChange}
+                        onPageSizeChange={onPageSizeChange}
+                        rankings={rankings}
+                        selectedFootageIds={selectedFootageIds}
+                        footageToAssignedRankMap={footageToAssignedRankMap}
+                        onAssignFootageToRank={onAssignFootageToRank}
+                        tagMap={tagMap}
+                        settings={settings}
+                      />
+                    </div>
+                  )}
+                </div>
 
                 {/*
-                  PURE HORIZONTAL SLIDING DUAL-DRAWER CONTAINER
-                  No `w-full` or `layout` FLIP on the two child motion.divs so CSS and Framer Motion never conflict.
+                  DESKTOP (lg:flex): PURE HORIZONTAL SLIDING DUAL-DRAWER CONTAINER
                   Left Panel animates flexBasis / width: 91% <-> 30%
                   Right Panel animates flexBasis / width: 9% <-> 70%
-                  Both slide simultaneously in real time with 0ms wait delay!
                 */}
-                <div className="flex flex-row gap-3 items-stretch w-full overflow-hidden">
+                <div className="hidden lg:flex flex-row gap-3 items-stretch w-full overflow-hidden">
                   {/* LEFT DRAWER: 91% (Expanded Formula + Full 5-Rank Board) <-> 30% (Compact 5-Rank Summary) */}
                   <motion.div
                     initial={false}
@@ -383,10 +586,7 @@ export const BuilderStep2RankingWorkspace: React.FC<
                                 </div>
                                 <div>
                                   <span className="text-sm block">
-                                    เลือกสูตรผสมด่วน (คลิกปุ่มเพื่อใส่ 5 คลิปอัตโนมัติ)
-                                  </span>
-                                  <span className="text-[11px] font-normal text-[#787066]">
-                                    ระบบคัดคลิปที่ไม่ซ้ำและพักจนสดลง 5 อันดับให้ทันทีในคลิกเดียว
+                                    เลือกสูตรผสมด่วน (คลิกเพื่อใส่ 5 คลิปอัตโนมัติ)
                                   </span>
                                 </div>
                               </div>
@@ -398,7 +598,7 @@ export const BuilderStep2RankingWorkspace: React.FC<
                                   </span>
                                   <span className="text-[#d5cbc0]">·</span>
                                   <span className="text-[#2b5435] font-bold">
-                                    เก่าสด {selectedFreshCount}/5
+                                    สด {selectedFreshCount}/5
                                   </span>
                                 </div>
 
@@ -431,21 +631,16 @@ export const BuilderStep2RankingWorkspace: React.FC<
                                     onClick={() =>
                                       onApplyRecipe && onApplyRecipe(rec.id)
                                     }
-                                    className={`p-3 rounded-xl text-left border transition-colors cursor-pointer flex flex-col justify-between gap-1.5 ${
+                                    className={`px-3 py-2.5 rounded-xl text-left border transition-colors cursor-pointer flex items-center gap-2 ${
                                       isRecActive
                                         ? 'bg-[#edf4ed] text-[#244b2f] border-[#bad8b9] ring-2 ring-[#a4c5a1]/40 shadow-xs'
                                         : 'bg-[#faf7f2] hover:bg-white text-[#4d4740] border-[#e8dfd3]'
                                     }`}
                                     title={rec.hint}
                                   >
-                                    <div className="flex items-center gap-1.5 text-xs font-bold truncate">
-                                      <Icon className="w-4 h-4 shrink-0 text-[#3b6845]" />
-                                      <span className="truncate">
-                                        {rec.title}
-                                      </span>
-                                    </div>
-                                    <span className="text-[11px] text-[#787066] truncate">
-                                      {rec.hint}
+                                    <Icon className="w-4 h-4 shrink-0 text-[#3b6845]" />
+                                    <span className="text-xs font-bold truncate">
+                                      {rec.title}
                                     </span>
                                   </motion.button>
                                 );
@@ -478,6 +673,13 @@ export const BuilderStep2RankingWorkspace: React.FC<
                                   }
                                   onScriptChange={(script) =>
                                     onUpdateSlotScript(slot.rank, script)
+                                  }
+                                  onRankFieldChange={(field, val) =>
+                                    onUpdateSlotRankFields?.(
+                                      slot.rank,
+                                      field,
+                                      val
+                                    )
                                   }
                                   canMoveUp={index > 0}
                                   canMoveDown={index < rankings.length - 1}
@@ -515,10 +717,10 @@ export const BuilderStep2RankingWorkspace: React.FC<
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-xs font-bold text-[#2d2926] truncate">
-                                    เลือกสูตรผสมด่วน (หดย่อ)
+                                    เลือกสูตรผสมด่วน
                                   </div>
                                   <div className="text-[11px] text-[#3b6845] font-semibold truncate">
-                                    คลิกเพื่อสไลด์กางเต็มจอ »
+                                    คลิกกางเต็มจอ »
                                   </div>
                                 </div>
                               </div>

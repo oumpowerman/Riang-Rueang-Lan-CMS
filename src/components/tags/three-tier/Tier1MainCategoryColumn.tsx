@@ -17,7 +17,6 @@ import {
   ArrowDownToDot,
   Maximize2,
   Minimize2,
-  PencilLine,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
 import { BatchTagMoveDestination } from '../../../context/cms/cms.types';
@@ -245,8 +244,8 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
               }`}
               title={
                 isExpandedGrid
-                  ? 'ย่อกลับเป็นคอลัมน์ปกติ'
-                  : 'กางคอลัมน์ป้ายแท็กหลักเป็นตารางหลายคอลัมน์เพื่ออ่านชื่อเต็มและจัดการจำนวนมาก'
+                  ? 'ย่อคอลัมน์นี้กลับเป็นขนาดปกติ'
+                  : 'กางคอลัมน์ป้ายแท็กหลักเป็นตารางหลายคอลัมน์เพื่ออ่านชื่อเต็มและจัดการหลายรายการ'
               }
             >
               {isExpandedGrid ? (
@@ -737,22 +736,11 @@ export const Tier1MainCategoryColumn: React.FC<Tier1MainCategoryColumnProps> = (
                           </button>
                         )}
 
-                        {onStartInlineRename && !isInlineEditing && (
-                          <button
-                            type="button"
-                            onClick={(e) => onStartInlineRename(cat, e)}
-                            className="p-1 rounded-md text-[#7D6E61] hover:text-[#1B4369] hover:bg-[#E7F1F9] transition-colors cursor-pointer"
-                            title="เปลี่ยนชื่อแท็กด่วนบนการ์ด (หรือดับเบิลคลิกที่ชื่อ)"
-                          >
-                            <PencilLine className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-
                         <button
                           type="button"
                           onClick={(e) => onOpenEditMainCat(cat, e)}
                           className="p-1 rounded-md text-[#7D6E61] hover:text-[#1B4369] hover:bg-[#E7F1F9] transition-colors cursor-pointer"
-                          title="แก้ไขโทนสีพาสเทลและรายละเอียดแท็ก"
+                          title="แก้ไขชื่อ โทนสีพาสเทล และรายละเอียดแท็ก (หรือดับเบิลคลิกที่ชื่อเพื่อแก้ชื่อด่วน)"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
