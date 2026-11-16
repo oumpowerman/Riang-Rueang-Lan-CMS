@@ -318,7 +318,10 @@ export interface CMSContextType {
   ) => { createdSources: RawSource[]; createdFootage: Footage[] };
 
   // Actions: Footage Update/Delete & Batch Operations
-  updateFootage: (id: string, updates: Partial<Footage>) => void;
+  updateFootage: (
+    id: string,
+    updates: Partial<Footage>
+  ) => Promise<{ ok: boolean; error?: string }>;
   deleteFootage: (id: string) => void;
   batchAddDirectFootage: (
     items: Array<{
@@ -378,7 +381,7 @@ export interface CMSContextType {
   ) => Promise<void>;
   updateEpisodeWorkflowStage: (episodeId: string, stage: EpisodeWorkflowStage) => void;
   updateEpisodeMasterInfo: (episodeId: string, updates: Partial<MasterVideoInfo>) => void;
-  deleteEpisode: (episodeId: string) => void;
+  deleteEpisode: (episodeId: string) => Promise<{ ok: boolean; error?: string }>;
 
   // Demo Reset / Production Clip Wipe
   resetDemoData: () => void;

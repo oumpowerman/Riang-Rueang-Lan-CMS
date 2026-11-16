@@ -9,12 +9,13 @@ import {
   Filter,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
+  AlertTriangle,
+  Layers,
 } from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
-import type {
-  EpisodeWorkflowStage,
-  EpisodeProductionTarget,
-} from '../../../../types/episode.types';
+import type { EpisodeProductionTarget } from '../../../../types/episode.types';
+import type { EpisodeCompletenessFilter } from '../../../../utils/episodeValidator';
 import type {
   CategoryTag,
   ArchiveSeriesCategory,
@@ -34,9 +35,9 @@ interface EpisodeFilterControlsProps {
   availableSubcategories: CategoryTag[];
   productionTargetFilter: 'ALL' | EpisodeProductionTarget;
   onProductionTargetChange: (target: 'ALL' | EpisodeProductionTarget) => void;
-  workflowFilter: 'ALL' | EpisodeWorkflowStage;
-  onWorkflowFilterChange: (workflow: 'ALL' | EpisodeWorkflowStage) => void;
-  workflowStageCounts: Record<'ALL' | EpisodeWorkflowStage, number>;
+  completenessFilter: EpisodeCompletenessFilter;
+  onCompletenessFilterChange: (filter: EpisodeCompletenessFilter) => void;
+  completenessCounts: Record<EpisodeCompletenessFilter, number>;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
   viewMode: ViewMode;
@@ -54,17 +55,18 @@ interface EpisodeFilterControlsProps {
   issueCount?: number;
 }
 
-const WORKFLOW_STAGE_LABELS: Record<EpisodeWorkflowStage, string> = {
-  '1_MIXING': '1. ผสมฟุตเทจ',
-  '2_MASCOT_SCRIPTING': '2. เขียนบทมาสคอต',
-  '3_VIDEO_EDITING': '3. ตัดต่อวิดีโอ',
-  '4_PUBLISHED': '4. เผยแพร่แล้ว',
+const COMPLETENESS_FILTER_LABELS: Record<EpisodeCompletenessFilter, string> = {
+  ALL: 'ทั้งหมด',
+  COMPLETE: 'พร้อมสมบูรณ์',
+  INCOMPLETE: 'ข้อมูลหรือลิงก์ไม่ครบ',
 };
 
-const WORKFLOW_TABS: Array<{
-  id: 'ALL' | EpisodeWorkflowStage;
+const COMPLETENESS_TABS: Array<{
+  id: EpisodeCompletenessFilter;
   label: string;
   mobileLabel: string;
+  titleHint: string;
+  icon: 'ALL' | 'COMPLETE' | 'INCOMPLETE';
   activeBg: string;
   activeText: string;
   activeBorder: string;
@@ -73,8 +75,10 @@ const WORKFLOW_TABS: Array<{
 }> = [
   {
     id: 'ALL',
-    label: 'ทุกสถานะ',
+    label: 'ทั้งหมด',
     mobileLabel: 'ทั้งหมด',
+    titleHint: 'แสดงคลิปหลักทั้งหมดตามเงื่อนไขที่เลือก',
+    icon: 'ALL',
     activeBg: 'bg-[#FFFDF9]',
     activeText: 'text-[#2D2926]',
     activeBorder: 'border-[#C5AB84]',
@@ -82,44 +86,28 @@ const WORKFLOW_TABS: Array<{
     countText: 'text-[#5C5349]',
   },
   {
-    id: '1_MIXING',
-    label: '1. ผสมฟุตเทจ',
-    mobileLabel: '1.ผสมฟุต',
-    activeBg: 'bg-[#FBF3E4]',
-    activeText: 'text-[#6E4919]',
-    activeBorder: 'border-[#E0C28E]',
-    countBg: 'bg-[#F2E2C4]',
-    countText: 'text-[#6E4919]',
-  },
-  {
-    id: '2_MASCOT_SCRIPTING',
-    label: '2. เขียนบทมาสคอต',
-    mobileLabel: '2.เขียนบท',
-    activeBg: 'bg-[#F3EFEA]',
-    activeText: 'text-[#4E3D66]',
-    activeBorder: 'border-[#CBBCE0]',
-    countBg: 'bg-[#E6DFEF]',
-    countText: 'text-[#4E3D66]',
-  },
-  {
-    id: '3_VIDEO_EDITING',
-    label: '3. ตัดต่อวิดีโอ',
-    mobileLabel: '3.ตัดต่อ',
-    activeBg: 'bg-[#EDF5F8]',
-    activeText: 'text-[#21526B]',
-    activeBorder: 'border-[#AED1E3]',
-    countBg: 'bg-[#DCEBF2]',
-    countText: 'text-[#21526B]',
-  },
-  {
-    id: '4_PUBLISHED',
-    label: '4. เผยแพร่แล้ว',
-    mobileLabel: '4.เผยแพร่',
+    id: 'COMPLETE',
+    label: 'พร้อมสมบูรณ์',
+    mobileLabel: 'พร้อมสมบูรณ์',
+    titleHint: 'ครบ 5 ฟุต ชื่อมาตรฐาน 5 อันดับ และมีลิงก์ Master Drive จริง',
+    icon: 'COMPLETE',
     activeBg: 'bg-[#E8F3E8]',
     activeText: 'text-[#224A2D]',
     activeBorder: 'border-[#9EC49C]',
     countBg: 'bg-[#D3E8D3]',
     countText: 'text-[#224A2D]',
+  },
+  {
+    id: 'INCOMPLETE',
+    label: 'ข้อมูลหรือลิงก์ไม่ครบ',
+    mobileLabel: 'ข้อมูลไม่ครบ',
+    titleHint: 'ยังขาดลิงก์ Master Drive จริง ฟุตไม่ครบ 5 อันดับ หรือชื่อยังไม่มาตรฐาน',
+    icon: 'INCOMPLETE',
+    activeBg: 'bg-[#FAF0E1]',
+    activeText: 'text-[#7A3F17]',
+    activeBorder: 'border-[#E5CFA6]',
+    countBg: 'bg-[#F2DEC1]',
+    countText: 'text-[#7A3F17]',
   },
 ];
 
@@ -135,9 +123,9 @@ export const EpisodeFilterControls: React.FC<EpisodeFilterControlsProps> = ({
   availableSubcategories,
   productionTargetFilter,
   onProductionTargetChange,
-  workflowFilter,
-  onWorkflowFilterChange,
-  workflowStageCounts,
+  completenessFilter,
+  onCompletenessFilterChange,
+  completenessCounts,
   sortBy,
   onSortChange,
   viewMode,
@@ -299,25 +287,47 @@ export const EpisodeFilterControls: React.FC<EpisodeFilterControlsProps> = ({
         </div>
       )}
 
-      {/* ROW 2: Workflow Stage Segmented Tabs + Count & Sort & View Mode */}
-      <div className="pt-2.5 border-t border-[#EFE8DC] flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
-        {/* Left: Interactive Workflow Stage Tabs with Live Counts */}
-        <div className="flex items-center gap-1.5 overflow-x-auto thin-scrollbar pb-0.5">
-          {WORKFLOW_TABS.map((tab) => {
-            const isActive = workflowFilter === tab.id;
-            const count = workflowStageCounts[tab.id] ?? 0;
+      {/* ROW 2: Episode Completeness Filter Tabs + Count & Sort & View Mode */}
+      <div className="pt-2.5 border-t border-[#EFE8DC] flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+        {/* Left: Interactive Completeness Tabs with Live Counts */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {COMPLETENESS_TABS.map((tab) => {
+            const isActive = completenessFilter === tab.id;
+            const count = completenessCounts[tab.id] ?? 0;
 
             return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => onWorkflowFilterChange(tab.id)}
-                className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                title={tab.titleHint}
+                onClick={() => onCompletenessFilterChange(tab.id)}
+                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
                   isActive
                     ? `${tab.activeBg} ${tab.activeText} ${tab.activeBorder} shadow-2xs`
                     : 'bg-[#FAF7F2] text-[#6E665E] border-transparent hover:bg-[#F3EDE2] hover:text-[#2D2926]'
                 }`}
               >
+                {tab.icon === 'ALL' && (
+                  <Layers
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      isActive ? 'text-[#6B4616]' : 'text-[#8C8277]'
+                    }`}
+                  />
+                )}
+                {tab.icon === 'COMPLETE' && (
+                  <CheckCircle2
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      isActive ? 'text-[#2E7D32]' : 'text-[#738A74]'
+                    }`}
+                  />
+                )}
+                {tab.icon === 'INCOMPLETE' && (
+                  <AlertTriangle
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      isActive ? 'text-[#B56722]' : 'text-[#A08164]'
+                    }`}
+                  />
+                )}
                 <span className="sm:hidden">{tab.mobileLabel}</span>
                 <span className="hidden sm:inline">{tab.label}</span>
                 <span
@@ -496,14 +506,16 @@ export const EpisodeFilterControls: React.FC<EpisodeFilterControlsProps> = ({
               </button>
             )}
 
-            {workflowFilter !== 'ALL' && (
+            {completenessFilter !== 'ALL' && (
               <button
                 type="button"
-                onClick={() => onWorkflowFilterChange('ALL')}
+                onClick={() => onCompletenessFilterChange('ALL')}
                 className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[#F3EFEA] hover:bg-[#E7E0D6] text-[#4D4740] font-semibold text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                title="คลิกเพื่อยกเลิกตัวกรองสถานะ"
+                title="คลิกเพื่อยกเลิกตัวกรองความสมบูรณ์"
               >
-                <span>สถานะ: {WORKFLOW_STAGE_LABELS[workflowFilter]}</span>
+                <span>
+                  ความสมบูรณ์: {COMPLETENESS_FILTER_LABELS[completenessFilter]}
+                </span>
                 <X className="w-3 h-3 opacity-75" />
               </button>
             )}

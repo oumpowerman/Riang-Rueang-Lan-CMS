@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCMS } from '../../../context/CMSContext';
+import { useDebouncedCloudSync } from '../../../hooks/useDebouncedCloudSync';
+import type { ComputedFootage, Footage } from '../../../types/footage.types';
 import { buildFootageCatchphraseUpdate } from '../../../utils/episodeScriptGenerator';
 import { generateStandardFileName } from '../../../utils/fileNameGenerator';
 import { CoUsedPartnerEntry, TraceabilityTabId } from './traceability.types';
+
+const TRACEABILITY_DEBOUNCE_MS = 550;
 
 export function useFootageTraceability() {
   const {
@@ -21,26 +25,62 @@ export function useFootageTraceability() {
     useState<TraceabilityTabId>('DETAILS_AND_TAGS');
   const [copiedFileName, setCopiedFileName] = useState(false);
 
-  const footage = traceabilityFootageId
+  const {
+    summary: syncSummary,
+    getItemDraft,
+    getItemStatus,
+    scheduleUpdate,
+    flushItem,
+    flushAll,
+    retryItem,
+    retryAllFailed,
+    resetSession,
+  } = useDebouncedCloudSync<Footage>({
+    delayMs: TRACEABILITY_DEBOUNCE_MS,
+    onCommit: updateFootage,
+  });
+
+  const baseFootage = traceabilityFootageId
     ? computedFootageMap[traceabilityFootageId] || null
     : null;
 
-  // Reset copied state when switching footage
+  // Merge active local draft so inputs remain 0ms responsive without Firestore snapshot jitter
+  const footage = useMemo<ComputedFootage | null>(() => {
+    if (!baseFootage) return null;
+    const draft = getItemDraft(baseFootage.id);
+    if (!draft) return baseFootage;
+    const nextTitle = draft.title !== undefined ? draft.title : baseFootage.title;
+    return {
+      ...baseFootage,
+      ...draft,
+      standardFileName: generateStandardFileName(baseFootage.id, nextTitle),
+    };
+  }, [baseFootage, getItemDraft]);
+
+  // Reset copied state when switching footage; reset session when modal fully closes
   useEffect(() => {
     setCopiedFileName(false);
-  }, [traceabilityFootageId]);
+    if (!traceabilityFootageId) {
+      resetSession();
+    }
+  }, [traceabilityFootageId, resetSession]);
 
-  // Close on Escape key
+  const handleClose = useCallback(() => {
+    void flushAll();
+    setTraceabilityFootageId(null);
+  }, [flushAll, setTraceabilityFootageId]);
+
+  // Close on Escape key (flush pending edits first)
   useEffect(() => {
-    if (!footage) return;
+    if (!baseFootage) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setTraceabilityFootageId(null);
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [footage, setTraceabilityFootageId]);
+  }, [baseFootage, handleClose]);
 
   const parentSource = useMemo(() => {
     if (!footage?.sourceId) return null;
@@ -59,22 +99,21 @@ export function useFootageTraceability() {
       .sort((a, b) => b.count - a.count);
   }, [footage, computedFootageMap]);
 
-  const handleClose = () => {
-    setTraceabilityFootageId(null);
-  };
-
   const handleOpenParentSource = () => {
     if (!parentSource) return;
+    void flushAll();
     setTraceabilityFootageId(null);
     openSourceSplitterFor(parentSource);
   };
 
   const handleSelectEpisode = (episodeId: string) => {
+    void flushAll();
     setTraceabilityFootageId(null);
     setSelectedEpisodeDetailId(episodeId);
   };
 
   const handleSelectPartnerFootage = (partnerId: string) => {
+    void flushAll();
     setTraceabilityFootageId(partnerId);
   };
 
@@ -87,7 +126,7 @@ export function useFootageTraceability() {
 
   const handleUpdateTitle = (title: string) => {
     if (!footage) return;
-    updateFootage(footage.id, {
+    scheduleUpdate(footage.id, {
       title,
       standardFileName: generateStandardFileName(footage.id, title),
     });
@@ -96,35 +135,52 @@ export function useFootageTraceability() {
   const handleUpdatePunchlineNote = (punchlineNote: string) => {
     if (!footage) return;
     const synced = buildFootageCatchphraseUpdate(footage, { punchlineNote });
-    updateFootage(footage.id, synced);
+    scheduleUpdate(footage.id, synced);
   };
 
   const handleUpdateRankTitle = (rankTitle: string) => {
     if (!footage) return;
     const synced = buildFootageCatchphraseUpdate(footage, { rankTitle });
-    updateFootage(footage.id, synced);
+    scheduleUpdate(footage.id, synced);
   };
 
   const handleUpdateMascotNotes = (mascotNotes: string) => {
     if (!footage) return;
     const synced = buildFootageCatchphraseUpdate(footage, { mascotNotes });
-    updateFootage(footage.id, synced);
+    scheduleUpdate(footage.id, synced);
   };
 
-  const handleUpdateOriginalUrl = (originalUrl: string) => {
+  const handleUpdateOriginalUrl = (originalUrl: string, immediate = false) => {
     if (!footage) return;
-    updateFootage(footage.id, { originalUrl });
+    scheduleUpdate(footage.id, { originalUrl }, { immediate });
   };
 
-  const handleUpdateDriveFileUrl = (driveFileUrl: string) => {
+  const handleUpdateDriveFileUrl = (driveFileUrl: string, immediate = false) => {
     if (!footage) return;
-    updateFootage(footage.id, { driveFileUrl });
+    scheduleUpdate(footage.id, { driveFileUrl }, { immediate });
   };
 
   const handleUpdateTags = (tags: string[]) => {
     if (!footage) return;
-    updateFootage(footage.id, { tags });
+    scheduleUpdate(footage.id, { tags }, { immediate: true });
   };
+
+  const handleFlushCurrent = () => {
+    if (!footage) return;
+    void flushItem(footage.id);
+  };
+
+  const handleFlushAll = () => {
+    void flushAll();
+  };
+
+  const handleRetryAllFailed = () => {
+    void retryAllFailed();
+  };
+
+  const currentSyncStatus = footage
+    ? getItemStatus(footage.id)
+    : { state: 'IDLE' as const };
 
   return {
     footage,
@@ -135,6 +191,9 @@ export function useFootageTraceability() {
     activeTab,
     setActiveTab,
     copiedFileName,
+    syncSummary,
+    currentSyncStatus,
+    debounceMs: TRACEABILITY_DEBOUNCE_MS,
     handleClose,
     handleOpenParentSource,
     handleSelectEpisode,
@@ -147,5 +206,11 @@ export function useFootageTraceability() {
     handleUpdateOriginalUrl,
     handleUpdateDriveFileUrl,
     handleUpdateTags,
+    handleFlushCurrent,
+    handleFlushAll,
+    handleRetryCurrent: () => {
+      if (footage) void retryItem(footage.id);
+    },
+    handleRetryAllFailed,
   };
 }

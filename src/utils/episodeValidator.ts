@@ -220,3 +220,108 @@ export function auditEpisodesQuality(
     incompleteSlotsCount,
   };
 }
+
+export type EpisodeCompletenessFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE';
+
+export interface EpisodeCompletenessResult {
+  isComplete: boolean;
+  hasRealMasterDrive: boolean;
+  hasStandardTitle: boolean;
+  hasFullFiveSlots: boolean;
+  filledSlotCount: number;
+  missingItems: string[];
+  shortLabel: string;
+  detailText: string;
+  isPlaceholderDrive: boolean;
+}
+
+const PLACEHOLDER_MASTER_DRIVE_PATTERN =
+  /drive\.google\.com\/file\/d\/MASTER-/i;
+
+/**
+ * Checks whether a Master Video Google Drive URL is a real user-provided URL
+ * (excludes empty values and auto-generated placeholder links like .../MASTER-EP-0001/view).
+ */
+export function hasRealMasterDriveLink(url?: string | null): boolean {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return false;
+  if (!/^https?:\/\/\S+/i.test(trimmed)) return false;
+  if (PLACEHOLDER_MASTER_DRIVE_PATTERN.test(trimmed)) return false;
+  return true;
+}
+
+export function isPlaceholderMasterDriveLink(url?: string | null): boolean {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return false;
+  return PLACEHOLDER_MASTER_DRIVE_PATTERN.test(trimmed);
+}
+
+/**
+ * Evaluates full readiness of a Master Episode against all 3 production criteria:
+ * 1. All 5 ranking slots are filled with valid footage
+ * 2. Episode title is real and follows the "5 อันดับ" standard
+ * 3. A real Google Drive Master video link is present (non-placeholder)
+ */
+export function evaluateEpisodeCompleteness(
+  ep: Episode
+): EpisodeCompletenessResult {
+  const std = validateEpisodeStandard(ep);
+  const driveUrl = ep.masterVideoInfo?.masterDriveUrl;
+  const hasRealMasterDrive = hasRealMasterDriveLink(driveUrl);
+  const isPlaceholderDrive = isPlaceholderMasterDriveLink(driveUrl);
+  const hasStandardTitle = !std.hasMissingTitle && !std.hasNon5Rank;
+  const hasFullFiveSlots = !std.hasIncompleteSlots;
+
+  const missingItems: string[] = [];
+  if (std.hasMissingTitle) {
+    missingItems.push('ยังไม่ตั้งชื่อคลิป');
+  } else if (std.hasNon5Rank) {
+    missingItems.push('ชื่อยังไม่เป็น "5 อันดับ"');
+  }
+  if (std.hasIncompleteSlots) {
+    missingItems.push(`ฟุตไม่ครบ (${std.filledSlotCount}/5)`);
+  }
+  if (!hasRealMasterDrive) {
+    missingItems.push(
+      isPlaceholderDrive
+        ? 'ยังเป็นลิงก์ Drive จำลอง (รอวางลิงก์จริง)'
+        : 'ขาดลิงก์ Master Drive'
+    );
+  }
+
+  const isComplete = missingItems.length === 0;
+
+  let shortLabel = 'พร้อมสมบูรณ์';
+  if (!isComplete) {
+    if (missingItems.length === 1) {
+      if (!hasRealMasterDrive) {
+        shortLabel = 'ขาดลิงก์ Drive';
+      } else if (std.hasIncompleteSlots) {
+        shortLabel = `ฟุตไม่ครบ (${std.filledSlotCount}/5)`;
+      } else if (std.hasMissingTitle) {
+        shortLabel = 'ยังไม่ตั้งชื่อ';
+      } else {
+        shortLabel = 'ชื่อยังไม่ 5 อันดับ';
+      }
+    } else {
+      shortLabel = `ไม่ครบ ${missingItems.length} จุด`;
+    }
+  }
+
+  const detailText = isComplete
+    ? 'พร้อมสมบูรณ์: ครบ 5 ฟุต, ชื่อมาตรฐาน และมีลิงก์ Master Drive จริง'
+    : `จุดที่ยังไม่ครบ: ${missingItems.join(' · ')}`;
+
+  return {
+    isComplete,
+    hasRealMasterDrive,
+    hasStandardTitle,
+    hasFullFiveSlots,
+    filledSlotCount: std.filledSlotCount,
+    missingItems,
+    shortLabel,
+    detailText,
+    isPlaceholderDrive,
+  };
+}
+

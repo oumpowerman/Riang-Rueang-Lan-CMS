@@ -10,15 +10,19 @@ import {
   ArrowDown,
   Play,
   Film,
+  AlertTriangle,
 } from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
 import { extractEpisodeSeriesInfo } from '../../../../utils/seriesExtractor';
-import { validateEpisodeStandard } from '../../../../utils/episodeValidator';
+import {
+  validateEpisodeStandard,
+  evaluateEpisodeCompleteness,
+} from '../../../../utils/episodeValidator';
 import { TagPill } from '../../../ui/TagPill';
 import { PaginationBar } from '../../../ui/PaginationBar';
 import { VideoThumbnailPreview } from '../../../footage/VideoThumbnailPreview';
-import type { Episode, EpisodeWorkflowStage } from '../../../../types/episode.types';
+import type { Episode } from '../../../../types/episode.types';
 import type { EpisodeFootageMix } from '../hooks/useMasterArchiveMetrics';
 import type { SortOption } from '../hooks/useMasterArchiveFilter';
 
@@ -35,27 +39,6 @@ interface EpisodeTableViewProps {
   onToggleSortColumn?: (column: 'TITLE' | 'ID' | 'DATE') => void;
 }
 
-const WORKFLOW_BADGE_MAP: Record<
-  EpisodeWorkflowStage,
-  { label: string; className: string }
-> = {
-  '1_MIXING': {
-    label: '1. ผสมฟุตเทจ',
-    className: 'bg-[#FAF2E1] text-[#6E4919] border-[#E6D4B3]',
-  },
-  '2_MASCOT_SCRIPTING': {
-    label: '2. เขียนบทมาสคอต',
-    className: 'bg-[#EDF5F9] text-[#23546E] border-[#C4DFED]',
-  },
-  '3_VIDEO_EDITING': {
-    label: '3. ตัดต่อวิดีโอ',
-    className: 'bg-[#FBF0DC] text-[#785324] border-[#E5CFA6]',
-  },
-  '4_PUBLISHED': {
-    label: '4. เผยแพร่แล้ว',
-    className: 'bg-[#E6F2E6] text-[#224A2D] border-[#A7C9A5]',
-  },
-};
 
 export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
   paginatedEpisodes,
@@ -145,8 +128,8 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                 {/* 3. Category */}
                 <th className="py-2.5 px-3.5 w-44">หมวดหมู่</th>
 
-                {/* 4. Workflow Stage */}
-                <th className="py-2.5 px-3.5 w-36">สถานะงาน</th>
+                {/* 4. Completeness Status */}
+                <th className="py-2.5 px-3.5 w-44">ความสมบูรณ์</th>
 
                 {/* 5. Footage Proportion */}
                 <th className="py-2.5 px-3.5 w-40">สัดส่วนฟุตเทจ</th>
@@ -184,15 +167,14 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                 const mix = getEpisodeFootageMix(ep);
                 const seriesInfo = extractEpisodeSeriesInfo(ep, tagMap);
                 const validation = validateEpisodeStandard(ep);
-                const wfBadge =
-                  WORKFLOW_BADGE_MAP[ep.workflowStage] || WORKFLOW_BADGE_MAP['1_MIXING'];
+                const completeness = evaluateEpisodeCompleteness(ep);
 
                 return (
                   <tr
                     key={ep.id}
                     onClick={() => onSelectEpisode(ep.id)}
                     className={`cursor-pointer transition-colors group ${
-                      !validation.isStandard
+                      !completeness.isComplete
                         ? 'hover:bg-[#FAF0E6]/70 bg-[#FFFDF9]'
                         : 'hover:bg-[#FAF3E6]/70'
                     }`}
@@ -295,9 +277,19 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
 
                     <td className="py-2.5 px-3.5 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-lg border text-[11px] font-bold ${wfBadge.className}`}
+                        title={completeness.detailText}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-bold ${
+                          completeness.isComplete
+                            ? 'bg-[#E6F2E6] text-[#224A2D] border-[#A7C9A5]'
+                            : 'bg-[#FAF0E1] text-[#7A3F17] border-[#E5CFA6]'
+                        }`}
                       >
-                        {wfBadge.label}
+                        {completeness.isComplete ? (
+                          <CheckCircle2 className="w-3 h-3 text-[#2E7D32] shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-3 h-3 text-[#B56722] shrink-0" />
+                        )}
+                        <span>{completeness.shortLabel}</span>
                       </span>
                     </td>
 

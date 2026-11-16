@@ -135,9 +135,21 @@ export function useCMSEpisodeActions({
     );
   };
 
-  const deleteEpisode = (episodeId: string) => {
-    setEpisodes((prev) => prev.filter((ep) => ep.id !== episodeId));
-    firestoreService.deleteEpisode(episodeId).catch((err) => console.warn('Firestore deleteEpisode error:', err));
+  const deleteEpisode = async (
+    episodeId: string
+  ): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      await firestoreService.deleteEpisode(episodeId);
+      setEpisodes((prev) => prev.filter((ep) => ep.id !== episodeId));
+      return { ok: true };
+    } catch (err) {
+      console.warn('Firestore deleteEpisode error:', err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'ไม่สามารถลบคลิปหลักบน Cloud ได้ กรุณาลองใหม่อีกครั้ง';
+      return { ok: false, error: message };
+    }
   };
 
   const batchUpsertEpisodes = async (

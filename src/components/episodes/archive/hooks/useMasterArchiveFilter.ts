@@ -4,10 +4,11 @@ import { useDebounce } from '../../../../hooks/useDebounce';
 import {
   validateEpisodeStandard,
   auditEpisodesQuality,
+  evaluateEpisodeCompleteness,
   EpisodeQualityAuditSummary,
+  EpisodeCompletenessFilter,
 } from '../../../../utils/episodeValidator';
 import type {
-  EpisodeWorkflowStage,
   Episode,
   EpisodeRankingSlot,
   EpisodeProductionTarget,
@@ -57,9 +58,8 @@ export function useMasterArchiveFilter({
   const [productionTargetFilter, setProductionTargetFilter] = useState<
     'ALL' | EpisodeProductionTarget
   >('ALL');
-  const [workflowFilter, setWorkflowFilter] = useState<
-    'ALL' | EpisodeWorkflowStage
-  >('ALL');
+  const [completenessFilter, setCompletenessFilter] =
+    useState<EpisodeCompletenessFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('DATE_DESC');
   const [viewMode, setViewMode] = useState<ViewMode>('CARDS');
 
@@ -92,7 +92,7 @@ export function useMasterArchiveFilter({
     subcategoryFilter,
     productionTargetFilter,
     selectedGroupId,
-    workflowFilter,
+    completenessFilter,
     issueFilterOnly,
     selectedFootageTagIds,
     footageTagMatchMode,
@@ -267,6 +267,7 @@ export function useMasterArchiveFilter({
     });
   }, [
     episodes,
+    issueFilterOnly,
     episodeSeriesKeyMap,
     selectedGroupId,
     seriesKeyToArchiveCatMap,
@@ -280,33 +281,36 @@ export function useMasterArchiveFilter({
     tagMap,
   ]);
 
-  // Step 2: Compute live counts per workflow stage from baseFilteredEpisodes
-  const workflowStageCounts = useMemo<
-    Record<'ALL' | EpisodeWorkflowStage, number>
+  // Step 2: Compute live counts per completeness state from baseFilteredEpisodes
+  const completenessCounts = useMemo<
+    Record<EpisodeCompletenessFilter, number>
   >(() => {
-    const counts: Record<'ALL' | EpisodeWorkflowStage, number> = {
+    const counts: Record<EpisodeCompletenessFilter, number> = {
       ALL: baseFilteredEpisodes.length,
-      '1_MIXING': 0,
-      '2_MASCOT_SCRIPTING': 0,
-      '3_VIDEO_EDITING': 0,
-      '4_PUBLISHED': 0,
+      COMPLETE: 0,
+      INCOMPLETE: 0,
     };
     for (const ep of baseFilteredEpisodes) {
-      if (counts[ep.workflowStage] !== undefined) {
-        counts[ep.workflowStage] += 1;
+      if (evaluateEpisodeCompleteness(ep).isComplete) {
+        counts.COMPLETE += 1;
+      } else {
+        counts.INCOMPLETE += 1;
       }
     }
     return counts;
   }, [baseFilteredEpisodes]);
 
-  // Step 3: Apply workflowFilter and sortBy
+  // Step 3: Apply completenessFilter and sortBy
   const sortedEpisodes = useMemo(() => {
     const filtered =
-      workflowFilter === 'ALL'
+      completenessFilter === 'ALL'
         ? [...baseFilteredEpisodes]
-        : baseFilteredEpisodes.filter(
-            (ep) => ep.workflowStage === workflowFilter
-          );
+        : baseFilteredEpisodes.filter((ep) => {
+            const { isComplete } = evaluateEpisodeCompleteness(ep);
+            return completenessFilter === 'COMPLETE'
+              ? isComplete
+              : !isComplete;
+          });
 
     return filtered.sort((a, b) => {
       if (sortBy === 'TITLE_ASC') {
@@ -350,7 +354,7 @@ export function useMasterArchiveFilter({
         return b.publishSlot.localeCompare(a.publishSlot);
       return b.id.localeCompare(a.id, undefined, { numeric: true });
     });
-  }, [baseFilteredEpisodes, workflowFilter, sortBy, getEpisodeFootageMix]);
+  }, [baseFilteredEpisodes, completenessFilter, sortBy, getEpisodeFootageMix]);
 
   const paginatedEpisodes = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -363,7 +367,7 @@ export function useMasterArchiveFilter({
     subcategoryFilter !== 'ALL' ||
     productionTargetFilter !== 'ALL' ||
     selectedGroupId !== 'ALL' ||
-    workflowFilter !== 'ALL' ||
+    completenessFilter !== 'ALL' ||
     issueFilterOnly ||
     selectedFootageTagIds.length > 0;
 
@@ -373,7 +377,7 @@ export function useMasterArchiveFilter({
     setSubcategoryFilter('ALL');
     setProductionTargetFilter('ALL');
     setSelectedGroupId('ALL');
-    setWorkflowFilter('ALL');
+    setCompletenessFilter('ALL');
     setIssueFilterOnly(false);
     setSelectedFootageTagIds([]);
   };
@@ -403,9 +407,9 @@ export function useMasterArchiveFilter({
     productionTargetFilter,
     setProductionTargetFilter,
     availableSubcategories,
-    workflowFilter,
-    setWorkflowFilter,
-    workflowStageCounts,
+    completenessFilter,
+    setCompletenessFilter,
+    completenessCounts,
     issueFilterOnly,
     setIssueFilterOnly,
     auditSummary,

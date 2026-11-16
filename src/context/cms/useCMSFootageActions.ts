@@ -216,9 +216,14 @@ export function useCMSFootageActions({
     return createdFootage;
   };
 
-  const updateFootage = (id: string, updates: Partial<Footage>) => {
+  const updateFootage = async (
+    id: string,
+    updates: Partial<Footage>
+  ): Promise<{ ok: boolean; error?: string }> => {
     const target = footageRef.current.find((ft) => ft.id === id);
-    if (!target) return;
+    if (!target) {
+      return { ok: false, error: 'ไม่พบข้อมูลฟุตเทจที่ต้องการบันทึก' };
+    }
 
     const nextTitle = updates.title !== undefined ? updates.title : target.title;
     const nextTags =
@@ -233,9 +238,18 @@ export function useCMSFootageActions({
     const nextFootageList = footageRef.current.map((ft) => (ft.id === id ? updatedFt : ft));
     footageRef.current = nextFootageList;
     setFootage(nextFootageList);
-    firestoreService
-      .saveFootage(updatedFt)
-      .catch((err) => console.warn('Firestore updateFootage error:', err));
+
+    try {
+      await firestoreService.saveFootage(updatedFt);
+      return { ok: true };
+    } catch (err) {
+      console.warn('Firestore updateFootage error:', err);
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'บันทึกขึ้น Cloud ไม่สำเร็จ';
+      return { ok: false, error: message };
+    }
   };
 
   const deleteFootage = (id: string) => {

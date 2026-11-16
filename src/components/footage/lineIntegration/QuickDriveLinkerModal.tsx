@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -15,16 +14,24 @@ import {
   X,
 } from 'lucide-react';
 import { useCMS } from '../../../context/CMSContext';
+import { useDebouncedCloudSync } from '../../../hooks/useDebouncedCloudSync';
+import type { Footage } from '../../../types/footage.types';
 import {
   formatThaiDate,
+  generateStandardFileName,
   hasRealDriveLink,
 } from '../../../utils/fileNameGenerator';
+import { BaseModal } from '../../ui/BaseModal';
+import { CloudSyncStatusBadge } from '../../ui/CloudSyncStatusBadge';
+import { CloudSyncFooterBar } from '../../ui/CloudSyncFooterBar';
 
 interface QuickDriveLinkerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectForTraceability?: (footageId: string) => void;
 }
+
+const DEBOUNCE_DELAY_MS = 550;
 
 export const QuickDriveLinkerModal: React.FC<QuickDriveLinkerModalProps> = ({
   isOpen,
@@ -42,14 +49,36 @@ export const QuickDriveLinkerModal: React.FC<QuickDriveLinkerModalProps> = ({
   // Keep track of IDs that were missing Drive when the modal opened so rows don't abruptly disappear mid-typing
   const [sessionTargetIds, setSessionTargetIds] = useState<string[]>([]);
 
+  const {
+    summary: syncSummary,
+    getFieldValue,
+    getItemStatus,
+    scheduleUpdate,
+    flushItem,
+    flushAll,
+    retryItem,
+    retryAllFailed,
+    resetSession,
+  } = useDebouncedCloudSync<Footage>({
+    delayMs: DEBOUNCE_DELAY_MS,
+    onCommit: updateFootage,
+  });
+
   useEffect(() => {
     if (isOpen) {
+      resetSession();
       const missingIds = computedFootage
         .filter((ft) => !hasRealDriveLink(ft.driveFileUrl))
         .map((ft) => ft.id);
       setSessionTargetIds(missingIds);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  const handleCloseModal = useCallback(() => {
+    void flushAll();
+    onClose();
+  }, [flushAll, onClose]);
 
   // Also include any newly arrived footage from LINE OA while the modal is open
   const queueFootages = useMemo(() => {
@@ -61,21 +90,29 @@ export const QuickDriveLinkerModal: React.FC<QuickDriveLinkerModalProps> = ({
 
   const socialOnlyCount = useMemo(
     () =>
-      queueFootages.filter(
-        (ft) =>
-          Boolean(ft.originalUrl?.trim()) && !hasRealDriveLink(ft.driveFileUrl)
-      ).length,
-    [queueFootages]
+      queueFootages.filter((ft) => {
+        const liveDrive = getFieldValue(ft.id, 'driveFileUrl', ft.driveFileUrl || '');
+        return Boolean(ft.originalUrl?.trim()) && !hasRealDriveLink(liveDrive);
+      }).length,
+    [queueFootages, getFieldValue]
   );
 
   const remainingMissingCount = useMemo(
-    () => queueFootages.filter((ft) => !hasRealDriveLink(ft.driveFileUrl)).length,
-    [queueFootages]
+    () =>
+      queueFootages.filter((ft) => {
+        const liveDrive = getFieldValue(ft.id, 'driveFileUrl', ft.driveFileUrl || '');
+        return !hasRealDriveLink(liveDrive);
+      }).length,
+    [queueFootages, getFieldValue]
   );
 
   const completedInSessionCount = useMemo(
-    () => queueFootages.filter((ft) => hasRealDriveLink(ft.driveFileUrl)).length,
-    [queueFootages]
+    () =>
+      queueFootages.filter((ft) => {
+        const liveDrive = getFieldValue(ft.id, 'driveFileUrl', ft.driveFileUrl || '');
+        return hasRealDriveLink(liveDrive);
+      }).length,
+    [queueFootages, getFieldValue]
   );
 
   const filteredItems = useMemo(() => {
@@ -85,13 +122,14 @@ export const QuickDriveLinkerModal: React.FC<QuickDriveLinkerModalProps> = ({
         return false;
       }
       if (!q) return true;
+      const liveTitle = getFieldValue(ft.id, 'title', ft.title);
       return (
         ft.id.toLowerCase().includes(q) ||
-        ft.title.toLowerCase().includes(q) ||
+        liveTitle.toLowerCase().includes(q) ||
         (ft.originalUrl || '').toLowerCase().includes(q)
       );
     });
-  }, [queueFootages, scopeFilter, searchQuery]);
+  }, [queueFootages, scopeFilter, searchQuery, getFieldValue]);
 
   const handleCopyFileName = async (id: string, fileName: string) => {
     try {
@@ -103,303 +141,281 @@ export const QuickDriveLinkerModal: React.FC<QuickDriveLinkerModalProps> = ({
     }
   };
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          key="quick-drive-linker-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.16 }}
-          onClick={onClose}
-          className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs"
-        >
-          <motion.div
-            key="quick-drive-linker-dialog"
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-4xl h-[94dvh] max-h-[95dvh] sm:h-[85vh] sm:max-h-[85vh] flex flex-col overflow-hidden"
-          >
-            {/* Header */}
-            <div className="border-b border-slate-200 bg-slate-50/95 px-3.5 sm:px-5 pt-3 sm:pt-4 pb-2.5 sm:pb-3 space-y-2.5 shrink-0">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-2xs">
-                    <FolderCheck className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 truncate">
-                      คิววางลิงก์ Google Drive ด่วน (จาก LINE / Social)
-                    </h2>
-                    <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-                      กดเปิดลิงก์ต้นฉบับ ➔ คัดลอกชื่อไฟล์ไปอัปโหลด ➔ วางลิงก์ Drive เพื่อบันทึกทันที
-                    </p>
-                  </div>
-                </div>
+  const handleDrivePaste = (
+    id: string,
+    e: React.ClipboardEvent<HTMLInputElement>
+  ) => {
+    const pasted = e.clipboardData.getData('text').trim();
+    if (/^https?:\/\/\S+/i.test(pasted)) {
+      e.preventDefault();
+      scheduleUpdate(id, { driveFileUrl: pasted }, { immediate: true });
+    }
+  };
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {completedInSessionCount > 0 && (
-                    <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold font-mono tabular-nums">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>ผูกแล้ว {completedInSessionCount}</span>
+  const headerRight = (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {completedInSessionCount > 0 && (
+        <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#E8F3E8] border border-[#9EC49C] text-[#224A2D] text-xs font-bold font-mono tabular-nums">
+          <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D32]" />
+          <span>ผูกแล้ว {completedInSessionCount}</span>
+        </span>
+      )}
+
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FAF2E1] border border-[#E0C28E] text-[#6E4919] text-xs font-extrabold font-mono tabular-nums">
+        <Clock className="w-3.5 h-3.5 text-[#B57B2E]" />
+        <span>ค้าง {remainingMissingCount}</span>
+      </span>
+    </div>
+  );
+
+  const headerContent = (
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+      <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-[#F2ECE1] border border-[#E2D8C9] rounded-xl shrink-0">
+        <button
+          type="button"
+          onClick={() => setScopeFilter('ALL_MISSING')}
+          className={`py-1 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            scopeFilter === 'ALL_MISSING'
+              ? 'bg-[#FFFDF9] text-[#2D2926] shadow-2xs border border-[#D5C7B2]'
+              : 'text-[#6E665E] hover:text-[#2D2926] border border-transparent'
+          }`}
+        >
+          ขาดลิงก์ Drive ทั้งหมด ({remainingMissingCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setScopeFilter('SOCIAL_ONLY')}
+          className={`py-1 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            scopeFilter === 'SOCIAL_ONLY'
+              ? 'bg-[#FFFDF9] text-[#2D2926] shadow-2xs border border-[#D5C7B2]'
+              : 'text-[#6E665E] hover:text-[#2D2926] border border-transparent'
+          }`}
+        >
+          มีลิงก์ Social ({socialOnlyCount})
+        </button>
+      </div>
+
+      <div className="relative flex-1 min-w-0">
+        <Search className="w-3.5 h-3.5 text-[#8C8277] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="ค้นหารหัส หรือชื่อคลิป..."
+          className="w-full pl-8 pr-7 py-1.5 text-xs bg-[#FAF7F2] border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:bg-white focus:border-[#C5AB84] text-[#2D2926] placeholder:text-[#968B7E]"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C8277] hover:text-[#2D2926] cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const footer = (
+    <CloudSyncFooterBar
+      summary={syncSummary}
+      debounceMs={DEBOUNCE_DELAY_MS}
+      onFlushAll={() => void flushAll()}
+      onRetryAll={() => void retryAllFailed()}
+      onClose={handleCloseModal}
+    />
+  );
+
+  return (
+    <BaseModal
+      isOpen={isOpen}
+      onClose={handleCloseModal}
+      title="คิววางลิงก์ Google Drive ด่วน (จาก LINE / Social)"
+      subtitle="กดเปิดลิงก์ต้นฉบับ ➔ คัดลอกชื่อไฟล์ไปอัปโหลด ➔ วางลิงก์ Drive (หน่วงพิมพ์ 0.55 วิ / วางลิงก์บันทึกทันที)"
+      icon={<FolderCheck className="w-4 h-4 text-[#8A5A22]" />}
+      headerRight={headerRight}
+      headerContent={headerContent}
+      footer={footer}
+      maxWidthClass="max-w-4xl"
+      heightClass="h-[92dvh] max-h-[92dvh] sm:h-[85vh] sm:max-h-[85vh]"
+      bodyClassName="p-3.5 sm:p-5 bg-[#FAF8F5] space-y-2.5"
+    >
+      {filteredItems.length === 0 ? (
+        <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center p-6 bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl">
+          <div className="w-11 h-11 rounded-2xl bg-[#E8F3E8] border border-[#9EC49C] text-[#2E7D32] flex items-center justify-center mb-3">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <h3 className="text-sm font-bold text-[#2D2926]">
+            ไม่มีรายการค้างวางลิงก์ Google Drive
+          </h3>
+          <p className="text-xs text-[#787066] mt-1 max-w-md">
+            ฟุตเทจทั้งหมดในหมวดนี้มีลิงก์ Google Drive ครบถ้วนพร้อมใช้งานแล้ว
+          </p>
+        </div>
+      ) : (
+        filteredItems.map((ft) => {
+          const liveTitle = getFieldValue(ft.id, 'title', ft.title);
+          const liveDriveUrl = getFieldValue(
+            ft.id,
+            'driveFileUrl',
+            ft.driveFileUrl || ''
+          );
+          const liveStandardFileName = generateStandardFileName(ft.id, liveTitle);
+          const isDriveReady = hasRealDriveLink(liveDriveUrl);
+          const hasSocial = Boolean(ft.originalUrl?.trim());
+          const isCopied = copiedId === ft.id;
+          const rowSyncStatus = getItemStatus(ft.id);
+
+          return (
+            <div
+              key={ft.id}
+              className={`rounded-2xl border p-3.5 transition-all space-y-2.5 shadow-2xs ${
+                rowSyncStatus.state === 'ERROR'
+                  ? 'bg-[#FFF9F9] border-[#ECC8C8]'
+                  : isDriveReady
+                  ? 'bg-[#F4FAF4] border-[#BBD6B9]'
+                  : 'bg-[#FDFBF7] border-[#E8DFD3] hover:border-[#DEC190]'
+              }`}
+            >
+              {/* Row 1: ID + Date + Drive Status + Live Cloud Sync Status + Quick Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#4A3D31] text-white font-mono text-xs font-bold shrink-0">
+                    <Film className="w-3 h-3 text-[#E6D4B3]" />
+                    <span>{ft.id}</span>
+                  </span>
+
+                  <span className="text-[11px] font-mono text-[#787066] tabular-nums">
+                    {formatThaiDate(ft.createdAt)}
+                  </span>
+
+                  {isDriveReady ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#E8F3E8] border border-[#9EC49C] text-[#224A2D] text-[11px] font-bold">
+                      <CheckCircle2 className="w-3 h-3 text-[#2E7D32]" />
+                      <span>ผูกลิงก์ Drive แล้ว</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#FAF2E1] border border-[#E0C28E] text-[#6E4919] text-[11px] font-bold">
+                      <Clock className="w-3 h-3 text-[#B57B2E]" />
+                      <span>รอลิงก์ Drive</span>
                     </span>
                   )}
 
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 text-xs font-extrabold font-mono tabular-nums">
-                    <Clock className="w-3.5 h-3.5 text-amber-700" />
-                    <span>ค้าง {remainingMissingCount}</span>
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-200/70 rounded-xl transition-colors cursor-pointer"
-                    aria-label="ปิดหน้าต่าง"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Filter & Search Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-slate-200/80 rounded-xl shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setScopeFilter('ALL_MISSING')}
-                    className={`py-1 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      scopeFilter === 'ALL_MISSING'
-                        ? 'bg-white text-slate-900 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    ขาดลิงก์ Drive ทั้งหมด ({remainingMissingCount})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScopeFilter('SOCIAL_ONLY')}
-                    className={`py-1 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      scopeFilter === 'SOCIAL_ONLY'
-                        ? 'bg-white text-slate-900 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    มีลิงก์ Social ({socialOnlyCount})
-                  </button>
-                </div>
-
-                <div className="relative flex-1 min-w-0">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ค้นหารหัส หรือชื่อคลิป..."
-                    className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
+                  {/* Per-Row Live Cloud Save Status */}
+                  <CloudSyncStatusBadge
+                    status={rowSyncStatus}
+                    onRetry={() => void retryItem(ft.id)}
+                    showTimestamp
                   />
-                  {searchQuery && (
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Copy Standard File Name Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleCopyFileName(ft.id, liveStandardFileName)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FAF7F2] hover:bg-[#F2EBE0] border border-[#E2D8C9] text-[11px] font-bold text-[#5C5349] transition-colors cursor-pointer"
+                    title={`คัดลอกชื่อไฟล์: ${liveStandardFileName}`}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-3 h-3 text-[#2E7D32]" />
+                        <span className="text-[#224A2D]">คัดลอกชื่อไฟล์แล้ว</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileCode className="w-3 h-3 text-[#8C8277]" />
+                        <span className="font-mono max-w-[140px] sm:max-w-[200px] truncate">
+                          {liveStandardFileName}
+                        </span>
+                        <Copy className="w-3 h-3 text-[#8C8277]" />
+                      </>
+                    )}
+                  </button>
+
+                  {/* Open Social Link Button */}
+                  {hasSocial && (
+                    <a
+                      href={ft.originalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDF5F9] hover:bg-[#DCEBF2] border border-[#C4DFED] text-[#23546E] text-[11px] font-bold transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3 text-[#2E6B8A]" />
+                      <span>เปิดลิงก์ Social</span>
+                    </a>
+                  )}
+
+                  {/* Open Full Edit & Tags Modal */}
+                  {onSelectForTraceability && (
                     <button
                       type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      onClick={() => {
+                        void flushAll();
+                        onClose();
+                        onSelectForTraceability(ft.id);
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#FFFDF9] hover:bg-[#F4EFE6] border border-[#E2D8C9] text-[#5C5349] text-[11px] font-bold transition-colors cursor-pointer"
+                      title="เปิดหน้าต่างติดแท็ก 3 ชั้นและแก้ไขละเอียด"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <SlidersHorizontal className="w-3 h-3" />
+                      <span className="hidden sm:inline">ติดแท็ก</span>
                     </button>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Queue List Body */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-5 bg-slate-50/50 space-y-2.5">
-              {filteredItems.length === 0 ? (
-                <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center p-6 bg-white border border-slate-200 rounded-2xl">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mb-3">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    ไม่มีรายการค้างวางลิงก์ Google Drive
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md">
-                    ฟุตเทจทั้งหมดในหมวดนี้มีลิงก์ Google Drive ครบถ้วนพร้อมใช้งานแล้ว
-                  </p>
+              {/* Row 2: Inline Title (Debounced) + Google Drive URL Input (Debounced + Immediate Paste/Blur) */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                <div className="md:col-span-5">
+                  <input
+                    type="text"
+                    value={liveTitle}
+                    onChange={(e) =>
+                      scheduleUpdate(ft.id, { title: e.target.value })
+                    }
+                    onBlur={() => void flushItem(ft.id)}
+                    placeholder="ชื่อช็อตฟุตเทจ..."
+                    className="w-full px-3 py-1.5 text-xs font-semibold bg-[#FAF7F2] border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:bg-white focus:border-[#C5AB84] text-[#2D2926]"
+                  />
                 </div>
-              ) : (
-                filteredItems.map((ft) => {
-                  const isDriveReady = hasRealDriveLink(ft.driveFileUrl);
-                  const hasSocial = Boolean(ft.originalUrl?.trim());
-                  const isCopied = copiedId === ft.id;
 
-                  return (
-                    <div
-                      key={ft.id}
-                      className={`rounded-2xl border p-3.5 transition-all space-y-2.5 shadow-2xs ${
-                        isDriveReady
-                          ? 'bg-emerald-50/40 border-emerald-300'
-                          : 'bg-white border-slate-200/90 hover:border-amber-300'
-                      }`}
-                    >
-                      {/* Row 1: ID + Date + Copy Standard Filename + Open Social Link */}
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-900 text-white font-mono text-xs font-bold shrink-0">
-                            <Film className="w-3 h-3 text-slate-300" />
-                            <span>{ft.id}</span>
-                          </span>
-
-                          <span className="text-[11px] font-mono text-slate-500 tabular-nums">
-                            {formatThaiDate(ft.createdAt)}
-                          </span>
-
-                          {isDriveReady ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                              <span>ผูกลิงก์ Drive แล้ว</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              <span>รอลิงก์ Drive</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Copy Standard File Name Button */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleCopyFileName(ft.id, ft.standardFileName)
-                            }
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-[11px] font-bold text-slate-700 transition-colors cursor-pointer"
-                            title={`คัดลอกชื่อไฟล์: ${ft.standardFileName}`}
-                          >
-                            {isCopied ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-600" />
-                                <span className="text-emerald-700">
-                                  คัดลอกชื่อไฟล์แล้ว
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <FileCode className="w-3 h-3 text-slate-500" />
-                                <span className="font-mono max-w-[140px] sm:max-w-[200px] truncate">
-                                  {ft.standardFileName}
-                                </span>
-                                <Copy className="w-3 h-3 text-slate-500" />
-                              </>
-                            )}
-                          </button>
-
-                          {/* Open Social Link Button */}
-                          {hasSocial && (
-                            <a
-                              href={ft.originalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[11px] font-bold transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3 text-indigo-600" />
-                              <span>เปิดลิงก์ Social</span>
-                            </a>
-                          )}
-
-                          {/* Open Full Edit & Tags Modal */}
-                          {onSelectForTraceability && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onClose();
-                                onSelectForTraceability(ft.id);
-                              }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-bold transition-colors cursor-pointer"
-                              title="เปิดหน้าต่างติดแท็ก 3 ชั้นและแก้ไขละเอียด"
-                            >
-                              <SlidersHorizontal className="w-3 h-3" />
-                              <span className="hidden sm:inline">ติดแท็ก</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Row 2: Inline Title + Google Drive URL Input */}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                        <div className="md:col-span-5">
-                          <input
-                            type="text"
-                            value={ft.title}
-                            onChange={(e) =>
-                              updateFootage(ft.id, { title: e.target.value })
-                            }
-                            placeholder="ชื่อช็อตฟุตเทจ..."
-                            className="w-full px-3 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-600"
-                          />
-                        </div>
-
-                        <div className="md:col-span-7 relative">
-                          <FolderCheck
-                            className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${
-                              isDriveReady ? 'text-emerald-600' : 'text-amber-600'
-                            }`}
-                          />
-                          <input
-                            type="url"
-                            value={ft.driveFileUrl || ''}
-                            onChange={(e) =>
-                              updateFootage(ft.id, {
-                                driveFileUrl: e.target.value,
-                              })
-                            }
-                            placeholder="วางลิงก์ Google Drive ที่นี่ (https://drive.google.com/file/d/...)..."
-                            className={`w-full pl-8 pr-3 py-1.5 text-xs font-mono rounded-xl border focus:outline-none transition-colors ${
-                              isDriveReady
-                                ? 'bg-white border-emerald-400 text-emerald-950'
-                                : 'bg-amber-50/40 border-amber-300 focus:bg-white focus:border-emerald-600'
-                            }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Optional Social Link Preview */}
-                      {hasSocial && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 truncate px-0.5">
-                          <Link2 className="w-3 h-3 text-indigo-500 shrink-0" />
-                          <span className="font-mono truncate">
-                            {ft.originalUrl}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="px-3.5 sm:px-5 py-2.5 border-t border-slate-200 bg-white flex items-center justify-between gap-2 shrink-0 text-xs">
-              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-[11px] sm:text-xs truncate">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>วางลิงก์ Drive แล้วระบบบันทึกขึ้น Cloud อัตโนมัติทันที</span>
+                <div className="md:col-span-7 relative">
+                  <FolderCheck
+                    className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                      isDriveReady ? 'text-[#2E7D32]' : 'text-[#B57B2E]'
+                    }`}
+                  />
+                  <input
+                    type="url"
+                    value={liveDriveUrl}
+                    onChange={(e) =>
+                      scheduleUpdate(ft.id, { driveFileUrl: e.target.value })
+                    }
+                    onPaste={(e) => handleDrivePaste(ft.id, e)}
+                    onBlur={() => void flushItem(ft.id)}
+                    placeholder="วางลิงก์ Google Drive ที่นี่ (https://drive.google.com/file/d/...)..."
+                    className={`w-full pl-8 pr-3 py-1.5 text-xs font-mono rounded-xl border focus:outline-hidden transition-colors ${
+                      isDriveReady
+                        ? 'bg-white border-[#9EC49C] text-[#1D3B26]'
+                        : 'bg-[#FAF2E1]/50 border-[#E0C28E] focus:bg-white focus:border-[#9EC49C] text-[#2D2926]'
+                    }`}
+                  />
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 transition-colors cursor-pointer"
-              >
-                ปิด
-              </button>
+              {/* Optional Social Link Preview */}
+              {hasSocial && (
+                <div className="flex items-center gap-1.5 text-[11px] text-[#787066] truncate px-0.5">
+                  <Link2 className="w-3 h-3 text-[#2E6B8A] shrink-0" />
+                  <span className="font-mono truncate">{ft.originalUrl}</span>
+                </div>
+              )}
             </div>
-          </motion.div>
-        </motion.div>
+          );
+        })
       )}
-    </AnimatePresence>
+    </BaseModal>
   );
 };

@@ -36,9 +36,21 @@ export const TraceabilityDetailsTab: React.FC<TraceabilityDetailsTabProps> = ({
   onUpdateOriginalUrl,
   onUpdateDriveFileUrl,
   onUpdateTags,
+  onFlushDraft,
 }) => {
   const { tagMap } = useCMS();
   const [isCategorySelectorOpen, setIsCategorySelectorOpen] = useState(false);
+
+  const handleUrlPaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+    handler: (url: string, immediate?: boolean) => void
+  ) => {
+    const pasted = e.clipboardData.getData('text').trim();
+    if (/^https?:\/\/\S+/i.test(pasted)) {
+      e.preventDefault();
+      handler(pasted, true);
+    }
+  };
 
   const hasDriveUrl = Boolean(footage.driveFileUrl?.trim());
   const hasOriginalUrl = Boolean(footage.originalUrl?.trim());
@@ -94,6 +106,7 @@ export const TraceabilityDetailsTab: React.FC<TraceabilityDetailsTabProps> = ({
               type="text"
               value={footage.title}
               onChange={(e) => onUpdateTitle(e.target.value)}
+              onBlur={() => onFlushDraft?.()}
               placeholder="ระบุชื่อช็อตสั้นๆ ให้เข้าใจง่าย..."
               className="w-full px-3 py-2 text-xs sm:text-sm font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-600"
             />
@@ -120,6 +133,7 @@ export const TraceabilityDetailsTab: React.FC<TraceabilityDetailsTabProps> = ({
               type="text"
               value={currentPunchline}
               onChange={(e) => onUpdatePunchlineNote(e.target.value)}
+              onBlur={() => onFlushDraft?.()}
               placeholder="พิมพ์คำสร้อยประจำฟุตเทจนี้ (เปลี่ยนที่นี่จะอัปเดตไปทุก EP ที่ใช้ฟุตนี้ทันที)..."
               className="w-full px-3 py-2 text-xs sm:text-sm font-semibold bg-[#F6FAF6] border border-[#BBD6B9] rounded-xl focus:outline-none focus:bg-white focus:border-[#386B46] text-[#1D3B26]"
             />
@@ -135,6 +149,7 @@ export const TraceabilityDetailsTab: React.FC<TraceabilityDetailsTabProps> = ({
               type="text"
               value={footage.mascotNotes || ''}
               onChange={(e) => onUpdateMascotNotes(e.target.value)}
+              onBlur={() => onFlushDraft?.()}
               placeholder="โน้ตจังหวะพากย์ขยี้มุกสำหรับดึงไปใช้ในช่องจัดอันดับ..."
               className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-600"
             />
@@ -174,6 +189,8 @@ export const TraceabilityDetailsTab: React.FC<TraceabilityDetailsTabProps> = ({
             type="url"
             value={footage.driveFileUrl || ''}
             onChange={(e) => onUpdateDriveFileUrl(e.target.value)}
+            onPaste={(e) => handleUrlPaste(e, onUpdateDriveFileUrl)}
+            onBlur={() => onFlushDraft?.()}
             placeholder="https://drive.google.com/file/d/..."
             className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600"
           />
@@ -208,6 +225,8 @@ export const TraceabilityDetailsTab: React.FC<TraceabilityDetailsTabProps> = ({
             type="url"
             value={footage.originalUrl || ''}
             onChange={(e) => onUpdateOriginalUrl(e.target.value)}
+            onPaste={(e) => handleUrlPaste(e, onUpdateOriginalUrl)}
+            onBlur={() => onFlushDraft?.()}
             placeholder="https://www.tiktok.com/@creator/video/..."
             className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-600"
           />

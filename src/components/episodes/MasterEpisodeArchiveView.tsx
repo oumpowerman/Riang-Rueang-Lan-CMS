@@ -163,9 +163,9 @@ export const MasterEpisodeArchiveView: React.FC = () => {
     productionTargetFilter,
     setProductionTargetFilter,
     availableSubcategories,
-    workflowFilter,
-    setWorkflowFilter,
-    workflowStageCounts,
+    completenessFilter,
+    setCompletenessFilter,
+    completenessCounts,
     issueFilterOnly,
     setIssueFilterOnly,
     auditSummary,
@@ -299,9 +299,9 @@ export const MasterEpisodeArchiveView: React.FC = () => {
             availableSubcategories={availableSubcategories}
             productionTargetFilter={productionTargetFilter}
             onProductionTargetChange={setProductionTargetFilter}
-            workflowFilter={workflowFilter}
-            onWorkflowFilterChange={setWorkflowFilter}
-            workflowStageCounts={workflowStageCounts}
+            completenessFilter={completenessFilter}
+            onCompletenessFilterChange={setCompletenessFilter}
+            completenessCounts={completenessCounts}
             sortBy={sortBy}
             onSortChange={setSortBy}
             viewMode={viewMode}

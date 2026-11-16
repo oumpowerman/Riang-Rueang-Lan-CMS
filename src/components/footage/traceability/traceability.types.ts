@@ -32,9 +32,10 @@ export interface TraceabilityDetailsTabProps {
   onUpdatePunchlineNote: (punchlineNote: string) => void;
   onUpdateRankTitle?: (rankTitle: string) => void;
   onUpdateMascotNotes: (mascotNotes: string) => void;
-  onUpdateOriginalUrl: (originalUrl: string) => void;
-  onUpdateDriveFileUrl: (driveFileUrl: string) => void;
+  onUpdateOriginalUrl: (originalUrl: string, immediate?: boolean) => void;
+  onUpdateDriveFileUrl: (driveFileUrl: string, immediate?: boolean) => void;
   onUpdateTags: (tags: string[]) => void;
+  onFlushDraft?: () => void;
 }
 
 export interface TraceabilityEpisodeHistoryTabProps {

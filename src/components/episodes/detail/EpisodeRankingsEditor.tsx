@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Lock,
   UploadCloud,
+  Unlink,
 } from 'lucide-react';
 import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { StatusBadge } from '../../ui/StatusBadge';
@@ -34,6 +35,7 @@ interface EpisodeRankingsEditorProps {
   ) => void;
   onOpenFootagePicker: (rank: RankNumber) => void;
   onSwapRanks: (rankA: RankNumber, rankB: RankNumber) => void;
+  onRemoveSlotFootage: (rank: RankNumber) => void;
 }
 
 export const EpisodeRankingsEditor: React.FC<EpisodeRankingsEditorProps> = ({
@@ -41,6 +43,7 @@ export const EpisodeRankingsEditor: React.FC<EpisodeRankingsEditorProps> = ({
   onChangeSlot,
   onOpenFootagePicker,
   onSwapRanks,
+  onRemoveSlotFootage,
 }) => {
   const { computedFootageMap, settings, setPreviewFootageId, updateFootage } =
     useCMS();
@@ -68,6 +71,13 @@ export const EpisodeRankingsEditor: React.FC<EpisodeRankingsEditorProps> = ({
             : null;
           const resolvedValues = resolveSlotScriptValues(slot, footage);
           const isCustomMode = resolvedValues.isCustomOverride;
+          const hasAnySlotData = Boolean(
+            slot.footageId ||
+              resolvedValues.rankTitle ||
+              resolvedValues.punchlineNote ||
+              slot.mascotScript ||
+              slot.snapshotNote
+          );
 
           const handleFieldEdit = (
             field: 'rankTitle' | 'punchlineNote',
@@ -120,7 +130,7 @@ export const EpisodeRankingsEditor: React.FC<EpisodeRankingsEditorProps> = ({
                     </div>
                   ) : (
                     <div className="w-20 h-13 rounded-xl border border-dashed border-[#D5C7B4] bg-[#F5EFE6] flex items-center justify-center text-[10px] text-[#8C8277] shrink-0 font-mono">
-                      ยังไม่มีฟุต
+                      ช่องว่าง
                     </div>
                   )}
 
@@ -140,13 +150,17 @@ export const EpisodeRankingsEditor: React.FC<EpisodeRankingsEditorProps> = ({
                       )}
                     </div>
                     <div className="text-xs font-bold text-[#2D2926] truncate max-w-sm sm:max-w-md mt-0.5">
-                      {footage ? footage.title : 'ไม่ได้ระบุฟุตเทจ'}
+                      {footage
+                        ? footage.title
+                        : slot.footageId
+                        ? 'ไม่พบข้อมูลฟุตเทจในคลัง'
+                        : 'ว่าง (ยังไม่ได้เลือกฟุตเทจ)'}
                     </div>
                   </div>
                 </div>
 
-                {/* Slot Action Controls: Change Footage + Swap with other ranks */}
-                <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                {/* Slot Action Controls: Change Footage + Remove Footage + Swap with other ranks */}
+                <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-center shrink-0">
                   {/* Swap Up */}
                   {index > 0 && (
                     <button
@@ -167,8 +181,20 @@ export const EpisodeRankingsEditor: React.FC<EpisodeRankingsEditorProps> = ({
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#EEF5EE] hover:bg-[#E1EDE1] text-[#224A2D] border border-[#BBD6B9] text-xs font-bold transition-colors cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-[#386B46]" />
-                    <span>เปลี่ยนฟุตเทจ</span>
+                    <span>{slot.footageId ? 'เปลี่ยนฟุตเทจ' : 'เลือกฟุตเทจใส่'}</span>
                   </button>
+
+                  {hasAnySlotData && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveSlotFootage(rankNum)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FFF5F5] hover:bg-[#FCE8E8] text-[#9E2A2B] border border-[#F3C7C7] text-xs font-bold transition-colors cursor-pointer"
+                      title="ถอดฟุตเทจและล้างข้อมูลทุกช่องในอันดับนี้ (ไม่ลบตัวฟุตเทจออกจากคลัง)"
+                    >
+                      <Unlink className="w-3.5 h-3.5 text-[#B43C3E]" />
+                      <span>ถอดฟุตเทจ</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

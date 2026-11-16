@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { CheckCircle2 } from 'lucide-react';
+import { CloudSyncFooterBar } from '../ui/CloudSyncFooterBar';
 import { TraceabilityCoUsageTab } from './traceability/TraceabilityCoUsageTab';
 import { TraceabilityDetailsTab } from './traceability/TraceabilityDetailsTab';
 import { TraceabilityEpisodeHistoryTab } from './traceability/TraceabilityEpisodeHistoryTab';
@@ -20,6 +20,8 @@ export const FootageTraceabilityModal: React.FC = () => {
     activeTab,
     setActiveTab,
     copiedFileName,
+    syncSummary,
+    debounceMs,
     handleClose,
     handleOpenParentSource,
     handleSelectEpisode,
@@ -32,6 +34,9 @@ export const FootageTraceabilityModal: React.FC = () => {
     handleUpdateOriginalUrl,
     handleUpdateDriveFileUrl,
     handleUpdateTags,
+    handleFlushCurrent,
+    handleFlushAll,
+    handleRetryAllFailed,
   } = useFootageTraceability();
 
   React.useEffect(() => {
@@ -107,6 +112,7 @@ export const FootageTraceabilityModal: React.FC = () => {
                       onUpdateOriginalUrl={handleUpdateOriginalUrl}
                       onUpdateDriveFileUrl={handleUpdateDriveFileUrl}
                       onUpdateTags={handleUpdateTags}
+                      onFlushDraft={handleFlushCurrent}
                     />
                   )}
 
@@ -129,23 +135,16 @@ export const FootageTraceabilityModal: React.FC = () => {
               </AnimatePresence>
             </div>
 
-            {/* Single-Row Compact Footer Bar */}
-            <div className="px-3.5 sm:px-5 py-2 sm:py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-2 shrink-0 text-xs">
-              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-[11px] sm:text-xs truncate">
-                <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
-                <span className="sm:hidden">บันทึกอัตโนมัติเรียลไทม์</span>
-                <span className="hidden sm:inline">
-                  บันทึกการแก้ไขข้อมูล คำสร้อย ลิงก์ และหมวดหมู่อัตโนมัติแบบเรียลไทม์
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleClose}
-                className="px-3.5 sm:px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 transition-colors cursor-pointer"
-              >
-                ปิด
-              </button>
+            {/* Live Cloud Auto-Save Footer Bar */}
+            <div className="px-3.5 sm:px-5 py-2.5 sm:py-3 border-t border-[#E8DFD3] bg-[#FDFBF7] shrink-0">
+              <CloudSyncFooterBar
+                summary={syncSummary}
+                debounceMs={debounceMs}
+                idleMessage="แก้ไขชื่อ คำสร้อย ลิงก์ หรือแท็ก — ระบบหน่วง 0.55 วิแล้วบันทึกขึ้น Cloud อัตโนมัติ"
+                onFlushAll={handleFlushAll}
+                onRetryAll={handleRetryAllFailed}
+                onClose={handleClose}
+              />
             </div>
           </motion.div>
         </motion.div>

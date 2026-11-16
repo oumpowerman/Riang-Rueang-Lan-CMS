@@ -15,11 +15,14 @@ import {
 import { useCMS } from '../../../../context/CMSContext';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
 import { extractEpisodeSeriesInfo } from '../../../../utils/seriesExtractor';
-import { validateEpisodeStandard } from '../../../../utils/episodeValidator';
+import {
+  validateEpisodeStandard,
+  evaluateEpisodeCompleteness,
+} from '../../../../utils/episodeValidator';
 import { TagPill } from '../../../ui/TagPill';
 import { PaginationBar } from '../../../ui/PaginationBar';
 import { VideoThumbnailPreview } from '../../../footage/VideoThumbnailPreview';
-import type { Episode, EpisodeWorkflowStage } from '../../../../types/episode.types';
+import type { Episode } from '../../../../types/episode.types';
 import type { EpisodeFootageMix } from '../hooks/useMasterArchiveMetrics';
 
 interface EpisodeCardGridProps {
@@ -33,27 +36,6 @@ interface EpisodeCardGridProps {
   onSelectEpisode: (episodeId: string) => void;
 }
 
-const WORKFLOW_BADGE_MAP: Record<
-  EpisodeWorkflowStage,
-  { label: string; className: string }
-> = {
-  '1_MIXING': {
-    label: '1. ผสมฟุตเทจ',
-    className: 'bg-[#FAF2E1] text-[#6E4919] border-[#E6D4B3]',
-  },
-  '2_MASCOT_SCRIPTING': {
-    label: '2. เขียนบทมาสคอต',
-    className: 'bg-[#EDF5F9] text-[#23546E] border-[#C4DFED]',
-  },
-  '3_VIDEO_EDITING': {
-    label: '3. ตัดต่อวิดีโอ',
-    className: 'bg-[#FBF0DC] text-[#785324] border-[#E5CFA6]',
-  },
-  '4_PUBLISHED': {
-    label: '4. เผยแพร่แล้ว',
-    className: 'bg-[#E6F2E6] text-[#224A2D] border-[#A7C9A5]',
-  },
-};
 
 export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
   paginatedEpisodes,
@@ -87,16 +69,15 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
           const mix = getEpisodeFootageMix(ep);
           const seriesInfo = extractEpisodeSeriesInfo(ep, tagMap);
           const validation = validateEpisodeStandard(ep);
-          const wfBadge =
-            WORKFLOW_BADGE_MAP[ep.workflowStage] || WORKFLOW_BADGE_MAP['1_MIXING'];
+          const completeness = evaluateEpisodeCompleteness(ep);
 
           return (
             <div
               key={ep.id}
               onClick={() => onSelectEpisode(ep.id)}
               className={`group bg-[#FDFBF7] border rounded-2xl p-4 hover:bg-white hover:shadow-2xs transition-all cursor-pointer flex flex-col justify-between gap-3 ${
-                !validation.isStandard
-                  ? 'border-[#E6CDB7] hover:border-[#D9A87E]'
+                !completeness.isComplete
+                  ? 'border-[#E6D3BE] hover:border-[#D9B18A]'
                   : 'border-[#E8DFD3] hover:border-[#CFB58C]'
               }`}
             >
@@ -146,11 +127,21 @@ export const EpisodeCardGrid: React.FC<EpisodeCardGridProps> = ({
                     )}
                   </div>
 
-                  {/* Workflow Stage Badge */}
+                  {/* Completeness Status Badge */}
                   <span
-                    className={`px-2 py-0.5 rounded-lg border text-[11px] font-bold ${wfBadge.className}`}
+                    title={completeness.detailText}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-bold whitespace-nowrap shrink-0 ${
+                      completeness.isComplete
+                        ? 'bg-[#E6F2E6] text-[#224A2D] border-[#A7C9A5]'
+                        : 'bg-[#FAF0E1] text-[#7A3F17] border-[#E5CFA6]'
+                    }`}
                   >
-                    {wfBadge.label}
+                    {completeness.isComplete ? (
+                      <CheckCircle2 className="w-3 h-3 text-[#2E7D32] shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-3 h-3 text-[#B56722] shrink-0" />
+                    )}
+                    <span>{completeness.shortLabel}</span>
                   </span>
                 </div>
 

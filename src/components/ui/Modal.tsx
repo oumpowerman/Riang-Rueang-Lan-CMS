@@ -10,6 +10,7 @@ interface ModalProps {
   headerRight?: React.ReactNode;
   maxWidthClass?: string;
   headerContent?: React.ReactNode;
+  closeOnEsc?: boolean;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }
@@ -23,6 +24,7 @@ export const Modal: React.FC<ModalProps> = ({
   headerRight,
   maxWidthClass = 'max-w-3xl',
   headerContent,
+  closeOnEsc = true,
   children,
   footer,
 }) => {
@@ -36,6 +38,7 @@ export const Modal: React.FC<ModalProps> = ({
       headerRight={headerRight}
       maxWidthClass={maxWidthClass}
       headerContent={headerContent}
+      closeOnEsc={closeOnEsc}
       bodyClassName="p-3.5 sm:p-5 bg-white"
       footer={
         footer ? (

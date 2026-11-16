@@ -2,20 +2,18 @@ import React, { useEffect, useState } from 'react';
 import {
   Check,
   Copy,
-  ExternalLink,
   Film,
-  FolderGit2,
   Moon,
   Sun,
   Sparkles,
   CheckCircle2,
   Repeat,
-  Play,
   Edit3,
   X,
   Save,
   RefreshCw,
   Lock,
+  Trash2,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { formatThaiDate } from '../../utils/fileNameGenerator';
@@ -31,6 +29,8 @@ import { VideoThumbnailPreview } from '../footage/VideoThumbnailPreview';
 import { EpisodeHeaderEditor } from './detail/EpisodeHeaderEditor';
 import { EpisodeRankingsEditor } from './detail/EpisodeRankingsEditor';
 import { EpisodeScriptExporterPanel } from './detail/EpisodeScriptExporterPanel';
+import { EpisodeMasterLinksForm } from './detail/EpisodeMasterLinksForm';
+import { EpisodeDeleteConfirmModal } from './detail/EpisodeDeleteConfirmModal';
 import { FootagePickerSubModal } from './detail/FootagePickerSubModal';
 import type { EpisodeRankingSlot } from '../../types/episode.types';
 import type { RankNumber } from './builder/builder.types';
@@ -45,6 +45,7 @@ export const EpisodeDetailModal: React.FC = () => {
     settings,
     saveEpisode,
     updateEpisodeMasterInfo,
+    deleteEpisode,
     setTraceabilityFootageId,
     setPreviewFootageId,
   } = useCMS();
@@ -53,6 +54,11 @@ export const EpisodeDetailModal: React.FC = () => {
 
   // Edit Mode Toggle
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Delete Episode Confirmation State
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeletingEpisode, setIsDeletingEpisode] = useState(false);
+  const [deleteEpisodeError, setDeleteEpisodeError] = useState<string | null>(null);
 
   // Editable fields draft state
   const [draftTitle, setDraftTitle] = useState('');
@@ -87,6 +93,9 @@ export const EpisodeDetailModal: React.FC = () => {
       setSavedNotice(false);
       setIsEditMode(false);
       setPickerTargetRank(null);
+      setIsDeleteConfirmOpen(false);
+      setIsDeletingEpisode(false);
+      setDeleteEpisodeError(null);
     }
   }, [episode]);
 
@@ -97,16 +106,23 @@ export const EpisodeDetailModal: React.FC = () => {
     footage: slot.footageId ? computedFootageMap[slot.footageId] || null : null,
   }));
 
-  // Calculate how many footages in this episode were brand new vs recycled
-  const newCountInEp = rankingFootages.filter(
+  const filledRankingFootages = rankingFootages.filter(
+    (item) => item.slot.footageId !== null
+  );
+
+  // Calculate how many filled footages in this episode were brand new vs recycled
+  const newCountInEp = filledRankingFootages.filter(
     (item) =>
       (item.slot.snapshotNote || '').includes('ใหม่') ||
       (item.footage && item.footage.totalUsageCount <= 1)
   ).length;
-  const recycledCountInEp = 5 - newCountInEp;
+  const recycledCountInEp = Math.max(
+    0,
+    filledRankingFootages.length - newCountInEp
+  );
 
-  // Calculate how many footages in this episode have been reused in multiple episodes
-  const multiUsedCount = rankingFootages.filter(
+  // Calculate how many filled footages in this episode have been reused in multiple episodes
+  const multiUsedCount = filledRankingFootages.filter(
     (item) => item.footage && item.footage.totalUsageCount >= 2
   ).length;
 
@@ -202,6 +218,41 @@ export const EpisodeDetailModal: React.FC = () => {
     });
   };
 
+  const handleRemoveFootageFromRank = (rank: RankNumber) => {
+    setDraftRankings((prev) =>
+      prev.map((slot) =>
+        slot.rank === rank
+          ? {
+              rank: slot.rank,
+              footageId: null,
+              rankTitle: '',
+              punchlineNote: '',
+              mascotScript: '',
+              snapshotNote: '',
+              isCustomOverride: false,
+            }
+          : slot
+      )
+    );
+  };
+
+  const handleConfirmDeleteEpisode = async () => {
+    if (!episode || isDeletingEpisode) return;
+    setIsDeletingEpisode(true);
+    setDeleteEpisodeError(null);
+    const result = await deleteEpisode(episode.id);
+    setIsDeletingEpisode(false);
+    if (result.ok) {
+      setIsDeleteConfirmOpen(false);
+      setIsEditMode(false);
+      setSelectedEpisodeDetailId(null);
+    } else {
+      setDeleteEpisodeError(
+        result.error || 'ไม่สามารถลบคลิปหลักได้ กรุณาลองใหม่อีกครั้ง'
+      );
+    }
+  };
+
   const handleSaveAllEdits = () => {
     const cleanTitle = draftTitle.trim() || episode.title;
     const cleanSeriesTitle =
@@ -246,11 +297,13 @@ export const EpisodeDetailModal: React.FC = () => {
       <Modal
         isOpen={Boolean(episode)}
         onClose={() => {
+          if (isDeletingEpisode) return;
           if (isEditMode) {
             handleCancelEdits();
           }
           setSelectedEpisodeDetailId(null);
         }}
+        closeOnEsc={!isDeleteConfirmOpen && pickerTargetRank === null && !isDeletingEpisode}
         title={
           isEditMode
             ? `แก้ไขส่วนผสมและรายชื่อคลิป 5 อันดับ — ${episode.id}`
@@ -263,36 +316,50 @@ export const EpisodeDetailModal: React.FC = () => {
         }
         maxWidthClass="max-w-6xl"
         headerContent={
-          <div className="flex items-center gap-2">
-            {!isEditMode ? (
-              <button
-                type="button"
-                onClick={() => setIsEditMode(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAF2E1] hover:bg-[#F3E5C8] text-[#6E4919] border border-[#DEC190] shadow-2xs transition-all cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-[#8A5A22]" />
-                <span>แก้ไขรายละเอียด & ส่วนผสม</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!isEditMode ? (
                 <button
                   type="button"
-                  onClick={handleCancelEdits}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#FAF7F2] text-[#5C5349] border border-[#E2D8C9] transition-colors cursor-pointer"
+                  onClick={() => setIsEditMode(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAF2E1] hover:bg-[#F3E5C8] text-[#6E4919] border border-[#DEC190] shadow-2xs transition-all cursor-pointer"
                 >
-                  <X className="w-3.5 h-3.5" />
-                  <span>ยกเลิก</span>
+                  <Edit3 className="w-3.5 h-3.5 text-[#8A5A22]" />
+                  <span>แก้ไขรายละเอียด & ส่วนผสม</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAllEdits}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#224A2D] hover:bg-[#1A3A23] text-white shadow-2xs transition-colors cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>บันทึกการแก้ไข</span>
-                </button>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleCancelEdits}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#FAF7F2] text-[#5C5349] border border-[#E2D8C9] transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>ยกเลิก</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAllEdits}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#224A2D] hover:bg-[#1A3A23] text-white shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>บันทึกการแก้ไข</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteEpisodeError(null);
+                setIsDeleteConfirmOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FFF5F5] hover:bg-[#FCE8E8] text-[#9E2A2B] border border-[#F3C7C7] shadow-2xs transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-[#B43C3E]" />
+              <span>ลบคลิปหลัก (EP)</span>
+            </button>
           </div>
         }
         footer={
@@ -349,6 +416,7 @@ export const EpisodeDetailModal: React.FC = () => {
                 onChangeSlot={handleSlotChange}
                 onOpenFootagePicker={(rank) => setPickerTargetRank(rank)}
                 onSwapRanks={handleSwapRanks}
+                onRemoveSlotFootage={handleRemoveFootageFromRank}
               />
             </div>
           ) : (
@@ -423,7 +491,9 @@ export const EpisodeDetailModal: React.FC = () => {
                     </div>
                     <div className="text-sm font-bold font-mono tabular-nums text-[#244B2F] mt-1 flex items-center gap-1.5">
                       <Repeat className="w-3.5 h-3.5 text-[#386B46] shrink-0" />
-                      <span>ใช้ซ้ำหลาย EP {multiUsedCount}/5 ชิ้น</span>
+                      <span>
+                        ใช้ซ้ำหลาย EP {multiUsedCount}/{filledRankingFootages.length} ชิ้น
+                      </span>
                     </div>
                   </div>
 
@@ -521,7 +591,11 @@ export const EpisodeDetailModal: React.FC = () => {
                                   setTraceabilityFootageId(footage.id);
                                 }
                               }}
-                              className="hover:bg-[#FAF3E6]/50 cursor-pointer transition-colors align-top"
+                              className={
+                                footage
+                                  ? 'hover:bg-[#FAF3E6]/50 cursor-pointer transition-colors align-top'
+                                  : 'bg-[#FDFBF7]/60 transition-colors align-top'
+                              }
                             >
                               <td className="py-3.5 px-4 font-mono font-bold text-[#2D2926] whitespace-nowrap text-center align-top">
                                 <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-[#FAF2E1] text-[#6E4919] border border-[#E6D4B3] text-xs font-mono font-black">
@@ -544,36 +618,47 @@ export const EpisodeDetailModal: React.FC = () => {
                                     />
                                   </div>
                                 ) : (
-                                  <div className="w-20 h-12 bg-[#F5EFE6] rounded-xl border border-[#E8DFD3] flex items-center justify-center text-[10px] text-[#8C8277] font-mono mx-auto">
-                                    ไม่มีข้อมูล
+                                  <div className="w-20 h-12 bg-[#F5EFE6] rounded-xl border border-dashed border-[#D5C7B4] flex items-center justify-center text-[10px] text-[#8C8277] font-mono mx-auto">
+                                    {slot.footageId ? 'ไม่มีข้อมูล' : 'ช่องว่าง'}
                                   </div>
                                 )}
                               </td>
                               <td className="py-3.5 px-4 font-mono font-bold text-[#6B4616] whitespace-nowrap align-top">
-                                {slot.footageId || '-'}
+                                {slot.footageId || '—'}
                               </td>
                               <td className="py-3.5 px-4 align-top">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-bold text-[#2D2926] text-[13px]">
-                                    {footage ? footage.title : 'ไม่พบข้อมูลฟุตเทจ'}
+                                  <span
+                                    className={`font-bold text-[13px] ${
+                                      slot.footageId
+                                        ? 'text-[#2D2926]'
+                                        : 'text-[#8C8277] font-medium'
+                                    }`}
+                                  >
+                                    {footage
+                                      ? footage.title
+                                      : slot.footageId
+                                      ? 'ไม่พบข้อมูลฟุตเทจ'
+                                      : 'ว่าง (ยังไม่ได้เลือกฟุตเทจ)'}
                                   </span>
-                                  {resolvedSlot.isCustomOverride ? (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF6E8] text-[#7D5622] border border-[#F0DFC8] text-[10px] font-bold"
-                                      title="ล็อกคำสร้อย/ชื่อฟุตเฉพาะ EP นี้"
-                                    >
-                                      <Lock className="w-2.5 h-2.5" />
-                                      <span>เฉพาะ EP นี้</span>
-                                    </span>
-                                  ) : (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EDF4ED] text-[#244B2F] border border-[#BBD6B9] text-[10px] font-bold"
-                                      title="ซิงก์คำสร้อยและชื่อฟุตแบบ Realtime จากตัวฟุตเทจหลัก"
-                                    >
-                                      <RefreshCw className="w-2.5 h-2.5" />
-                                      <span>Realtime</span>
-                                    </span>
-                                  )}
+                                  {slot.footageId &&
+                                    (resolvedSlot.isCustomOverride ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FEF6E8] text-[#7D5622] border border-[#F0DFC8] text-[10px] font-bold"
+                                        title="ล็อกคำสร้อย/ชื่อฟุตเฉพาะ EP นี้"
+                                      >
+                                        <Lock className="w-2.5 h-2.5" />
+                                        <span>เฉพาะ EP นี้</span>
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EDF4ED] text-[#244B2F] border border-[#BBD6B9] text-[10px] font-bold"
+                                        title="ซิงก์คำสร้อยและชื่อฟุตแบบ Realtime จากตัวฟุตเทจหลัก"
+                                      >
+                                        <RefreshCw className="w-2.5 h-2.5" />
+                                        <span>Realtime</span>
+                                      </span>
+                                    ))}
                                 </div>
                                 {(resolvedSlot.rankTitle ||
                                   resolvedSlot.punchlineNote) && (
@@ -625,167 +710,21 @@ export const EpisodeDetailModal: React.FC = () => {
               </section>
 
               {/* Section 2: Master Video Links Editor */}
-              <section className="space-y-3">
-                <h4 className="text-sm font-bold text-[#2D2926] flex items-center gap-2">
-                  <FolderGit2 className="w-4 h-4 text-[#8A5A22]" />
-                  <span>02. ลิงก์ไฟล์คลิปหลักและหมายเหตุการใช้งาน</span>
-                </h4>
-
-                <form
-                  onSubmit={handleSaveMasterLinks}
-                  className="bg-[#FAF7F2] border border-[#E8DFD3] rounded-2xl p-5 space-y-4"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-[#5C5349] mb-1">
-                        ลิงก์ไฟล์วิดีโอตัวเต็มใน Google Drive (รวม 5 ฟุต + มาสคอต)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={masterDriveUrl}
-                          onChange={(e) => setMasterDriveUrl(e.target.value)}
-                          placeholder="https://drive.google.com/file/d/..."
-                          className="flex-1 px-3 py-2 text-xs bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84]"
-                        />
-                        {masterDriveUrl && (
-                          <a
-                            href={masterDriveUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 bg-white border border-[#E2D8C9] rounded-xl text-[#5C5349] hover:text-[#6B4616]"
-                            title="เปิดไฟล์ใน Google Drive"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#5C5349] mb-1">
-                        ลิงก์อ้างอิง YouTube (ถ้ามี)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={youtubeUrl}
-                          onChange={(e) => setYoutubeUrl(e.target.value)}
-                          placeholder="https://www.youtube.com/watch?v=..."
-                          className="flex-1 px-3 py-2 text-xs bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84]"
-                        />
-                        {youtubeUrl && (
-                          <a
-                            href={youtubeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 bg-white border border-[#E2D8C9] rounded-xl text-[#5C5349] hover:text-[#6B4616]"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#5C5349] mb-1">
-                        ลิงก์อ้างอิง Facebook (ถ้ามี)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={facebookUrl}
-                          onChange={(e) => setFacebookUrl(e.target.value)}
-                          placeholder="https://www.facebook.com/..."
-                          className="flex-1 px-3 py-2 text-xs bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84]"
-                        />
-                        {facebookUrl && (
-                          <a
-                            href={facebookUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 bg-white border border-[#E2D8C9] rounded-xl text-[#5C5349] hover:text-[#6B4616]"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#5C5349] mb-1">
-                        ลิงก์อ้างอิง TikTok (ถ้ามี)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={tiktokUrl}
-                          onChange={(e) => setTiktokUrl(e.target.value)}
-                          placeholder="https://www.tiktok.com/@juijui.j/video/..."
-                          className="flex-1 px-3 py-2 text-xs bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84]"
-                        />
-                        {tiktokUrl && (
-                          <a
-                            href={tiktokUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 bg-white border border-[#E2D8C9] rounded-xl text-[#5C5349] hover:text-[#6B4616]"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#5C5349] mb-1">
-                        ลิงก์อ้างอิง Instagram (ถ้ามี)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="url"
-                          value={instagramUrl}
-                          onChange={(e) => setInstagramUrl(e.target.value)}
-                          placeholder="https://www.instagram.com/reel/..."
-                          className="flex-1 px-3 py-2 text-xs bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84]"
-                        />
-                        {instagramUrl && (
-                          <a
-                            href={instagramUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 bg-white border border-[#E2D8C9] rounded-xl text-[#5C5349] hover:text-[#6B4616]"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-[#5C5349] mb-1">
-                        บันทึกหมายเหตุการคัดเลือกฟุตเทจของตอนนี้
-                      </label>
-                      <input
-                        type="text"
-                        value={performanceNote}
-                        onChange={(e) => setPerformanceNote(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-3 pt-2">
-                    <button
-                      type="submit"
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#3B6845] hover:bg-[#2C5234] rounded-xl transition-colors cursor-pointer shadow-2xs"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>อัปเดตข้อมูลไฟล์ตัวเต็ม & ลิงก์อ้างอิง</span>
-                    </button>
-                  </div>
-                </form>
-              </section>
+              <EpisodeMasterLinksForm
+                masterDriveUrl={masterDriveUrl}
+                onChangeMasterDriveUrl={setMasterDriveUrl}
+                youtubeUrl={youtubeUrl}
+                onChangeYoutubeUrl={setYoutubeUrl}
+                facebookUrl={facebookUrl}
+                onChangeFacebookUrl={setFacebookUrl}
+                tiktokUrl={tiktokUrl}
+                onChangeTiktokUrl={setTiktokUrl}
+                instagramUrl={instagramUrl}
+                onChangeInstagramUrl={setInstagramUrl}
+                performanceNote={performanceNote}
+                onChangePerformanceNote={setPerformanceNote}
+                onSubmit={handleSaveMasterLinks}
+              />
             </>
           )}
         </div>
@@ -801,6 +740,17 @@ export const EpisodeDetailModal: React.FC = () => {
           onSelectFootage={handleSelectFootageForRank}
         />
       )}
+
+      {/* Sub-modal: Confirm Permanent Delete Master Episode */}
+      <EpisodeDeleteConfirmModal
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        episode={episode}
+        linkedFootagesCount={filledRankingFootages.length}
+        onConfirmDelete={handleConfirmDeleteEpisode}
+        isDeleting={isDeletingEpisode}
+        deleteError={deleteEpisodeError}
+      />
     </>
   );
 };
