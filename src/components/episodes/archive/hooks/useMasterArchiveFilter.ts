@@ -7,10 +7,11 @@ import {
   evaluateEpisodeCompleteness,
   EpisodeQualityAuditSummary,
   EpisodeCompletenessFilter,
+  THAI_COLLATOR,
+  NUMERIC_ID_COLLATOR,
 } from '../../../../utils/episodeValidator';
 import type {
   Episode,
-  EpisodeRankingSlot,
   EpisodeProductionTarget,
 } from '../../../../types/episode.types';
 import type { CategoryTag } from '../../../../types/tag.types';
@@ -18,6 +19,13 @@ import type {
   CategoryRankingItem,
   EpisodeFootageMix,
 } from './useMasterArchiveMetrics';
+
+import {
+  getEpisodeSmartSearchIndex,
+  matchesSmartSearchTokens,
+  normalizeCompactSearchText,
+  parseSmartSearchQuery,
+} from '../../../../utils/smartSearchEngine';
 
 export type ArchiveTab = 'EPISODES' | 'SERIES_SHELF';
 export type ViewMode = 'CARDS' | 'TABLE';
@@ -46,7 +54,7 @@ export function useMasterArchiveFilter({
   episodeFootageTagsMap,
   getEpisodeFootageMix,
 }: UseMasterArchiveFilterProps) {
-  const { episodes, tags, tagMap } = useCMS();
+  const { episodes, tags, tagMap, serverCounts, archiveSummaryStats } = useCMS();
 
   const [archiveTab, setArchiveTab] = useState<ArchiveTab>('EPISODES');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('ALL');
@@ -125,6 +133,12 @@ export function useMasterArchiveFilter({
     );
   }, [categoryRanking, selectedGroupId]);
 
+  // Parse debounced search query into normalized tokens ONCE per search change
+  const queryTokens = useMemo(
+    () => parseSmartSearchQuery(debouncedSearchQuery),
+    [debouncedSearchQuery]
+  );
+
   // Series displayed in Series Shelf tab (Active Series + optional 0-EP Series)
   const shelfSeriesItems = useMemo(() => {
     const baseList = showUnproducedSeries
@@ -135,19 +149,19 @@ export function useMasterArchiveFilter({
         ? baseList
         : baseList.filter((item) => item.archiveCategoryId === selectedGroupId);
 
-    const q = debouncedSearchQuery.trim().toLowerCase();
-    if (!q) return byGroup;
-    return byGroup.filter(
-      (item) =>
-        item.seriesName.toLowerCase().includes(q) ||
-        item.fullSeriesTitle.toLowerCase().includes(q)
-    );
+    if (queryTokens.length === 0) return byGroup;
+    return byGroup.filter((item) => {
+      const compactSeriesText = normalizeCompactSearchText(
+        `${item.seriesName} ${item.fullSeriesTitle} ${item.matchedTagNames.join(' ')}`
+      );
+      return matchesSmartSearchTokens(compactSeriesText, queryTokens);
+    });
   }, [
     showUnproducedSeries,
     categoryRanking,
     unproducedSeriesRanking,
     selectedGroupId,
-    debouncedSearchQuery,
+    queryTokens,
   ]);
 
   const availableSubcategories = useMemo(() => {
@@ -172,7 +186,7 @@ export function useMasterArchiveFilter({
 
   // Step 1: Filter episodes by everything EXCEPT workflowStage
   const baseFilteredEpisodes = useMemo(() => {
-    const q = debouncedSearchQuery.trim().toLowerCase();
+    const hasQuery = queryTokens.length > 0;
 
     return episodes.filter((ep: Episode) => {
       // 0. Issue Filter (Non-standard / Incomplete / Missing Title)
@@ -203,9 +217,10 @@ export function useMasterArchiveFilter({
         }
       }
 
+      const epTagSet = episodeFootageTagsMap[ep.id];
+
       // 3. Filter by 3-Tier Footage Tags present inside the Episode's 5 slots
       if (selectedFootageTagIds.length > 0) {
-        const epTagSet = episodeFootageTagsMap[ep.id];
         if (!epTagSet) return false;
         if (footageTagMatchMode === 'AND') {
           const hasAll = selectedFootageTagIds.every((tid) =>
@@ -227,41 +242,9 @@ export function useMasterArchiveFilter({
         const epTarget = ep.productionTarget || 'MAIN_CATEGORY_VARIETY';
         if (epTarget !== productionTargetFilter) return false;
       }
-      if (q !== '') {
-        const inId = ep.id.toLowerCase().includes(q);
-        if (inId) return true;
-        const inTitle = ep.title.toLowerCase().includes(q);
-        if (inTitle) return true;
-        const inSeriesTitle = (ep.seriesTitle || '')
-          .toLowerCase()
-          .includes(q);
-        if (inSeriesTitle) return true;
-        const inMasterFile = (
-          ep.masterVideoInfo?.masterFileName || ''
-        )
-          .toLowerCase()
-          .includes(q);
-        if (inMasterFile) return true;
-        const catName = (
-          tagMap[ep.mainCategoryTagId]?.name || ''
-        ).toLowerCase();
-        const subName = ep.targetSubcategoryId
-          ? (tagMap[ep.targetSubcategoryId]?.name || '').toLowerCase()
-          : '';
-        if (catName.includes(q) || subName.includes(q)) return true;
-        const epNoStr = `ep.${ep.categoryEpisodeNo || ''}`.toLowerCase();
-        const epNoStr2 = `ep ${ep.categoryEpisodeNo || ''}`.toLowerCase();
-        if (
-          Boolean(ep.categoryEpisodeNo) &&
-          (epNoStr.includes(q) || epNoStr2.includes(q))
-        ) {
-          return true;
-        }
-        const inFootage = ep.rankings.some((r: EpisodeRankingSlot) =>
-          (r.footageId || '').toLowerCase().includes(q)
-        );
-        if (inFootage) return true;
-        return false;
+      if (hasQuery) {
+        const compactIndex = getEpisodeSmartSearchIndex(ep, tagMap, epTagSet);
+        return matchesSmartSearchTokens(compactIndex, queryTokens);
       }
       return true;
     });
@@ -277,11 +260,21 @@ export function useMasterArchiveFilter({
     footageTagMatchMode,
     subcategoryFilter,
     productionTargetFilter,
-    debouncedSearchQuery,
+    queryTokens,
     tagMap,
   ]);
 
+  const hasBaseFilters =
+    debouncedSearchQuery.trim() !== '' ||
+    categoryFilter !== 'ALL' ||
+    subcategoryFilter !== 'ALL' ||
+    productionTargetFilter !== 'ALL' ||
+    selectedGroupId !== 'ALL' ||
+    issueFilterOnly ||
+    selectedFootageTagIds.length > 0;
+
   // Step 2: Compute live counts per completeness state from baseFilteredEpisodes
+  // (merges serverCounts / archiveSummaryStats when unfiltered & hydrating background chunks)
   const completenessCounts = useMemo<
     Record<EpisodeCompletenessFilter, number>
   >(() => {
@@ -289,49 +282,76 @@ export function useMasterArchiveFilter({
       ALL: baseFilteredEpisodes.length,
       COMPLETE: 0,
       INCOMPLETE: 0,
+      INCOMPLETE_FOOTAGE: 0,
     };
-    for (const ep of baseFilteredEpisodes) {
-      if (evaluateEpisodeCompleteness(ep).isComplete) {
+    for (let i = 0; i < baseFilteredEpisodes.length; i++) {
+      const comp = evaluateEpisodeCompleteness(baseFilteredEpisodes[i]);
+      if (comp.isComplete) {
         counts.COMPLETE += 1;
       } else {
         counts.INCOMPLETE += 1;
       }
+      if (!comp.hasFullFiveSlots) {
+        counts.INCOMPLETE_FOOTAGE += 1;
+      }
     }
-    return counts;
-  }, [baseFilteredEpisodes]);
 
-  // Step 3: Apply completenessFilter and sortBy
+    if (
+      !hasBaseFilters &&
+      serverCounts &&
+      serverCounts.totalEpisodes > episodes.length
+    ) {
+      counts.ALL = serverCounts.totalEpisodes;
+      if (
+        archiveSummaryStats &&
+        archiveSummaryStats.totalEpisodes >= serverCounts.totalEpisodes
+      ) {
+        counts.COMPLETE = archiveSummaryStats.completeEpisodesCount;
+        counts.INCOMPLETE = archiveSummaryStats.incompleteEpisodesCount;
+        counts.INCOMPLETE_FOOTAGE =
+          archiveSummaryStats.incompleteFootageEpisodesCount;
+      }
+    }
+
+    return counts;
+  }, [
+    baseFilteredEpisodes,
+    hasBaseFilters,
+    serverCounts,
+    episodes.length,
+    archiveSummaryStats,
+  ]);
+
+  // Step 3: Apply completenessFilter and sortBy using shared THAI_COLLATOR & NUMERIC_ID_COLLATOR
   const sortedEpisodes = useMemo(() => {
     const filtered =
       completenessFilter === 'ALL'
         ? [...baseFilteredEpisodes]
         : baseFilteredEpisodes.filter((ep) => {
-            const { isComplete } = evaluateEpisodeCompleteness(ep);
-            return completenessFilter === 'COMPLETE'
-              ? isComplete
-              : !isComplete;
+            const comp = evaluateEpisodeCompleteness(ep);
+            if (completenessFilter === 'COMPLETE') return comp.isComplete;
+            if (completenessFilter === 'INCOMPLETE_FOOTAGE') {
+              return !comp.hasFullFiveSlots;
+            }
+            return !comp.isComplete;
           });
 
     return filtered.sort((a, b) => {
       if (sortBy === 'TITLE_ASC') {
-        const titleDiff = a.title.localeCompare(b.title, 'th', {
-          sensitivity: 'base',
-        });
+        const titleDiff = THAI_COLLATOR.compare(a.title, b.title);
         if (titleDiff !== 0) return titleDiff;
-        return a.id.localeCompare(b.id, undefined, { numeric: true });
+        return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
       }
       if (sortBy === 'TITLE_DESC') {
-        const titleDiff = b.title.localeCompare(a.title, 'th', {
-          sensitivity: 'base',
-        });
+        const titleDiff = THAI_COLLATOR.compare(b.title, a.title);
         if (titleDiff !== 0) return titleDiff;
-        return b.id.localeCompare(a.id, undefined, { numeric: true });
+        return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
       }
       if (sortBy === 'ID_ASC') {
-        return a.id.localeCompare(b.id, undefined, { numeric: true });
+        return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
       }
       if (sortBy === 'ID_DESC') {
-        return b.id.localeCompare(a.id, undefined, { numeric: true });
+        return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
       }
       if (sortBy === 'SERIES_EP_DESC') {
         const epDiff = (b.categoryEpisodeNo || 0) - (a.categoryEpisodeNo || 0);
@@ -343,16 +363,19 @@ export function useMasterArchiveFilter({
         if (mixB !== mixA) return mixB - mixA;
       }
       if (sortBy === 'DATE_ASC') {
-        if (a.publishDate !== b.publishDate)
-          return a.publishDate.localeCompare(b.publishDate);
-        return a.id.localeCompare(b.id, undefined, { numeric: true });
+        if (a.publishDate !== b.publishDate) {
+          return a.publishDate > b.publishDate ? 1 : -1;
+        }
+        return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
       }
       // Default: DATE_DESC
-      if (a.publishDate !== b.publishDate)
-        return b.publishDate.localeCompare(a.publishDate);
-      if (a.publishSlot !== b.publishSlot)
-        return b.publishSlot.localeCompare(a.publishSlot);
-      return b.id.localeCompare(a.id, undefined, { numeric: true });
+      if (a.publishDate !== b.publishDate) {
+        return b.publishDate > a.publishDate ? 1 : -1;
+      }
+      if (a.publishSlot !== b.publishSlot) {
+        return b.publishSlot > a.publishSlot ? 1 : -1;
+      }
+      return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
     });
   }, [baseFilteredEpisodes, completenessFilter, sortBy, getEpisodeFootageMix]);
 
@@ -433,7 +456,10 @@ export function useMasterArchiveFilter({
     categoriesInGroup,
     sortedEpisodes,
     paginatedEpisodes,
-    totalEpisodesCount: episodes.length,
+    totalEpisodesCount:
+      serverCounts && serverCounts.totalEpisodes > episodes.length
+        ? serverCounts.totalEpisodes
+        : episodes.length || archiveSummaryStats?.totalEpisodes || 0,
     hasActiveFilters,
     resetFilters,
   };

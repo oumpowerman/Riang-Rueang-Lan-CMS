@@ -25,6 +25,28 @@ export type EpisodeGroupFilterMode =
   | 'NEW_EP_ONLY'
   | 'UPDATE_EP_ONLY';
 
+export interface SheetColumnSyncConfig {
+  syncColB_EpTitle: boolean; // Col B: ชื่อคลิปหลัก EP (ถ้าปิด = คงชื่อคลิปหลักและคำสร้อยชื่อคลิปเดิมในระบบไว้)
+  syncColC_RankTitle: boolean; // Col C: ชื่ออันดับ (แต่ละสล็อต 5-1 + โน้ตฟุตเทจ)
+  syncColD_Punchline: boolean; // Col D: คำสร้อยประจำอันดับ (แต่ละสล็อต 5-1 + โน้ตฟุตเทจ)
+  syncColE_Tier1Tags: boolean; // Col E: แท็ก Tier 1 (วงการ)
+  syncColF_Tier2Tags: boolean; // Col F: แท็ก Tier 2 (บริบท)
+  syncColG_Tier3Tags: boolean; // Col G: แท็ก Tier 3 (ชื่อบุคคล/รายการ)
+  syncColH_Url: boolean; // Col H: ลิงก์ YouTube Shorts
+  syncColIJ_DateAndTime: boolean; // Col I-J: วันที่และเวลาเผยแพร่
+}
+
+export const DEFAULT_SHEET_COLUMN_SYNC_CONFIG: SheetColumnSyncConfig = {
+  syncColB_EpTitle: true,
+  syncColC_RankTitle: true,
+  syncColD_Punchline: true,
+  syncColE_Tier1Tags: true,
+  syncColF_Tier2Tags: true,
+  syncColG_Tier3Tags: true,
+  syncColH_Url: true,
+  syncColIJ_DateAndTime: true,
+};
+
 export interface TagTierAssignment {
   name: string;
   tier: CategoryTier; // 1 | 2 | 3
@@ -52,12 +74,21 @@ export interface ParsedSheetRow {
   publishTime: string; // Col J: เวลาเผยแพร่ (HH:mm หรือว่าง)
   publishSlot: PublishSlot; // รอบเวลาเผยแพร่ (MORNING_0600 หรือ EVENING_1800)
   matchedFootage: ComputedFootage | null;
+  matchSimilarityPercent: number; // 100 = ตรงเป๊ะ, 82..99 = ใกล้เคียง (Fuzzy), 0 = ไม่พบ
+  isFuzzyMatched: boolean;
   isInStaging: boolean;
   occurrenceCountInSheet: number;
   existingTags: CategoryTag[];
   tagsToCreate: string[];
   finalTagNames: string[];
 }
+
+export type EpisodeMatchMethod =
+  | 'EXACT_TITLE'
+  | 'YOUTUBE_URL'
+  | 'FOOTAGE_OVERLAP'
+  | 'FUZZY_TITLE'
+  | 'NONE';
 
 export interface ParsedEpisodeGroup {
   groupKey: string;
@@ -73,6 +104,8 @@ export interface ParsedEpisodeGroup {
   hasExplicitDateInSheet: boolean; // มีการระบุวันที่มาในชีทหรือแก้ไขด้วยตนเองหรือไม่
   rows: ParsedSheetRow[];
   existingEpisode: Episode | null;
+  epMatchSimilarityPercent: number; // 100 = ตรงเป๊ะ/ลิงก์ตรง, 80..99 = ชื่อใกล้เคียง/ชุดฟุตเทจตรง, 0 = สร้างใหม่
+  epMatchMethod: EpisodeMatchMethod;
   primaryTagName: string;
   isCompleteFiveRanks: boolean;
   missingFootageCount: number;

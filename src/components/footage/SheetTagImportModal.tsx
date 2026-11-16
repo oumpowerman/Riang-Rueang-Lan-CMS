@@ -8,6 +8,7 @@ import { JunkTagCleanupModal } from '../tags/JunkTagCleanupModal';
 import { YouTubeDateSyncTabContent } from '../episodes/youtubeDateSync/YouTubeDateSyncModal';
 import { executeSheetUnifiedSync } from './sheetImport/executeSheetUnifiedSync';
 import { SheetCollapsiblePasteSection } from './sheetImport/SheetCollapsiblePasteSection';
+import { SheetColumnSelectorBar } from './sheetImport/SheetColumnSelectorBar';
 import { SheetEpisodeGroupsPreview } from './sheetImport/SheetEpisodeGroupsPreview';
 import { SheetFootageRowsTable } from './sheetImport/SheetFootageRowsTable';
 import {
@@ -24,9 +25,11 @@ import {
   SheetSyncSuccessReportView,
 } from './sheetImport/SheetSyncProgressAndReport';
 import {
+  DEFAULT_SHEET_COLUMN_SYNC_CONFIG,
   EpisodeGroupFilterMode,
   FootageRowFilterMode,
   RankingOrderDirection,
+  SheetColumnSyncConfig,
   SheetSyncSuccessReport,
   SyncProgressState,
   TableRowDensity,
@@ -95,6 +98,10 @@ export const SheetTagImportModal: React.FC = () => {
     useState(true);
   const [includeSeriesTagOnFootage, setIncludeSeriesTagOnFootage] =
     useState(false);
+  const [columnSyncConfig, setColumnSyncConfig] =
+    useState<SheetColumnSyncConfig>(() => ({
+      ...DEFAULT_SHEET_COLUMN_SYNC_CONFIG,
+    }));
 
   // Processing & Chunked Progress States
   const [isProcessing, setIsProcessing] = useState(false);
@@ -172,6 +179,7 @@ export const SheetTagImportModal: React.FC = () => {
         episodes,
         rankingOrder,
         includeSeriesTagOnFootage,
+        columnSyncConfig,
         customPublishDateByGroupKey,
         customPublishSlotByGroupKey,
       }),
@@ -183,6 +191,7 @@ export const SheetTagImportModal: React.FC = () => {
       episodes,
       rankingOrder,
       includeSeriesTagOnFootage,
+      columnSyncConfig,
       customPublishDateByGroupKey,
       customPublishSlotByGroupKey,
     ]
@@ -278,6 +287,7 @@ export const SheetTagImportModal: React.FC = () => {
         syncEpisodesFromColD,
         autoCreateMissingFootage,
         includeSeriesTagOnFootage,
+        columnSyncConfig,
         rankingOrder,
         tags,
         episodes,
@@ -516,6 +526,12 @@ export const SheetTagImportModal: React.FC = () => {
                 />
               )}
             </AnimatePresence>
+
+            <SheetColumnSelectorBar
+              columnSyncConfig={columnSyncConfig}
+              onChangeColumnSyncConfig={setColumnSyncConfig}
+              syncEpisodesFromColD={syncEpisodesFromColD}
+            />
 
             {hasData && (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">

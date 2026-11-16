@@ -127,12 +127,15 @@ export function computeFootageAnalytics(
   episodes: Episode[],
   settings: SystemSettings
 ): ComputedFootage[] {
-  // Sort episodes chronologically descending by publishDate and slot
+  // Sort episodes chronologically descending by publishDate and slot using fast ASCII comparison on ISO dates
   const sortedEpisodes = [...episodes].sort((a, b) => {
     if (a.publishDate !== b.publishDate) {
-      return b.publishDate.localeCompare(a.publishDate);
+      return b.publishDate > a.publishDate ? 1 : -1;
     }
-    return b.publishSlot.localeCompare(a.publishSlot);
+    if (a.publishSlot !== b.publishSlot) {
+      return b.publishSlot > a.publishSlot ? 1 : -1;
+    }
+    return 0;
   });
 
   const baseTodayStr = getReferenceTodayDate();
@@ -140,42 +143,83 @@ export function computeFootageAnalytics(
   const todayStr =
     latestEpDate && latestEpDate > baseTodayStr ? latestEpDate : baseTodayStr;
 
-  return footageList.map((ft) => {
-    const usageHistory: FootageUsageRecord[] = [];
-    const coUsedWithMap: Record<string, number> = {};
+  // Single-pass O(E) pre-indexing of episode rankings by footageId
+  // Eliminates the O(F * E) nested loop (100,000,000 iterations at 10k x 10k -> 20,000 ops)
+  const usageHistoryByFootageId = new Map<string, FootageUsageRecord[]>();
+  const coUsedByFootageId = new Map<string, Record<string, number>>();
 
-    for (const ep of sortedEpisodes) {
-      const slotMatch = ep.rankings.find((r) => r.footageId === ft.id);
-      if (slotMatch) {
-        const otherFootageIds = ep.rankings
-          .map((r) => r.footageId)
-          .filter((fid): fid is string => Boolean(fid && fid !== ft.id));
+  for (let i = 0; i < sortedEpisodes.length; i++) {
+    const ep = sortedEpisodes[i];
+    const rankings = ep.rankings;
+    if (!rankings || rankings.length === 0) continue;
 
-        const daysAgo = calculateDaysDiff(ep.publishDate, todayStr);
+    const daysAgo = calculateDaysDiff(ep.publishDate, todayStr);
 
-        usageHistory.push({
-          episodeId: ep.id,
-          episodeTitle: ep.title,
-          rank: slotMatch.rank,
-          publishDate: ep.publishDate,
-          publishSlot: ep.publishSlot,
-          workflowStage: ep.workflowStage,
-          coUsedFootageIds: otherFootageIds,
-          daysAgo,
-        });
+    // Collect valid footage IDs in this episode once
+    const validFootageIds: string[] = [];
+    for (let j = 0; j < rankings.length; j++) {
+      const fid = rankings[j].footageId;
+      if (fid) validFootageIds.push(fid);
+    }
+    if (validFootageIds.length === 0) continue;
 
-        for (const otherId of otherFootageIds) {
-          coUsedWithMap[otherId] = (coUsedWithMap[otherId] || 0) + 1;
-        }
+    // Track seen footageIds within the same episode to match .find() semantics
+    const seenInEp = new Set<string>();
+
+    for (let j = 0; j < rankings.length; j++) {
+      const slot = rankings[j];
+      const fid = slot.footageId;
+      if (!fid || seenInEp.has(fid)) continue;
+      seenInEp.add(fid);
+
+      const otherFootageIds = validFootageIds.filter((otherId) => otherId !== fid);
+
+      let historyList = usageHistoryByFootageId.get(fid);
+      if (!historyList) {
+        historyList = [];
+        usageHistoryByFootageId.set(fid, historyList);
+      }
+
+      historyList.push({
+        episodeId: ep.id,
+        episodeTitle: ep.title,
+        rank: slot.rank,
+        publishDate: ep.publishDate,
+        publishSlot: ep.publishSlot,
+        workflowStage: ep.workflowStage,
+        coUsedFootageIds: otherFootageIds,
+        daysAgo,
+      });
+
+      let coMap = coUsedByFootageId.get(fid);
+      if (!coMap) {
+        coMap = {};
+        coUsedByFootageId.set(fid, coMap);
+      }
+      for (let k = 0; k < otherFootageIds.length; k++) {
+        const otherId = otherFootageIds[k];
+        coMap[otherId] = (coMap[otherId] || 0) + 1;
       }
     }
+  }
+
+  // O(F) pass over footageList using O(1) map lookups
+  return footageList.map((ft) => {
+    const usageHistory = usageHistoryByFootageId.get(ft.id) || [];
+    const coUsedWithMap = coUsedByFootageId.get(ft.id) || {};
 
     const totalUsageCount = usageHistory.length;
-    const usageLast30Days = usageHistory.filter((u) => u.daysAgo <= 30).length;
-    const usageLast90Days = usageHistory.filter((u) => u.daysAgo <= 90).length;
-    const lastUsedDate = usageHistory.length > 0 ? usageHistory[0].publishDate : null;
+    let usageLast30Days = 0;
+    let usageLast90Days = 0;
+    for (let i = 0; i < totalUsageCount; i++) {
+      const d = usageHistory[i].daysAgo;
+      if (d <= 30) usageLast30Days++;
+      if (d <= 90) usageLast90Days++;
+    }
+
+    const lastUsedDate = totalUsageCount > 0 ? usageHistory[0].publishDate : null;
     const daysSinceLastUsed =
-      usageHistory.length > 0 ? usageHistory[0].daysAgo : null;
+      totalUsageCount > 0 ? usageHistory[0].daysAgo : null;
 
     const daysSinceCreated = Math.max(1, calculateDaysDiff(ft.createdAt, todayStr));
     const averageDaysBetweenUses =

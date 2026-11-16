@@ -1,5 +1,19 @@
 import { Episode } from '../types/episode.types';
 
+/**
+ * Shared high-performance Intl.Collator singletons for 10,000+ row sorting
+ * (5-10x faster than calling String.prototype.localeCompare inside sort loops)
+ */
+export const THAI_COLLATOR = new Intl.Collator('th', {
+  sensitivity: 'base',
+  numeric: true,
+});
+
+export const NUMERIC_ID_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+});
+
 export type EpisodeStandardIssue =
   | 'MISSING_TITLE'
   | 'NON_5_RANK'
@@ -14,6 +28,20 @@ export interface EpisodeValidationResult {
   hasIncompleteSlots: boolean;
   suggestedTitle: string;
   suggestedSeriesTitle: string;
+}
+
+const validationCache = new WeakMap<
+  Episode,
+  { sig: string; result: EpisodeValidationResult }
+>();
+
+function getEpisodeValidationSignature(ep: Episode): string {
+  const r = ep.rankings || [];
+  let slotMask = '';
+  for (let i = 0; i < r.length; i++) {
+    slotMask += r[i].footageId ? '1' : '0';
+  }
+  return `${ep.id}|${ep.title || ''}|${ep.seriesTitle || ''}|${ep.categoryEpisodeNo || 0}|${slotMask}`;
 }
 
 /**
@@ -105,6 +133,12 @@ export function normalizeFiveRankPrefix(rawTitle: string): string {
  * 3. Must have all 5 ranking slots filled with a valid footage ID
  */
 export function validateEpisodeStandard(ep: Episode): EpisodeValidationResult {
+  const sig = getEpisodeValidationSignature(ep);
+  const cached = validationCache.get(ep);
+  if (cached && cached.sig === sig) {
+    return cached.result;
+  }
+
   const issues: EpisodeStandardIssue[] = [];
 
   const rawTitle = (ep.title || '').trim();
@@ -126,8 +160,10 @@ export function validateEpisodeStandard(ep: Episode): EpisodeValidationResult {
 
   // 3. Check Slot Completeness (All 5 ranks must have footageId)
   const rankings = ep.rankings || [];
-  const filledSlots = rankings.filter((slot) => Boolean(slot.footageId));
-  const filledSlotCount = filledSlots.length;
+  let filledSlotCount = 0;
+  for (let i = 0; i < rankings.length; i++) {
+    if (rankings[i].footageId) filledSlotCount++;
+  }
 
   if (filledSlotCount < 5) {
     issues.push('INCOMPLETE_SLOTS');
@@ -148,7 +184,7 @@ export function validateEpisodeStandard(ep: Episode): EpisodeValidationResult {
     rawSeriesTitle
   );
 
-  return {
+  const result: EpisodeValidationResult = {
     isStandard: issues.length === 0,
     issues,
     filledSlotCount,
@@ -158,6 +194,9 @@ export function validateEpisodeStandard(ep: Episode): EpisodeValidationResult {
     suggestedTitle,
     suggestedSeriesTitle,
   };
+
+  validationCache.set(ep, { sig, result });
+  return result;
 }
 
 /**
@@ -221,7 +260,11 @@ export function auditEpisodesQuality(
   };
 }
 
-export type EpisodeCompletenessFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE';
+export type EpisodeCompletenessFilter =
+  | 'ALL'
+  | 'COMPLETE'
+  | 'INCOMPLETE'
+  | 'INCOMPLETE_FOOTAGE';
 
 export interface EpisodeCompletenessResult {
   isComplete: boolean;
@@ -256,6 +299,11 @@ export function isPlaceholderMasterDriveLink(url?: string | null): boolean {
   return PLACEHOLDER_MASTER_DRIVE_PATTERN.test(trimmed);
 }
 
+const completenessCache = new WeakMap<
+  Episode,
+  { sig: string; result: EpisodeCompletenessResult }
+>();
+
 /**
  * Evaluates full readiness of a Master Episode against all 3 production criteria:
  * 1. All 5 ranking slots are filled with valid footage
@@ -265,8 +313,14 @@ export function isPlaceholderMasterDriveLink(url?: string | null): boolean {
 export function evaluateEpisodeCompleteness(
   ep: Episode
 ): EpisodeCompletenessResult {
+  const driveUrl = ep.masterVideoInfo?.masterDriveUrl || '';
+  const sig = `${getEpisodeValidationSignature(ep)}|${driveUrl}`;
+  const cached = completenessCache.get(ep);
+  if (cached && cached.sig === sig) {
+    return cached.result;
+  }
+
   const std = validateEpisodeStandard(ep);
-  const driveUrl = ep.masterVideoInfo?.masterDriveUrl;
   const hasRealMasterDrive = hasRealMasterDriveLink(driveUrl);
   const isPlaceholderDrive = isPlaceholderMasterDriveLink(driveUrl);
   const hasStandardTitle = !std.hasMissingTitle && !std.hasNon5Rank;
@@ -312,7 +366,7 @@ export function evaluateEpisodeCompleteness(
     ? 'พร้อมสมบูรณ์: ครบ 5 ฟุต, ชื่อมาตรฐาน และมีลิงก์ Master Drive จริง'
     : `จุดที่ยังไม่ครบ: ${missingItems.join(' · ')}`;
 
-  return {
+  const result: EpisodeCompletenessResult = {
     isComplete,
     hasRealMasterDrive,
     hasStandardTitle,
@@ -323,5 +377,8 @@ export function evaluateEpisodeCompleteness(
     detailText,
     isPlaceholderDrive,
   };
+
+  completenessCache.set(ep, { sig, result });
+  return result;
 }
 

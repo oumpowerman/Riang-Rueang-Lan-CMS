@@ -418,13 +418,28 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                             {row.title}
                           </span>
                           {isMatched ? (
-                            <span
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]"
-                              title={`ไฟล์ในคลัง: ${row.matchedFootage?.standardFileName}`}
-                            >
-                              <Check className="w-2.5 h-2.5 text-[#3B6845]" />
-                              <span>{row.matchedFootage?.id}</span>
-                            </span>
+                            row.isFuzzyMatched ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-[#FEF6E8] text-[#8A4D1F] border border-[#EAD5AE]"
+                                title={`จับคู่แบบใกล้เคียง (${row.matchSimilarityPercent}%): ในคลังชื่อ "${row.matchedFootage?.title}"`}
+                              >
+                                <span>≈ {row.matchedFootage?.id}</span>
+                                <span className="px-1 rounded bg-white/80 text-[10px] text-[#734B17]">
+                                  {row.matchSimilarityPercent}%
+                                </span>
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF]"
+                                title={`ตรงเป๊ะ 100% — ไฟล์ในคลัง: ${row.matchedFootage?.standardFileName}`}
+                              >
+                                <Check className="w-2.5 h-2.5 text-[#3B6845]" />
+                                <span>{row.matchedFootage?.id}</span>
+                                <span className="text-[10px] opacity-80 ml-0.5">
+                                  100%
+                                </span>
+                              </span>
+                            )
                           ) : autoCreateMissingFootage ? (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF]">
                               <Plus className="w-2.5 h-2.5" />
@@ -443,6 +458,11 @@ export const SheetFootageRowsTable: React.FC<SheetFootageRowsTableProps> = ({
                             </span>
                           )}
                         </div>
+                        {row.isFuzzyMatched && row.matchedFootage && (
+                          <div className="text-[10px] text-[#8A4D1F] mt-0.5 truncate" title={row.matchedFootage.title}>
+                            ตรงกับในคลัง: <strong>"{row.matchedFootage.title}"</strong> ({row.matchSimilarityPercent}%)
+                          </div>
+                        )}
                         {row.occurrenceCountInSheet > 1 && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#734B17] mt-0.5">
                             <RefreshCw className="w-2.5 h-2.5" />

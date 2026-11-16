@@ -7,8 +7,10 @@ import {
   isStagingGroupId,
   isStagingTagId,
 } from '../../../services/seedData';
-import { CooldownStatus, IngestionFlow } from '../../../types/footage.types';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { ComputedFootage, CooldownStatus, IngestionFlow } from '../../../types/footage.types';
 import { scanDuplicateFootageClusters } from '../../../utils/duplicateClusterScanner';
+import { NUMERIC_ID_COLLATOR } from '../../../utils/episodeValidator';
 import { hasRealDriveLink } from '../../../utils/fileNameGenerator';
 import {
   FootageActionFilter,
@@ -22,6 +24,12 @@ import {
   VaultMetricsSummary,
   VaultViewMode,
 } from './vault.types';
+
+import {
+  getFootageSmartSearchIndex,
+  matchesSmartSearchTokens,
+  parseSmartSearchQuery,
+} from '../../../utils/smartSearchEngine';
 
 export type TagFilterMatchMode = 'AND' | 'OR';
 
@@ -59,6 +67,8 @@ export const useFootageVault = () => {
     launchEpisodeBuilderForCategory,
     launchEpisodeBuilderWithCustomClips,
     settings,
+    serverCounts,
+    archiveSummaryStats,
   } = useCMS();
 
   const duplicateScan = useMemo(
@@ -68,6 +78,7 @@ export const useFootageVault = () => {
 
   // Filter, Sort & View States
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 200);
   const [statusFilter, setStatusFilter] = useState<CooldownStatus | 'ALL'>('ALL');
   const [flowFilter, setFlowFilter] = useState<IngestionFlow | 'ALL'>('ALL');
   const [actionFilter, setActionFilter] = useState<FootageActionFilter>('ALL');
@@ -92,7 +103,7 @@ export const useFootageVault = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [
-    searchQuery,
+    debouncedSearchQuery,
     statusFilter,
     flowFilter,
     actionFilter,
@@ -110,40 +121,88 @@ export const useFootageVault = () => {
     return mainTag.groupType === groupShort || mainTag.groupType === groupId;
   };
 
-  // Overview of all tags for legacy/staging studio compatibility
+  // Pre-bucket non-staging footages by tagId in a single O(F) pass
+  const nonStagingFootagesByTagId = useMemo(() => {
+    const map = new Map<string, ComputedFootage[]>();
+    for (let i = 0; i < computedFootage.length; i++) {
+      const ft = computedFootage[i];
+      if (isFootageInStaging(ft.tags)) continue;
+      for (let j = 0; j < ft.tags.length; j++) {
+        const tid = ft.tags[j];
+        let bucket = map.get(tid);
+        if (!bucket) {
+          bucket = [];
+          map.set(tid, bucket);
+        }
+        bucket.push(ft);
+      }
+    }
+    return map;
+  }, [computedFootage]);
+
+  // Overview of all tags for legacy/staging studio compatibility (O(T) using pre-bucketed map)
   const mainCategoriesOverview = useMemo<MainCategoryOverviewItem[]>(() => {
     const mainTags = tags.filter((t) => !isStagingTagId(t.id) || t.id === STAGING_TAG_ID);
+    const childrenByParentId = new Map<string, typeof tags>();
+    for (let i = 0; i < tags.length; i++) {
+      const t = tags[i];
+      if (t.parentId) {
+        let list = childrenByParentId.get(t.parentId);
+        if (!list) {
+          list = [];
+          childrenByParentId.set(t.parentId, list);
+        }
+        list.push(t);
+      }
+    }
 
     return mainTags
       .map((mainTag) => {
         const isStaging = isStagingTagId(mainTag.id);
-        const subTags = tags.filter((t) => t.parentId === mainTag.id);
+        const subTags = childrenByParentId.get(mainTag.id) || [];
         const familyIds = new Set([mainTag.id, ...subTags.map((s) => s.id)]);
 
-        const footagesInFamily = isStaging
-          ? computedFootage.filter((ft) => isFootageInStaging(ft.tags))
-          : computedFootage.filter(
-              (ft) =>
-                !isFootageInStaging(ft.tags) &&
-                ft.tags.some((tid) => familyIds.has(tid))
-            );
-        const usableInFamily = footagesInFamily.filter(
-          (ft) =>
-            ft.cooldownStatus === 'NEW_UNTOUCHED' ||
-            ft.cooldownStatus === 'READY_FRESH'
-        );
-        const newInFamily = footagesInFamily.filter(
-          (ft) => ft.cooldownStatus === 'NEW_UNTOUCHED'
-        );
+        let footagesInFamily: ComputedFootage[];
+        if (isStaging) {
+          footagesInFamily = untaggedFootages;
+        } else if (subTags.length === 0) {
+          footagesInFamily = nonStagingFootagesByTagId.get(mainTag.id) || [];
+        } else {
+          const seen = new Set<string>();
+          footagesInFamily = [];
+          familyIds.forEach((fid) => {
+            const list = nonStagingFootagesByTagId.get(fid);
+            if (!list) return;
+            for (let i = 0; i < list.length; i++) {
+              const ft = list[i];
+              if (!seen.has(ft.id)) {
+                seen.add(ft.id);
+                footagesInFamily.push(ft);
+              }
+            }
+          });
+        }
+
+        let usableCount = 0;
+        let newCount = 0;
+        for (let i = 0; i < footagesInFamily.length; i++) {
+          const st = footagesInFamily[i].cooldownStatus;
+          if (st === 'NEW_UNTOUCHED') {
+            newCount++;
+            usableCount++;
+          } else if (st === 'READY_FRESH') {
+            usableCount++;
+          }
+        }
 
         return {
           mainTag,
           subTags,
           familyIds,
           totalCount: footagesInFamily.length,
-          usableCount: usableInFamily.length,
-          newCount: newInFamily.length,
-          producibleEpisodes: isStaging ? 0 : Math.floor(usableInFamily.length / 5),
+          usableCount,
+          newCount,
+          producibleEpisodes: isStaging ? 0 : Math.floor(usableCount / 5),
         };
       })
       .sort((a, b) => {
@@ -151,7 +210,7 @@ export const useFootageVault = () => {
         if (isStagingTagId(b.mainTag.id)) return 1;
         return b.usableCount - a.usableCount;
       });
-  }, [tags, computedFootage]);
+  }, [tags, untaggedFootages, nonStagingFootagesByTagId]);
 
   const categoryGroupsOverview = useMemo<CategoryGroupOverviewItem[]>(() => {
     return categoryGroups.map((group) => {
@@ -165,21 +224,36 @@ export const useFootageVault = () => {
         mc.familyIds.forEach((id) => groupFamilyTagIds.add(id));
       });
 
-      const footagesInGroup = isStagingGrp
-        ? computedFootage.filter((ft) => isFootageInStaging(ft.tags))
-        : computedFootage.filter(
-            (ft) =>
-              !isFootageInStaging(ft.tags) &&
-              ft.tags.some((tid) => groupFamilyTagIds.has(tid))
-          );
-      const usableInGroup = footagesInGroup.filter(
-        (ft) =>
-          ft.cooldownStatus === 'NEW_UNTOUCHED' ||
-          ft.cooldownStatus === 'READY_FRESH'
-      );
-      const newInGroup = footagesInGroup.filter(
-        (ft) => ft.cooldownStatus === 'NEW_UNTOUCHED'
-      );
+      let footagesInGroup: ComputedFootage[];
+      if (isStagingGrp) {
+        footagesInGroup = untaggedFootages;
+      } else {
+        const seen = new Set<string>();
+        footagesInGroup = [];
+        groupFamilyTagIds.forEach((tid) => {
+          const list = nonStagingFootagesByTagId.get(tid);
+          if (!list) return;
+          for (let i = 0; i < list.length; i++) {
+            const ft = list[i];
+            if (!seen.has(ft.id)) {
+              seen.add(ft.id);
+              footagesInGroup.push(ft);
+            }
+          }
+        });
+      }
+
+      let usableCount = 0;
+      let newCount = 0;
+      for (let i = 0; i < footagesInGroup.length; i++) {
+        const st = footagesInGroup[i].cooldownStatus;
+        if (st === 'NEW_UNTOUCHED') {
+          newCount++;
+          usableCount++;
+        } else if (st === 'READY_FRESH') {
+          usableCount++;
+        }
+      }
 
       return {
         group,
@@ -187,11 +261,17 @@ export const useFootageVault = () => {
         groupFamilyTagIds,
         mainCatCount: mainCatsInGroup.length,
         totalCount: footagesInGroup.length,
-        usableCount: usableInGroup.length,
-        newCount: newInGroup.length,
+        usableCount,
+        newCount,
       };
     });
-  }, [categoryGroups, mainCategoriesOverview, computedFootage, tagMap]);
+  }, [
+    categoryGroups,
+    mainCategoriesOverview,
+    untaggedFootages,
+    nonStagingFootagesByTagId,
+    tagMap,
+  ]);
 
   const activeMainCategory = useMemo<MainCategoryOverviewItem | null>(() => {
     if (selectedTagFilter.length === 0) return null;
@@ -260,29 +340,64 @@ export const useFootageVault = () => {
     activeGroupOverview,
   ]);
 
-  // Executive KPI Metrics (Dynamically reflects the selected Tag Combination)
+  // Executive KPI Metrics (Dynamically reflects the selected Tag Combination; merges serverCounts when hydrating)
   const vaultMetrics = useMemo<VaultMetricsSummary>(() => {
-    const total = categoryScopedFootage.length;
-    const newUntouched = categoryScopedFootage.filter(
-      (f) => f.cooldownStatus === 'NEW_UNTOUCHED'
-    ).length;
-    const readyFresh = categoryScopedFootage.filter(
-      (f) => f.cooldownStatus === 'READY_FRESH'
-    ).length;
-    const inCooldown = categoryScopedFootage.filter(
-      (f) =>
-        f.cooldownStatus === 'RECENT_COOLDOWN' ||
-        f.cooldownStatus === 'HIGH_VELOCITY_WARNING'
-    ).length;
+    let newUntouched = 0;
+    let readyFresh = 0;
+    let inCooldown = 0;
+    for (let i = 0; i < categoryScopedFootage.length; i++) {
+      const st = categoryScopedFootage[i].cooldownStatus;
+      if (st === 'NEW_UNTOUCHED') newUntouched++;
+      else if (st === 'READY_FRESH') readyFresh++;
+      else inCooldown++;
+    }
+
+    const isUnscopedAll =
+      selectedTagFilter.length === 0 && !selectedGroupId;
+    const isHydratingFootage =
+      isUnscopedAll &&
+      Boolean(serverCounts && serverCounts.totalFootage > computedFootage.length);
+
+    if (isHydratingFootage) {
+      const total = serverCounts!.totalFootage;
+      if (
+        archiveSummaryStats &&
+        archiveSummaryStats.totalFootage >= serverCounts!.totalFootage
+      ) {
+        return {
+          total,
+          usable:
+            archiveSummaryStats.newFootageCount +
+            archiveSummaryStats.readyFootageCount,
+          newUntouched: archiveSummaryStats.newFootageCount,
+          readyFresh: archiveSummaryStats.readyFootageCount,
+          inCooldown: archiveSummaryStats.coolingFootageCount,
+        };
+      }
+      return {
+        total,
+        usable: newUntouched + readyFresh,
+        newUntouched,
+        readyFresh,
+        inCooldown,
+      };
+    }
 
     return {
-      total,
+      total: categoryScopedFootage.length,
       usable: newUntouched + readyFresh,
       newUntouched,
       readyFresh,
       inCooldown,
     };
-  }, [categoryScopedFootage]);
+  }, [
+    categoryScopedFootage,
+    selectedTagFilter.length,
+    selectedGroupId,
+    serverCounts,
+    computedFootage.length,
+    archiveSummaryStats,
+  ]);
 
   // Human-readable label describing what the 4 KPI cards at the top currently represent
   const activeScopeDescription = useMemo<ActiveScopeDescription>(() => {
@@ -465,7 +580,15 @@ export const useFootageVault = () => {
     [categoryMatrix]
   );
 
+  // Parse debounced search query into normalized tokens ONCE per search change
+  const queryTokens = useMemo(
+    () => parseSmartSearchQuery(debouncedSearchQuery),
+    [debouncedSearchQuery]
+  );
+
   const filteredAndSortedFootage = useMemo(() => {
+    const hasQuery = queryTokens.length > 0;
+
     const filtered = categoryScopedFootage.filter((ft) => {
       if (statusFilter !== 'ALL') {
         if (statusFilter === 'RECENT_COOLDOWN') {
@@ -509,14 +632,9 @@ export const useFootageVault = () => {
         if (!isUsable || !belongsToMixCat) return false;
       }
 
-      if (searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase();
-        const inId = ft.id.toLowerCase().includes(q);
-        const inTitle = ft.title.toLowerCase().includes(q);
-        const inFile = ft.standardFileName.toLowerCase().includes(q);
-        const inNotes = ft.mascotNotes.toLowerCase().includes(q);
-        const inSource = (ft.sourceId || '').toLowerCase().includes(q);
-        if (!inId && !inTitle && !inFile && !inNotes && !inSource) return false;
+      if (hasQuery) {
+        const compactIndex = getFootageSmartSearchIndex(ft, tagMap);
+        if (!matchesSmartSearchTokens(compactIndex, queryTokens)) return false;
       }
       return true;
     });
@@ -540,17 +658,20 @@ export const useFootageVault = () => {
         return a.totalUsageCount - b.totalUsageCount;
       }
       if (sortBy === 'NEWEST_CREATED') {
-        if (b.createdAt !== a.createdAt) return b.createdAt.localeCompare(a.createdAt);
-        return b.id.localeCompare(a.id);
+        if (b.createdAt !== a.createdAt) {
+          return b.createdAt > a.createdAt ? 1 : -1;
+        }
+        return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
       }
-      return a.id.localeCompare(b.id);
+      return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
     });
   }, [
     categoryScopedFootage,
     statusFilter,
     flowFilter,
     actionFilter,
-    searchQuery,
+    queryTokens,
+    tagMap,
     sortBy,
     ready5CategoryIds,
     allNew5CategoryIds,

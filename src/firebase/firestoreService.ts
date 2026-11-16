@@ -5,6 +5,9 @@ import {
   getDoc,
   deleteDoc,
   getDocs,
+  getCountFromServer,
+  query,
+  limit,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -34,6 +37,30 @@ export interface BatchChunkProgress {
   totalChunks: number;
   completedOps: number;
   totalOps: number;
+}
+
+export interface ServerCollectionCounts {
+  totalEpisodes: number;
+  totalFootage: number;
+  totalSources: number;
+  fetchedAt: string;
+}
+
+export interface ArchiveSummaryStats {
+  totalEpisodes: number;
+  completeEpisodesCount: number;
+  incompleteEpisodesCount: number;
+  incompleteFootageEpisodesCount: number;
+  distinctSeriesCount: number;
+  totalFootage: number;
+  usedFootageCount: number;
+  readyFootageCount: number;
+  newFootageCount: number;
+  coolingFootageCount: number;
+  untaggedFootageCount: number;
+  missingDriveCount: number;
+  totalSources: number;
+  updatedAt: string;
 }
 
 interface BatchWriteOp {
@@ -238,6 +265,56 @@ export const firestoreService = {
     );
   },
 
+  /**
+   * Two-Stage Progressive Loader for Footages (10,000+ row support):
+   * Stage 1: Fetches an initial window (first 300 docs) immediately if local cache is empty
+   *          so the first page paints without waiting for all 10,000 docs.
+   * Stage 2: Streams the complete collection + live delta updates in the background.
+   */
+  subscribeFootagesProgressive(
+    hasLocalCache: () => boolean,
+    onFirstWindow: (footages: Footage[]) => void,
+    onFullSnapshot: (footages: Footage[]) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    let fullSnapshotReceived = false;
+    let cancelled = false;
+    const colRef = collection(db, 'footages');
+
+    if (!hasLocalCache()) {
+      const firstWindowQuery = query(colRef, limit(300));
+      getDocs(firstWindowQuery)
+        .then((snap) => {
+          if (cancelled || fullSnapshotReceived || snap.empty) return;
+          const windowList: Footage[] = [];
+          snap.forEach((d) => windowList.push(d.data() as Footage));
+          onFirstWindow(windowList);
+        })
+        .catch(() => {
+          // Fallback handled by onSnapshot below
+        });
+    }
+
+    const unsub = onSnapshot(
+      colRef,
+      (snapshot) => {
+        if (cancelled) return;
+        fullSnapshotReceived = true;
+        const list: Footage[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data() as Footage);
+        });
+        onFullSnapshot(list);
+      },
+      onError
+    );
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  },
+
   subscribeEpisodes(onUpdate: (episodes: Episode[]) => void, onError?: (err: Error) => void) {
     const colRef = collection(db, 'episodes');
     return onSnapshot(
@@ -251,6 +328,112 @@ export const firestoreService = {
       },
       onError
     );
+  },
+
+  /**
+   * Two-Stage Progressive Loader for Episodes (10,000+ row support):
+   * Stage 1: Fetches an initial window (first 300 docs) immediately if local cache is empty.
+   * Stage 2: Streams the complete collection + live delta updates in the background.
+   */
+  subscribeEpisodesProgressive(
+    hasLocalCache: () => boolean,
+    onFirstWindow: (episodes: Episode[]) => void,
+    onFullSnapshot: (episodes: Episode[]) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    let fullSnapshotReceived = false;
+    let cancelled = false;
+    const colRef = collection(db, 'episodes');
+
+    if (!hasLocalCache()) {
+      const firstWindowQuery = query(colRef, limit(300));
+      getDocs(firstWindowQuery)
+        .then((snap) => {
+          if (cancelled || fullSnapshotReceived || snap.empty) return;
+          const windowList: Episode[] = [];
+          snap.forEach((d) => windowList.push(d.data() as Episode));
+          onFirstWindow(windowList);
+        })
+        .catch(() => {
+          // Fallback handled by onSnapshot below
+        });
+    }
+
+    const unsub = onSnapshot(
+      colRef,
+      (snapshot) => {
+        if (cancelled) return;
+        fullSnapshotReceived = true;
+        const list: Episode[] = [];
+        snapshot.forEach((d) => {
+          list.push(d.data() as Episode);
+        });
+        onFullSnapshot(list);
+      },
+      onError
+    );
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  },
+
+  /**
+   * Fast Server-Side Row Counts using Firestore getCountFromServer()
+   * Returns exact collection counts in milliseconds without downloading 10,000 documents.
+   */
+  async fetchServerCollectionCounts(): Promise<ServerCollectionCounts | null> {
+    try {
+      const [epCountSnap, ftCountSnap, srcCountSnap] = await Promise.all([
+        getCountFromServer(collection(db, 'episodes')),
+        getCountFromServer(collection(db, 'footages')),
+        getCountFromServer(collection(db, 'sources')),
+      ]);
+      return {
+        totalEpisodes: epCountSnap.data().count,
+        totalFootage: ftCountSnap.data().count,
+        totalSources: srcCountSnap.data().count,
+        fetchedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      console.warn('fetchServerCollectionCounts warning:', err);
+      return null;
+    }
+  },
+
+  subscribeArchiveSummaryStats(
+    onUpdate: (stats: ArchiveSummaryStats | null) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const docRef = doc(db, 'system_settings', 'archive_summary_stats');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) {
+          onUpdate(null);
+        } else {
+          onUpdate(snap.data() as ArchiveSummaryStats);
+        }
+      },
+      onError
+    );
+  },
+
+  async saveArchiveSummaryStats(stats: ArchiveSummaryStats): Promise<void> {
+    try {
+      const docRef = doc(db, 'system_settings', 'archive_summary_stats');
+      await setDoc(
+        docRef,
+        sanitizeForFirestore({
+          ...stats,
+          updatedAt: new Date().toISOString(),
+        }),
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn('Failed to save archive_summary_stats:', err);
+    }
   },
 
   subscribeSettings(

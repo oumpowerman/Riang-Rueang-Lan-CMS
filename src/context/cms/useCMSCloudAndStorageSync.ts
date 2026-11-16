@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { firestoreService } from '../../firebase/firestoreService';
+import {
+  ArchiveSummaryStats,
+  firestoreService,
+  ServerCollectionCounts,
+} from '../../firebase/firestoreService';
 import { cmsRepository } from '../../services/cmsRepository';
+import {
+  idbStorageService,
+  safeLocalStorageSet,
+} from '../../services/idbStorageService';
 import { INITIAL_SETTINGS } from '../../services/seedData';
 import { Episode } from '../../types/episode.types';
 import { Footage } from '../../types/footage.types';
@@ -22,6 +30,11 @@ export function useCMSCloudAndStorageSync(
   const [episodes, setEpisodes] = useState<Episode[]>(() => cmsRepository.getEpisodes());
   const [settings, setSettings] = useState<SystemSettings>(() => cmsRepository.getSettings());
 
+  // Server-Side Counts & Central Summary Document (for instant 10,000+ row totals)
+  const [serverCounts, setServerCounts] = useState<ServerCollectionCounts | null>(null);
+  const [archiveSummaryStats, setArchiveSummaryStats] =
+    useState<ArchiveSummaryStats | null>(null);
+
   // Cloud Realtime State
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
@@ -29,6 +42,17 @@ export function useCMSCloudAndStorageSync(
   const [isClearingClips, setIsClearingClips] = useState(false);
 
   const isWipingCloudRef = useRef<boolean>(false);
+
+  // Track IndexedDB hydration and authoritative Cloud snapshot state
+  const isIdbHydratedRef = useRef<boolean>(false);
+  const hasFullCloudSourcesRef = useRef<boolean>(false);
+  const hasFullCloudFootageRef = useRef<boolean>(false);
+  const hasFullCloudEpisodesRef = useRef<boolean>(false);
+
+  const episodesCountRef = useRef<number>(episodes.length);
+  episodesCountRef.current = episodes.length;
+  const footageCountRef = useRef<number>(footage.length);
+  footageCountRef.current = footage.length;
 
   // Buffer latest Firestore snapshots received while a multi-chunk batch write is in progress
   // so partial 400-item chunks never overwrite the UI mid-upload, and flush the final authoritative
@@ -39,11 +63,55 @@ export function useCMSCloudAndStorageSync(
   const pendingFootageRef = useRef<Footage[] | null>(null);
   const pendingEpisodesRef = useRef<Episode[] | null>(null);
 
-  // Authoritative Firestore Realtime Subscriptions
-  // Firestore is the Single Source of Truth across all devices/tabs.
-  // When any item is added, updated, or deleted on Device A, Device B immediately
-  // receives the exact Firestore collection state and overwrites its localStorage cache.
+  // 1. Zero-Wait Local Hydration from IndexedDB on startup
   useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      cmsRepository.loadSourcesAsync(),
+      cmsRepository.loadFootageAsync(),
+      cmsRepository.loadEpisodesAsync(),
+      idbStorageService.getMeta<ArchiveSummaryStats>('archive_summary_stats'),
+    ])
+      .then(([idbSources, idbFootage, idbEpisodes, cachedSummary]) => {
+        if (cancelled) return;
+        isIdbHydratedRef.current = true;
+
+        if (!hasFullCloudSourcesRef.current && idbSources.length > 0) {
+          setSources(idbSources);
+        }
+        if (!hasFullCloudFootageRef.current && idbFootage.length > 0) {
+          setFootage(idbFootage);
+        }
+        if (!hasFullCloudEpisodesRef.current && idbEpisodes.length > 0) {
+          setEpisodes(idbEpisodes);
+        }
+        if (cachedSummary) {
+          setArchiveSummaryStats((prev) => prev || cachedSummary);
+        }
+      })
+      .catch((err) => {
+        isIdbHydratedRef.current = true;
+        console.warn('IndexedDB initial hydration warning:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 2. Authoritative Firestore Realtime Subscriptions + Progressive First-Window Loader
+  useEffect(() => {
+    // Fetch instant server collection counts via getCountFromServer()
+    firestoreService
+      .fetchServerCollectionCounts()
+      .then((counts) => {
+        if (counts) {
+          setServerCounts(counts);
+        }
+      })
+      .catch(() => {});
+
     const flushPendingSnapshots = () => {
       if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
         return;
@@ -66,18 +134,21 @@ export function useCMSCloudAndStorageSync(
       if (pendingSourcesRef.current !== null) {
         const cloudSources = pendingSourcesRef.current;
         pendingSourcesRef.current = null;
+        hasFullCloudSourcesRef.current = true;
         setSources(cloudSources);
         cmsRepository.saveSources(cloudSources);
       }
       if (pendingFootageRef.current !== null) {
         const cloudFootages = pendingFootageRef.current;
         pendingFootageRef.current = null;
+        hasFullCloudFootageRef.current = true;
         setFootage(cloudFootages);
         cmsRepository.saveFootage(cloudFootages);
       }
       if (pendingEpisodesRef.current !== null) {
         const cloudEpisodes = pendingEpisodesRef.current;
         pendingEpisodesRef.current = null;
+        hasFullCloudEpisodesRef.current = true;
         setEpisodes(cloudEpisodes);
         cmsRepository.saveEpisodes(cloudEpisodes);
       }
@@ -86,6 +157,16 @@ export function useCMSCloudAndStorageSync(
     const unsubBatchComplete = firestoreService.onBatchWriteComplete(() => {
       flushPendingSnapshots();
     });
+
+    const unsubSummaryStats = firestoreService.subscribeArchiveSummaryStats(
+      (cloudSummary) => {
+        if (cloudSummary) {
+          setArchiveSummaryStats(cloudSummary);
+          void idbStorageService.setMeta('archive_summary_stats', cloudSummary);
+        }
+      },
+      (err) => console.warn('Firestore archive_summary_stats warning:', err)
+    );
 
     const unsubCategoryGroups = firestoreService.subscribeCategoryGroups(
       (cloudGroups) => {
@@ -130,13 +211,25 @@ export function useCMSCloudAndStorageSync(
           return;
         }
         pendingSourcesRef.current = null;
+        hasFullCloudSourcesRef.current = true;
         setSources(cloudSources);
         cmsRepository.saveSources(cloudSources);
       },
       (err) => console.warn('Firestore sources subscription warning:', err)
     );
 
-    const unsubFootages = firestoreService.subscribeFootages(
+    const unsubFootages = firestoreService.subscribeFootagesProgressive(
+      () => footageCountRef.current > 0,
+      (firstWindowFootages) => {
+        if (
+          !hasFullCloudFootageRef.current &&
+          footageCountRef.current === 0 &&
+          firstWindowFootages.length > 0
+        ) {
+          setIsCloudConnected(true);
+          setFootage(firstWindowFootages);
+        }
+      },
       (cloudFootages) => {
         setIsCloudConnected(true);
         setIsCloudSynced(true);
@@ -145,13 +238,25 @@ export function useCMSCloudAndStorageSync(
           return;
         }
         pendingFootageRef.current = null;
+        hasFullCloudFootageRef.current = true;
         setFootage(cloudFootages);
         cmsRepository.saveFootage(cloudFootages);
       },
       (err) => console.warn('Firestore footages subscription warning:', err)
     );
 
-    const unsubEpisodes = firestoreService.subscribeEpisodes(
+    const unsubEpisodes = firestoreService.subscribeEpisodesProgressive(
+      () => episodesCountRef.current > 0,
+      (firstWindowEpisodes) => {
+        if (
+          !hasFullCloudEpisodesRef.current &&
+          episodesCountRef.current === 0 &&
+          firstWindowEpisodes.length > 0
+        ) {
+          setIsCloudConnected(true);
+          setEpisodes(firstWindowEpisodes);
+        }
+      },
       (cloudEpisodes) => {
         setIsCloudConnected(true);
         setIsCloudSynced(true);
@@ -160,6 +265,7 @@ export function useCMSCloudAndStorageSync(
           return;
         }
         pendingEpisodesRef.current = null;
+        hasFullCloudEpisodesRef.current = true;
         setEpisodes(cloudEpisodes);
         cmsRepository.saveEpisodes(cloudEpisodes);
       },
@@ -181,6 +287,7 @@ export function useCMSCloudAndStorageSync(
 
     return () => {
       unsubBatchComplete();
+      unsubSummaryStats();
       unsubCategoryGroups();
       unsubCategories();
       unsubSources();
@@ -218,14 +325,17 @@ export function useCMSCloudAndStorageSync(
   }, [tags]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current && !hasFullCloudSourcesRef.current) return;
     cmsRepository.saveSources(sources);
   }, [sources]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current && !hasFullCloudFootageRef.current) return;
     cmsRepository.saveFootage(footage);
   }, [footage]);
 
   useEffect(() => {
+    if (!isIdbHydratedRef.current && !hasFullCloudEpisodesRef.current) return;
     cmsRepository.saveEpisodes(episodes);
   }, [episodes]);
 
@@ -254,14 +364,10 @@ export function useCMSCloudAndStorageSync(
           ...prev,
           savedDriveFolders: cleanedFolders,
         };
-        try {
-          localStorage.setItem(
-            'rrl_drive_saved_folders_v1',
-            JSON.stringify(cleanedFolders)
-          );
-        } catch {
-          // ignore
-        }
+        safeLocalStorageSet(
+          'rrl_drive_saved_folders_v1',
+          JSON.stringify(cleanedFolders)
+        );
         firestoreService.saveSettings(nextSettings).catch(() => {});
         return nextSettings;
       });
@@ -294,6 +400,11 @@ export function useCMSCloudAndStorageSync(
     setEpisodes,
     settings,
     setSettings,
+    serverCounts,
+    archiveSummaryStats,
+    setArchiveSummaryStats,
+    hasFullCloudEpisodesRef,
+    hasFullCloudFootageRef,
     isCloudConnected,
     isCloudSynced,
     isSeedingToCloud,

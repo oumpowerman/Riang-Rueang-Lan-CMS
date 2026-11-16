@@ -13,6 +13,7 @@ import {
   findMatchedTagsForSeries,
   computeSeriesRelatedFootagePool,
 } from '../../../../utils/seriesExtractor';
+import { THAI_COLLATOR } from '../../../../utils/episodeValidator';
 
 export interface CategoryRankingItem {
   seriesKey: string; // Canonical series key (e.g. "SERIES::คนเมายาสุดฮา")
@@ -70,6 +71,8 @@ export function useMasterArchiveMetrics() {
     tagMap,
     settings,
     updateSettings,
+    serverCounts,
+    archiveSummaryStats,
   } = useCMS();
 
   // Active Master Archive Categories (user-customizable in settings)
@@ -371,13 +374,28 @@ export function useMasterArchiveMetrics() {
       });
     }
 
-    // Sort active series from Most Episodes -> Least Episodes, then Thai alphabetical
+    // Sort active series from Most Episodes -> Least Episodes, then Thai alphabetical via shared THAI_COLLATOR
     activeRows.sort((a, b) => {
       if (b.episodeCount !== a.episodeCount) {
         return b.episodeCount - a.episodeCount;
       }
-      return a.seriesName.localeCompare(b.seriesName, 'th');
+      return THAI_COLLATOR.compare(a.seriesName, b.seriesName);
     });
+
+    // Pre-bucket computedFootage by tagId in O(F) to avoid O(T * F) filtering
+    const footagesByTagId = new Map<string, typeof computedFootage>();
+    for (let i = 0; i < computedFootage.length; i++) {
+      const ft = computedFootage[i];
+      for (let j = 0; j < ft.tags.length; j++) {
+        const tid = ft.tags[j];
+        let list = footagesByTagId.get(tid);
+        if (!list) {
+          list = [];
+          footagesByTagId.set(tid, list);
+        }
+        list.push(ft);
+      }
+    }
 
     // Also build unproduced 0-EP tag series for the optional toggle in Series Shelf
     const activeLowerNames = new Set(
@@ -398,15 +416,20 @@ export function useMasterArchiveMetrics() {
           settings.seriesToArchiveCategoryMap,
           archiveCategories
         );
-        const ftInTag = computedFootage.filter((ft) => ft.tags.includes(t.id));
-        const usableFt = ftInTag.filter(
-          (ft) =>
-            ft.cooldownStatus === 'NEW_UNTOUCHED' ||
-            ft.cooldownStatus === 'READY_FRESH'
-        );
-        const newFt = ftInTag.filter(
-          (ft) => ft.cooldownStatus === 'NEW_UNTOUCHED'
-        );
+        const ftInTag = footagesByTagId.get(t.id) || [];
+        let usableCount = 0;
+        let newCount = 0;
+        let usedCount = 0;
+        for (let i = 0; i < ftInTag.length; i++) {
+          const ft = ftInTag[i];
+          if (ft.totalUsageCount > 0) usedCount++;
+          if (ft.cooldownStatus === 'NEW_UNTOUCHED') {
+            newCount++;
+            usableCount++;
+          } else if (ft.cooldownStatus === 'READY_FRESH') {
+            usableCount++;
+          }
+        }
         return {
           seriesKey: sKey,
           seriesName: t.name,
@@ -426,9 +449,9 @@ export function useMasterArchiveMetrics() {
           incompleteSlotEpisodeCount: 0,
           episodeSharePercent: 0,
           totalFootageInCat: ftInTag.length,
-          usedFootageInCat: ftInTag.filter((f) => f.totalUsageCount > 0).length,
-          untouchedFootageInCat: newFt.length,
-          usableFootageInCat: usableFt.length,
+          usedFootageInCat: usedCount,
+          untouchedFootageInCat: newCount,
+          usableFootageInCat: usableCount,
           utilizationPercent: 0,
         };
       })
@@ -552,11 +575,26 @@ export function useMasterArchiveMetrics() {
     return Math.max(1, ...activeSeriesRanking.map((r) => r.episodeCount));
   }, [activeSeriesRanking]);
 
-  // Real Utilization & Overview Metrics (based strictly on Active Produced Series)
+  // Real Utilization & Overview Metrics (merges serverCounts / archiveSummaryStats while background chunks hydrate)
   const overviewMetrics = useMemo<OverviewMetrics>(() => {
-    const totalEpisodes = episodes.length;
-    const totalDistinctSeries = activeSeriesRanking.length;
-    const totalFootage = computedFootage.length;
+    const isHydratingEpisodes =
+      Boolean(serverCounts && serverCounts.totalEpisodes > episodes.length);
+    const isHydratingFootage =
+      Boolean(serverCounts && serverCounts.totalFootage > computedFootage.length);
+
+    const totalEpisodes = isHydratingEpisodes
+      ? serverCounts!.totalEpisodes
+      : episodes.length || archiveSummaryStats?.totalEpisodes || 0;
+
+    const totalDistinctSeries =
+      activeSeriesRanking.length > 0
+        ? activeSeriesRanking.length
+        : archiveSummaryStats?.distinctSeriesCount || 0;
+
+    const totalFootage = isHydratingFootage
+      ? serverCounts!.totalFootage
+      : computedFootage.length || archiveSummaryStats?.totalFootage || 0;
+
     let usedFootage = 0;
     let untouchedFootage = 0;
     let reusedMoreThanOnce = 0;
@@ -566,6 +604,14 @@ export function useMasterArchiveMetrics() {
       if (f.totalUsageCount > 0) usedFootage++;
       if (f.cooldownStatus === 'NEW_UNTOUCHED') untouchedFootage++;
       if (f.totalUsageCount >= 2) reusedMoreThanOnce++;
+    }
+
+    if (isHydratingFootage && archiveSummaryStats) {
+      usedFootage = Math.max(usedFootage, archiveSummaryStats.usedFootageCount || 0);
+      untouchedFootage = Math.max(
+        untouchedFootage,
+        archiveSummaryStats.newFootageCount || 0
+      );
     }
 
     const utilizationRate =
@@ -588,7 +634,13 @@ export function useMasterArchiveMetrics() {
       topCategory,
       leastCategory,
     };
-  }, [episodes.length, computedFootage, activeSeriesRanking]);
+  }, [
+    episodes.length,
+    computedFootage,
+    activeSeriesRanking,
+    serverCounts,
+    archiveSummaryStats,
+  ]);
 
   const handleBindSeriesToTags = useCallback(
     (seriesKey: string, tagIds: string[] | null) => {

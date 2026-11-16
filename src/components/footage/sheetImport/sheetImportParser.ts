@@ -4,11 +4,20 @@ import { ComputedFootage } from '../../../types/footage.types';
 import { CategoryTag, CategoryTier } from '../../../types/tag.types';
 import { cleanFootageTitle } from '../../../utils/fileNameGenerator';
 import { resolveTagByDataDictionary } from '../../../utils/tagDictionaryRules';
+import {
+  computeThaiStringSimilarityPercent,
+  extractCoreEpisodeSubject,
+  extractExplicitEpNumber,
+  toThaiPhoneticSkeleton,
+} from '../../../utils/thaiFuzzyMatcher';
 import { stripHashtagsFromTitle } from '../../episodes/youtubeDateSync/youtubeDateSyncParser';
 import {
+  DEFAULT_SHEET_COLUMN_SYNC_CONFIG,
+  EpisodeMatchMethod,
   ParsedEpisodeGroup,
   ParsedSheetRow,
   RankingOrderDirection,
+  SheetColumnSyncConfig,
   SheetDetectedColumnFormat,
   SheetSyncSummaryStats,
   TagTierAssignment,
@@ -204,6 +213,7 @@ export function parseSheetClipboardData(params: {
   episodes: Episode[];
   rankingOrder: RankingOrderDirection;
   includeSeriesTagOnFootage: boolean;
+  columnSyncConfig?: SheetColumnSyncConfig;
   customPublishDateByGroupKey?: Record<string, string>;
   customPublishSlotByGroupKey?: Record<string, PublishSlot>;
 }): {
@@ -219,6 +229,7 @@ export function parseSheetClipboardData(params: {
     episodes,
     rankingOrder,
     includeSeriesTagOnFootage,
+    columnSyncConfig = DEFAULT_SHEET_COLUMN_SYNC_CONFIG,
     customPublishDateByGroupKey = {},
     customPublishSlotByGroupKey = {},
   } = params;
@@ -259,18 +270,27 @@ export function parseSheetClipboardData(params: {
     }
   });
 
-  // 2. Pre-index existing Footages by normalized title (prioritizing Staging footages)
+  // 2. Pre-index existing Footages by normalized title AND Thai phonetic skeleton (prioritizing Staging footages)
   const footageByNormalizedTitle = new Map<string, ComputedFootage>();
+  const footageBySkeletonTitle = new Map<string, ComputedFootage>();
   computedFootage.forEach((ft) => {
     const key = normalizeCompareKey(ft.title);
     if (!footageByNormalizedTitle.has(key)) {
       footageByNormalizedTitle.set(key, ft);
+    }
+    const skel = toThaiPhoneticSkeleton(ft.title);
+    if (skel.length >= 3 && !footageBySkeletonTitle.has(skel)) {
+      footageBySkeletonTitle.set(skel, ft);
     }
   });
   computedFootage.forEach((ft) => {
     if (isFootageInStaging(ft.tags)) {
       const key = normalizeCompareKey(ft.title);
       footageByNormalizedTitle.set(key, ft);
+      const skel = toThaiPhoneticSkeleton(ft.title);
+      if (skel.length >= 3) {
+        footageBySkeletonTitle.set(skel, ft);
+      }
     }
   });
 
@@ -478,11 +498,21 @@ export function parseSheetClipboardData(params: {
 
     const normTitle = normalizeCompareKey(title);
 
-    const rawT1Names = extractHashtagsOnly(tier1Raw);
-    const rawT2Names = extractHashtagsOnly(tier2Raw);
-    const rawT3Names = extractHashtagsOnly(tier3Raw);
+    const rawT1Names = columnSyncConfig.syncColE_Tier1Tags
+      ? extractHashtagsOnly(tier1Raw)
+      : [];
+    const rawT2Names = columnSyncConfig.syncColF_Tier2Tags
+      ? extractHashtagsOnly(tier2Raw)
+      : [];
+    const rawT3Names = columnSyncConfig.syncColG_Tier3Tags
+      ? extractHashtagsOnly(tier3Raw)
+      : [];
 
-    if (episodeTitle && includeSeriesTagOnFootage) {
+    if (
+      episodeTitle &&
+      includeSeriesTagOnFootage &&
+      columnSyncConfig.syncColE_Tier1Tags
+    ) {
       const { seriesBaseName } = parseEpisodeTitleAndNumber(episodeTitle);
       if (seriesBaseName && !rawT1Names.includes(seriesBaseName)) {
         rawT1Names.push(seriesBaseName);
@@ -541,16 +571,43 @@ export function parseSheetClipboardData(params: {
     const tagNames = resolvedTags.map((t) => t.name);
 
     let matchedFootage = footageByNormalizedTitle.get(normTitle) || null;
-    if (!matchedFootage && computedFootage.length <= 2000) {
-      matchedFootage =
-        computedFootage.find((ft) => {
-          const ftNorm = normalizeCompareKey(ft.title);
-          const fileNorm = normalizeCompareKey(ft.standardFileName);
-          return (
-            fileNorm.includes(normTitle) ||
-            (ftNorm.length >= 4 && normTitle.includes(ftNorm))
-          );
-        }) || null;
+    let matchSimilarityPercent = matchedFootage ? 100 : 0;
+    let isFuzzyMatched = false;
+
+    // Stage 2: O(1) Thai Phonetic Skeleton lookup (e.g. น้าค่อม vs น้าค้อม, กีต้าร์ vs กีต้า, กระลา vs กะลา)
+    if (!matchedFootage) {
+      const skelKey = toThaiPhoneticSkeleton(title);
+      const skelMatched =
+        skelKey.length >= 3 ? footageBySkeletonTitle.get(skelKey) || null : null;
+      if (skelMatched) {
+        matchedFootage = skelMatched;
+        matchSimilarityPercent = computeThaiStringSimilarityPercent(
+          title,
+          skelMatched.title
+        );
+        isFuzzyMatched = matchSimilarityPercent < 100 || normTitle !== normalizeCompareKey(skelMatched.title);
+      }
+    }
+
+    // Stage 3: Fuzzy Similarity Scan (>= 82% similarity or substring containment)
+    if (!matchedFootage && computedFootage.length <= 5000) {
+      let bestFt: ComputedFootage | null = null;
+      let bestSim = 0;
+
+      for (const ft of computedFootage) {
+        const sim = computeThaiStringSimilarityPercent(title, ft.title);
+        if (sim >= 82 && sim > bestSim) {
+          bestSim = sim;
+          bestFt = ft;
+          if (sim >= 97) break;
+        }
+      }
+
+      if (bestFt) {
+        matchedFootage = bestFt;
+        matchSimilarityPercent = bestSim;
+        isFuzzyMatched = true;
+      }
     }
 
     const isInStaging = matchedFootage
@@ -581,18 +638,20 @@ export function parseSheetClipboardData(params: {
       rawEpisodeColB,
       episodeTitle,
       episodeHashtags,
-      rankTitle,
-      punchlineNote,
+      rankTitle: columnSyncConfig.syncColC_RankTitle ? rankTitle : '',
+      punchlineNote: columnSyncConfig.syncColD_Punchline ? punchlineNote : '',
       tier1TagNames,
       tier2TagNames,
       tier3TagNames,
       resolvedTags,
       tagNames,
       episodeUrl,
-      publishDate,
-      publishTime,
+      publishDate: columnSyncConfig.syncColIJ_DateAndTime ? publishDate : '',
+      publishTime: columnSyncConfig.syncColIJ_DateAndTime ? publishTime : '',
       publishSlot,
       matchedFootage,
+      matchSimilarityPercent,
+      isFuzzyMatched,
       isInStaging,
       occurrenceCountInSheet: titleOccurrenceCounts.get(normTitle) || 1,
       existingTags,
@@ -617,14 +676,22 @@ export function parseSheetClipboardData(params: {
 
   episodeGroupMap.forEach((groupRows, groupKey) => {
     const firstRow = groupRows[0];
-    const episodeTitle = firstRow.episodeTitle;
+    const sheetEpisodeTitle = firstRow.episodeTitle;
     const { seriesBaseName, episodeNo } =
-      parseEpisodeTitleAndNumber(episodeTitle);
+      parseEpisodeTitleAndNumber(sheetEpisodeTitle);
 
     const youtubeUrl =
       groupRows.find((r) => Boolean(r.episodeUrl))?.episodeUrl || '';
 
+    // 4-Stage Smart Episode Matcher with % Similarity:
+    // Stage 1: Exact normalized title match (100%)
     let existingEpisode = episodeByNormalizedTitle.get(groupKey) || null;
+    let epMatchSimilarityPercent = existingEpisode ? 100 : 0;
+    let epMatchMethod: EpisodeMatchMethod = existingEpisode
+      ? 'EXACT_TITLE'
+      : 'NONE';
+
+    // Stage 2: Match by YouTube Shorts URL (100%)
     if (!existingEpisode && youtubeUrl) {
       const cleanUrl = youtubeUrl.trim();
       const normSeries = normalizeCompareKey(seriesBaseName);
@@ -633,12 +700,109 @@ export function parseSheetClipboardData(params: {
           (ep) =>
             ep.masterVideoInfo?.youtubeUrl?.trim() === cleanUrl &&
             normalizeCompareKey(ep.title).includes(normSeries)
-        ) || null;
+        ) ||
+        episodes.find(
+          (ep) => ep.masterVideoInfo?.youtubeUrl?.trim() === cleanUrl
+        ) ||
+        null;
+      if (existingEpisode) {
+        epMatchSimilarityPercent = 100;
+        epMatchMethod = 'YOUTUBE_URL';
+      }
     }
 
+    // Stage 3: Match by 5-Footage Rank Set Overlap (>= 3 matched footages in common)
+    if (!existingEpisode) {
+      const groupFootageIds = new Set(
+        groupRows
+          .map((r) => r.matchedFootage?.id)
+          .filter((id): id is string => Boolean(id))
+      );
+      if (groupFootageIds.size >= 3) {
+        let bestOverlapEp: Episode | null = null;
+        let bestOverlapCount = 0;
+        for (const ep of episodes) {
+          let overlap = 0;
+          for (const slot of ep.rankings) {
+            if (slot.footageId && groupFootageIds.has(slot.footageId)) {
+              overlap += 1;
+            }
+          }
+          if (overlap >= 3 && overlap > bestOverlapCount) {
+            bestOverlapCount = overlap;
+            bestOverlapEp = ep;
+          }
+        }
+        if (bestOverlapEp) {
+          existingEpisode = bestOverlapEp;
+          epMatchSimilarityPercent = Math.round((bestOverlapCount / 5) * 100);
+          epMatchMethod = 'FOOTAGE_OVERLAP';
+        }
+      }
+    }
+
+    // Stage 4: Thai-Aware Fuzzy Episode Title Similarity (>= 82% with strict EP.X number guard!)
+    // Handles cases like "5 อันดับ น้าค่อมสุดฮา" vs "5 อันดับ น้าค้อมสุดฮา!" (~95%) without ever mixing EP.1 and EP.2
+    if (!existingEpisode) {
+      const sheetEpNum = extractExplicitEpNumber(sheetEpisodeTitle);
+      const sheetCoreSubject = extractCoreEpisodeSubject(sheetEpisodeTitle);
+      let bestFuzzyEp: Episode | null = null;
+      let bestFuzzySim = 0;
+
+      for (const ep of episodes) {
+        const cleanExistingTitle = stripHashtagsFromTitle(ep.title);
+        const existingEpNum = extractExplicitEpNumber(cleanExistingTitle);
+
+        // Strict EP Number Guard: if both specify EP.X (or if either specifies EP > 1), they must match!
+        if (sheetEpNum !== null && existingEpNum !== null) {
+          if (sheetEpNum !== existingEpNum) continue;
+        } else if (
+          (sheetEpNum !== null && sheetEpNum > 1) ||
+          (existingEpNum !== null && existingEpNum > 1)
+        ) {
+          continue;
+        }
+
+        const fullSim = computeThaiStringSimilarityPercent(
+          sheetEpisodeTitle,
+          cleanExistingTitle
+        );
+        const existingCoreSubject = extractCoreEpisodeSubject(cleanExistingTitle);
+        const coreSim =
+          sheetCoreSubject && existingCoreSubject
+            ? computeThaiStringSimilarityPercent(
+                sheetCoreSubject,
+                existingCoreSubject
+              )
+            : fullSim;
+
+        const effectiveSim = Math.max(fullSim, coreSim);
+        if (effectiveSim >= 82 && effectiveSim > bestFuzzySim) {
+          bestFuzzySim = effectiveSim;
+          bestFuzzyEp = ep;
+        }
+      }
+
+      if (bestFuzzyEp) {
+        existingEpisode = bestFuzzyEp;
+        epMatchSimilarityPercent = bestFuzzySim;
+        epMatchMethod = 'FUZZY_TITLE';
+      }
+    }
+
+    // If existingEpisode is matched and Col B (syncColB_EpTitle) is disabled, preserve existingEpisode.title!
+    const episodeTitle =
+      existingEpisode && !columnSyncConfig.syncColB_EpTitle
+        ? existingEpisode.title
+        : sheetEpisodeTitle;
+
     // Resolve publishDate & publishSlot from Col I & Col J, or custom override, or existingEpisode
-    const rowWithDate = groupRows.find((r) => Boolean(r.publishDate));
-    const rowWithTime = groupRows.find((r) => Boolean(r.publishTime));
+    const rowWithDate = columnSyncConfig.syncColIJ_DateAndTime
+      ? groupRows.find((r) => Boolean(r.publishDate))
+      : undefined;
+    const rowWithTime = columnSyncConfig.syncColIJ_DateAndTime
+      ? groupRows.find((r) => Boolean(r.publishTime))
+      : undefined;
     const customDate = customPublishDateByGroupKey[groupKey];
     const customSlot = customPublishSlotByGroupKey[groupKey];
 
@@ -713,6 +877,8 @@ export function parseSheetClipboardData(params: {
       hasExplicitDateInSheet,
       rows: groupRows,
       existingEpisode,
+      epMatchSimilarityPercent,
+      epMatchMethod,
       primaryTagName,
       isCompleteFiveRanks,
       missingFootageCount,

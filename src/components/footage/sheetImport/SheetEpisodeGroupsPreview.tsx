@@ -486,9 +486,23 @@ export const SheetEpisodeGroupsPreview: React.FC<
                           </span>
 
                           {isUpdateExisting ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF] shrink-0">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-[#FEF8ED] text-[#734B17] border border-[#EDD7AF] shrink-0"
+                              title={
+                                group.epMatchMethod === 'FUZZY_TITLE'
+                                  ? `จับคู่จากชื่อใกล้เคียง ${group.epMatchSimilarityPercent}% กับ "${group.existingEpisode?.title}"`
+                                  : group.epMatchMethod === 'FOOTAGE_OVERLAP'
+                                  ? `จับคู่จากชุดฟุตเทจ 5 อันดับตรงกัน (${group.epMatchSimilarityPercent}%) กับ "${group.existingEpisode?.title}"`
+                                  : group.epMatchMethod === 'YOUTUBE_URL'
+                                  ? `จับคู่จากลิงก์ YouTube ตรงกัน 100% กับ "${group.existingEpisode?.title}"`
+                                  : `จับคู่จากชื่อคลิปตรงเป๊ะ 100%`
+                              }
+                            >
                               <RefreshCw className="w-3 h-3 text-[#8A5A22]" />
                               <span>อัปเดต {group.existingEpisode?.id}</span>
+                              <span className="font-mono text-[10px] px-1 rounded bg-white/80 text-[#8A4D1F]">
+                                {group.epMatchSimilarityPercent}%
+                              </span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] shrink-0">

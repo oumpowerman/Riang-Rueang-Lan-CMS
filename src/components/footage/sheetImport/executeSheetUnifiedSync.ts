@@ -18,9 +18,11 @@ import {
 import { resolveTagByDataDictionary } from '../../../utils/tagDictionaryRules';
 import { normalizeCompareKey } from './sheetImportParser';
 import {
+  DEFAULT_SHEET_COLUMN_SYNC_CONFIG,
   ParsedEpisodeGroup,
   ParsedSheetRow,
   RankingOrderDirection,
+  SheetColumnSyncConfig,
   SheetSyncSuccessReport,
   SyncProgressState,
 } from './sheetImport.types';
@@ -36,6 +38,7 @@ export interface ExecuteSheetUnifiedSyncParams {
   syncEpisodesFromColD: boolean;
   autoCreateMissingFootage: boolean;
   includeSeriesTagOnFootage: boolean;
+  columnSyncConfig?: SheetColumnSyncConfig;
   rankingOrder: RankingOrderDirection;
   tags: CategoryTag[];
   episodes: Episode[];
@@ -102,6 +105,7 @@ export async function executeSheetUnifiedSync(
     syncEpisodesFromColD,
     autoCreateMissingFootage,
     includeSeriesTagOnFootage,
+    columnSyncConfig = DEFAULT_SHEET_COLUMN_SYNC_CONFIG,
     rankingOrder,
     tags,
     episodes,
@@ -499,11 +503,17 @@ export async function executeSheetUnifiedSync(
           'TAG-0001';
 
         const publishDate =
-          group.publishDate || existingEp?.publishDate || todayIso;
+          (columnSyncConfig.syncColIJ_DateAndTime ? group.publishDate : '') ||
+          existingEp?.publishDate ||
+          todayIso;
         const publishSlot =
-          group.publishSlot || existingEp?.publishSlot || 'EVENING_1800';
+          (columnSyncConfig.syncColIJ_DateAndTime ? group.publishSlot : null) ||
+          existingEp?.publishSlot ||
+          'EVENING_1800';
         const youtubeUrl =
-          group.youtubeUrl || existingEp?.masterVideoInfo?.youtubeUrl || '';
+          (columnSyncConfig.syncColH_Url ? group.youtubeUrl : '') ||
+          existingEp?.masterVideoInfo?.youtubeUrl ||
+          '';
 
         const rankings: EpisodeRankingSlot[] = (
           [5, 4, 3, 2, 1] as const
@@ -530,7 +540,11 @@ export async function executeSheetUnifiedSync(
           }
 
           // Align sub-footage createdAt if publishDate is earlier so Cooldown is 100% accurate
-          if (resolvedFootageId && publishDate) {
+          if (
+            columnSyncConfig.syncColIJ_DateAndTime &&
+            resolvedFootageId &&
+            publishDate
+          ) {
             const currentFt = computedFootageMap[resolvedFootageId];
             const currentMinDate =
               earliestDateByFootageId[resolvedFootageId] ||
@@ -542,9 +556,17 @@ export async function executeSheetUnifiedSync(
           }
 
           const effectiveRankTitle =
-            rowForSlot?.rankTitle || prevSlot?.rankTitle || '';
+            (columnSyncConfig.syncColC_RankTitle
+              ? rowForSlot?.rankTitle
+              : '') ||
+            prevSlot?.rankTitle ||
+            '';
           const effectivePunchlineNote =
-            rowForSlot?.punchlineNote || prevSlot?.punchlineNote || '';
+            (columnSyncConfig.syncColD_Punchline
+              ? rowForSlot?.punchlineNote
+              : '') ||
+            prevSlot?.punchlineNote ||
+            '';
 
           // Build rich mascotScript from Col C (ชื่ออันดับ) and Col D (คำสร้อย)
           let slotMascotScript = '';
@@ -581,11 +603,24 @@ export async function executeSheetUnifiedSync(
           };
         });
 
+        const effectiveEpisodeTitle =
+          existingEp && !columnSyncConfig.syncColB_EpTitle
+            ? existingEp.title
+            : group.episodeTitle;
+        const effectiveSeriesTitle =
+          existingEp && !columnSyncConfig.syncColB_EpTitle
+            ? existingEp.seriesTitle
+            : group.seriesBaseName || group.episodeTitle;
+        const effectiveEpisodeNo =
+          existingEp && !columnSyncConfig.syncColB_EpTitle
+            ? existingEp.categoryEpisodeNo
+            : group.episodeNo;
+
         const autoMasterFileName = generateMasterEpisodeFileName(
           epId,
           publishDate,
           publishSlot,
-          group.episodeTitle
+          effectiveEpisodeTitle
         );
 
         const hashtagsSuffix =
@@ -595,11 +630,11 @@ export async function executeSheetUnifiedSync(
 
         const epPayload: Episode = {
           id: epId,
-          title: group.episodeTitle,
-          categoryEpisodeNo: group.episodeNo,
+          title: effectiveEpisodeTitle,
+          categoryEpisodeNo: effectiveEpisodeNo,
           categoryEpisodeScope: 'MAIN_CATEGORY',
           seriesId: primaryTagId,
-          seriesTitle: group.seriesBaseName || group.episodeTitle,
+          seriesTitle: effectiveSeriesTitle,
           categoryGroupId: existingEp?.categoryGroupId || 'GRP-THEME',
           mainCategoryTagId: primaryTagId,
           productionTarget:
@@ -610,10 +645,10 @@ export async function executeSheetUnifiedSync(
           workflowStage: '4_PUBLISHED',
           introMascotScript:
             existingEp?.introMascotScript ||
-            `สวัสดีครับ วันนี้พบกับ ${group.episodeTitle} ไปดูกันเลย!`,
+            `สวัสดีครับ วันนี้พบกับ ${effectiveEpisodeTitle} ไปดูกันเลย!`,
           outroMascotScript:
             existingEp?.outroMascotScript ||
-            `ชอบอันดับไหนใน ${group.episodeTitle} คอมเมนต์บอกกันได้เลย!`,
+            `ชอบอันดับไหนใน ${effectiveEpisodeTitle} คอมเมนต์บอกกันได้เลย!`,
           rankings,
           masterVideoInfo: {
             masterFileName:
@@ -631,7 +666,7 @@ export async function executeSheetUnifiedSync(
         };
 
         episodesToUpsert.push(epPayload);
-        syncedEpisodeTitles.push(group.episodeTitle);
+        syncedEpisodeTitles.push(effectiveEpisodeTitle);
       });
 
       if (episodesToUpsert.length > 0) {

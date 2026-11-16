@@ -34,6 +34,11 @@ function cleanRawSeriesText(raw: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+const seriesInfoCache = new WeakMap<
+  Episode,
+  { sig: string; result: ExtractedSeriesInfo }
+>();
+
 /**
  * Intelligently extracts the canonical "5 อันดับ [ชื่อรายการ]" series identity from an Episode.
  * Unifies variants like:
@@ -46,6 +51,14 @@ export function extractEpisodeSeriesInfo(
   ep: Episode,
   tagMap?: Record<string, CategoryTag>
 ): ExtractedSeriesInfo {
+  const tagFallbackName =
+    tagMap && ep.mainCategoryTagId ? tagMap[ep.mainCategoryTagId]?.name || '' : '';
+  const sig = `${ep.id}|${ep.title || ''}|${ep.seriesTitle || ''}|${ep.categoryEpisodeNo || 0}|${tagFallbackName}`;
+  const cached = seriesInfoCache.get(ep);
+  if (cached && cached.sig === sig) {
+    return cached.result;
+  }
+
   const rawCandidate = cleanRawSeriesText(ep.title || ep.seriesTitle || '');
 
   // Match pattern: [optional "5 อันดับ"] [Series Base Name] [EP.1 / EP 1 / ตอนที่ 1 / #1]
@@ -81,8 +94,8 @@ export function extractEpisodeSeriesInfo(
       .replace(/[!！]+$/g, '')
       .trim();
   }
-  if (!baseName && tagMap && ep.mainCategoryTagId && tagMap[ep.mainCategoryTagId]) {
-    baseName = tagMap[ep.mainCategoryTagId].name;
+  if (!baseName && tagFallbackName) {
+    baseName = tagFallbackName;
   }
   if (!baseName) {
     baseName = 'รายการทั่วไป';
@@ -99,12 +112,15 @@ export function extractEpisodeSeriesInfo(
     .replace(/[!！.\s]+/g, '');
   const seriesKey = `SERIES::${normalizedKey}`;
 
-  return {
+  const result: ExtractedSeriesInfo = {
     seriesKey,
     seriesName: displaySeriesName,
     fullSeriesTitle: `5 อันดับ ${displaySeriesName}`,
     parsedEpisodeNo: parsedEpNo,
   };
+
+  seriesInfoCache.set(ep, { sig, result });
+  return result;
 }
 
 /**
@@ -323,6 +339,17 @@ export function findMatchedTagsForSeries(
   };
 }
 
+const footageLowerTextCache = new WeakMap<ComputedFootage, string>();
+
+function getFootageLowerText(ft: ComputedFootage): string {
+  let cached = footageLowerTextCache.get(ft);
+  if (cached === undefined) {
+    cached = `${(ft.title || '').toLowerCase()} ${(ft.mascotNotes || '').toLowerCase()}`;
+    footageLowerTextCache.set(ft, cached);
+  }
+  return cached;
+}
+
 /**
  * Computes the complete footage pool belonging to a series from:
  * - Footage already used in episodes of the series
@@ -339,16 +366,19 @@ export function computeSeriesRelatedFootagePool(
   const lowerKeywords = keywords
     .map((k) => k.toLowerCase().trim())
     .filter((k) => k.length >= 2);
+  const hasKeywords = lowerKeywords.length > 0;
+  const hasTags = matchedTagSet.size > 0;
 
   return allFootage.filter((ft) => {
     if (seriesFootageIds.has(ft.id)) return true;
-    if (matchedTagSet.size > 0 && ft.tags.some((tid) => matchedTagSet.has(tid))) {
+    if (hasTags && ft.tags.some((tid) => matchedTagSet.has(tid))) {
       return true;
     }
-    const titleLower = (ft.title || '').toLowerCase();
-    const notesLower = (ft.mascotNotes || '').toLowerCase();
-    return lowerKeywords.some(
-      (kw) => titleLower.includes(kw) || notesLower.includes(kw)
-    );
+    if (!hasKeywords) return false;
+    const textLower = getFootageLowerText(ft);
+    for (let i = 0; i < lowerKeywords.length; i++) {
+      if (textLower.includes(lowerKeywords[i])) return true;
+    }
+    return false;
   });
 }

@@ -20,6 +20,11 @@ import {
   STAGING_TAG_ID,
 } from './seedData';
 import { normalizeLegacySubCategory } from '../utils/reorganizeTagsToDictionary';
+import {
+  idbStorageService,
+  safeLocalStorageRemove,
+  safeLocalStorageSet,
+} from './idbStorageService';
 
 const STORAGE_KEYS = {
   GROUPS: 'rrl_cms_category_groups_v1',
@@ -76,21 +81,55 @@ export function normalizeSingle3TierTag(t: CategoryTag): CategoryTag {
   };
 }
 
+function normalizeLoadedEpisodes(parsed: Episode[]): Episode[] {
+  if (!Array.isArray(parsed) || parsed.length === 0) return [];
+  const tagLookup = new Map(INITIAL_TAGS.map((t) => [t.id, t]));
+  const catCountMap: Record<string, number> = {};
+
+  return parsed.map((ep) => {
+    let changed = false;
+    let catGrpId = ep.categoryGroupId;
+    if (!catGrpId) {
+      changed = true;
+      const tag = tagLookup.get(ep.mainCategoryTagId);
+      catGrpId = tag?.groupId || (tag ? `GRP-${tag.groupType}` : 'GRP-THEME');
+    }
+
+    let catEpNo = ep.categoryEpisodeNo;
+    if (!catEpNo) {
+      changed = true;
+      const currentCount = (catCountMap[ep.mainCategoryTagId] || 0) + 1;
+      catCountMap[ep.mainCategoryTagId] = currentCount;
+      catEpNo = currentCount;
+    } else {
+      catCountMap[ep.mainCategoryTagId] = Math.max(
+        catCountMap[ep.mainCategoryTagId] || 0,
+        catEpNo
+      );
+    }
+
+    if (changed) {
+      return {
+        ...ep,
+        categoryGroupId: catGrpId,
+        categoryEpisodeNo: catEpNo,
+      };
+    }
+    return ep;
+  });
+}
+
 /**
- * Enterprise Repository Pattern for Riang-Rueang-Lan CMS (v3 3-Tier Faceted Tag Schema)
+ * Enterprise Repository Pattern for Riang-Rueang-Lan CMS (v3 3-Tier Faceted Tag Schema + IndexedDB Engine)
  */
 export const cmsRepository = {
   /**
    * Safe production state check — never wipes user clips automatically on startup.
    */
   ensureProductionCleanSlate(): boolean {
-    try {
-      localStorage.setItem(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE, 'true');
-      localStorage.setItem(STORAGE_KEYS.CLOUD_CLIPS_WIPED, 'true');
-      return false;
-    } catch {
-      return false;
-    }
+    safeLocalStorageSet(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE, 'true');
+    safeLocalStorageSet(STORAGE_KEYS.CLOUD_CLIPS_WIPED, 'true');
+    return false;
   },
 
   hasWipedCloudClips(): boolean {
@@ -98,11 +137,7 @@ export const cmsRepository = {
   },
 
   markCloudClipsWiped(): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.CLOUD_CLIPS_WIPED, 'true');
-    } catch {
-      // ignore storage errors
-    }
+    safeLocalStorageSet(STORAGE_KEYS.CLOUD_CLIPS_WIPED, 'true');
   },
 
   isCategoriesWiped(): boolean {
@@ -114,11 +149,7 @@ export const cmsRepository = {
   },
 
   setCategoriesWiped(wiped: boolean): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES_WIPED, wiped ? 'true' : 'false');
-    } catch {
-      // ignore storage errors
-    }
+    safeLocalStorageSet(STORAGE_KEYS.CATEGORIES_WIPED, wiped ? 'true' : 'false');
   },
 
   getDeletedTagIds(): Set<string> {
@@ -132,21 +163,13 @@ export const cmsRepository = {
   },
 
   markTagIdsDeleted(tagIds: string[]): void {
-    try {
-      const current = this.getDeletedTagIds();
-      tagIds.forEach((id) => current.add(id));
-      localStorage.setItem(STORAGE_KEYS.DELETED_TAG_IDS, JSON.stringify(Array.from(current)));
-    } catch {
-      // ignore storage errors
-    }
+    const current = this.getDeletedTagIds();
+    tagIds.forEach((id) => current.add(id));
+    safeLocalStorageSet(STORAGE_KEYS.DELETED_TAG_IDS, JSON.stringify(Array.from(current)));
   },
 
   clearDeletedTagIds(): void {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.DELETED_TAG_IDS);
-    } catch {
-      // ignore storage errors
-    }
+    safeLocalStorageRemove(STORAGE_KEYS.DELETED_TAG_IDS);
   },
 
   getDeletedGroupIds(): Set<string> {
@@ -160,21 +183,13 @@ export const cmsRepository = {
   },
 
   markGroupIdsDeleted(groupIds: string[]): void {
-    try {
-      const current = this.getDeletedGroupIds();
-      groupIds.forEach((id) => current.add(id));
-      localStorage.setItem(STORAGE_KEYS.DELETED_GROUP_IDS, JSON.stringify(Array.from(current)));
-    } catch {
-      // ignore storage errors
-    }
+    const current = this.getDeletedGroupIds();
+    groupIds.forEach((id) => current.add(id));
+    safeLocalStorageSet(STORAGE_KEYS.DELETED_GROUP_IDS, JSON.stringify(Array.from(current)));
   },
 
   clearDeletedGroupIds(): void {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.DELETED_GROUP_IDS);
-    } catch {
-      // ignore storage errors
-    }
+    safeLocalStorageRemove(STORAGE_KEYS.DELETED_GROUP_IDS);
   },
 
   /**
@@ -319,14 +334,14 @@ export const cmsRepository = {
       const raw = localStorage.getItem(STORAGE_KEYS.TAGS);
       if (!raw) {
         const initial = this.normalizeAndRepairTags(INITIAL_TAGS, true);
-        localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(initial));
+        safeLocalStorageSet(STORAGE_KEYS.TAGS, JSON.stringify(initial));
         return initial;
       }
       const parsed: CategoryTag[] = JSON.parse(raw);
       const repaired = this.normalizeAndRepairTags(parsed, false);
       if (repaired.filter((t) => !isStagingTagId(t.id)).length === 0) {
         const initial = this.normalizeAndRepairTags(INITIAL_TAGS, true);
-        localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(initial));
+        safeLocalStorageSet(STORAGE_KEYS.TAGS, JSON.stringify(initial));
         return initial;
       }
       return repaired;
@@ -336,109 +351,73 @@ export const cmsRepository = {
   },
 
   saveTags(tags: CategoryTag[]): void {
-    localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(tags));
+    safeLocalStorageSet(STORAGE_KEYS.TAGS, JSON.stringify(tags));
   },
 
   getSources(): RawSource[] {
     this.ensureProductionCleanSlate();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SOURCES);
-      if (!raw) {
-        localStorage.setItem(STORAGE_KEYS.SOURCES, JSON.stringify([]));
-        return [];
-      }
+      if (!raw) return [];
       return JSON.parse(raw);
     } catch {
       return [];
     }
   },
 
+  async loadSourcesAsync(): Promise<RawSource[]> {
+    return idbStorageService.loadSources();
+  },
+
   saveSources(sources: RawSource[]): void {
-    localStorage.setItem(STORAGE_KEYS.SOURCES, JSON.stringify(sources));
+    void idbStorageService.saveSources(sources);
   },
 
   getFootage(): Footage[] {
     this.ensureProductionCleanSlate();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FOOTAGE);
-      if (!raw) {
-        localStorage.setItem(STORAGE_KEYS.FOOTAGE, JSON.stringify([]));
-        return [];
-      }
+      if (!raw) return [];
       return JSON.parse(raw);
     } catch {
       return [];
     }
   },
 
+  async loadFootageAsync(): Promise<Footage[]> {
+    return idbStorageService.loadFootage();
+  },
+
   saveFootage(footage: Footage[]): void {
-    localStorage.setItem(STORAGE_KEYS.FOOTAGE, JSON.stringify(footage));
+    void idbStorageService.saveFootage(footage);
   },
 
   getEpisodes(): Episode[] {
     this.ensureProductionCleanSlate();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.EPISODES);
-      if (!raw) {
-        localStorage.setItem(STORAGE_KEYS.EPISODES, JSON.stringify([]));
-        return [];
-      }
+      if (!raw) return [];
       const parsed: Episode[] = JSON.parse(raw);
-      let needsSave = false;
-      const tagLookup = new Map(INITIAL_TAGS.map((t) => [t.id, t]));
-      const catCountMap: Record<string, number> = {};
-
-      const migrated = parsed.map((ep) => {
-        let changed = false;
-        let catGrpId = ep.categoryGroupId;
-        if (!catGrpId) {
-          changed = true;
-          const tag = tagLookup.get(ep.mainCategoryTagId);
-          catGrpId = tag?.groupId || (tag ? `GRP-${tag.groupType}` : 'GRP-THEME');
-        }
-
-        let catEpNo = ep.categoryEpisodeNo;
-        if (!catEpNo) {
-          changed = true;
-          const currentCount = (catCountMap[ep.mainCategoryTagId] || 0) + 1;
-          catCountMap[ep.mainCategoryTagId] = currentCount;
-          catEpNo = currentCount;
-        } else {
-          catCountMap[ep.mainCategoryTagId] = Math.max(
-            catCountMap[ep.mainCategoryTagId] || 0,
-            catEpNo
-          );
-        }
-
-        if (changed) {
-          needsSave = true;
-          return {
-            ...ep,
-            categoryGroupId: catGrpId,
-            categoryEpisodeNo: catEpNo,
-          };
-        }
-        return ep;
-      });
-
-      if (needsSave) {
-        localStorage.setItem(STORAGE_KEYS.EPISODES, JSON.stringify(migrated));
-      }
-      return migrated;
+      return normalizeLoadedEpisodes(parsed);
     } catch {
       return [];
     }
   },
 
+  async loadEpisodesAsync(): Promise<Episode[]> {
+    const raw = await idbStorageService.loadEpisodes();
+    return normalizeLoadedEpisodes(raw);
+  },
+
   saveEpisodes(episodes: Episode[]): void {
-    localStorage.setItem(STORAGE_KEYS.EPISODES, JSON.stringify(episodes));
+    void idbStorageService.saveEpisodes(episodes);
   },
 
   getSettings(): SystemSettings {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (!raw) {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
+        safeLocalStorageSet(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
         return INITIAL_SETTINGS;
       }
       const parsed = JSON.parse(raw);
@@ -452,7 +431,7 @@ export const cmsRepository = {
   },
 
   saveSettings(settings: SystemSettings): void {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    safeLocalStorageSet(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   },
 
   getCategoryGroups(): CategoryGroup[] {
@@ -462,7 +441,7 @@ export const cmsRepository = {
       }
       const raw = localStorage.getItem(STORAGE_KEYS.GROUPS);
       if (!raw) {
-        localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(INITIAL_CATEGORY_GROUPS));
+        safeLocalStorageSet(STORAGE_KEYS.GROUPS, JSON.stringify(INITIAL_CATEGORY_GROUPS));
         return INITIAL_CATEGORY_GROUPS;
       }
       const parsed: CategoryGroup[] = JSON.parse(raw);
@@ -473,13 +452,13 @@ export const cmsRepository = {
   },
 
   saveCategoryGroups(groups: CategoryGroup[]): void {
-    localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(groups));
+    safeLocalStorageSet(STORAGE_KEYS.GROUPS, JSON.stringify(groups));
   },
 
   wipeAllCategories(): void {
     this.setCategoriesWiped(true);
-    localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify([]));
+    safeLocalStorageSet(STORAGE_KEYS.GROUPS, JSON.stringify([]));
+    safeLocalStorageSet(STORAGE_KEYS.TAGS, JSON.stringify([]));
   },
 
   restoreDefaultCategories(): {
@@ -491,8 +470,8 @@ export const cmsRepository = {
     this.clearDeletedGroupIds();
     const groups = INITIAL_CATEGORY_GROUPS.map((g) => ({ ...g }));
     const tags = INITIAL_TAGS.map((t) => ({ ...t }));
-    localStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(groups));
-    localStorage.setItem(STORAGE_KEYS.TAGS, JSON.stringify(tags));
+    safeLocalStorageSet(STORAGE_KEYS.GROUPS, JSON.stringify(groups));
+    safeLocalStorageSet(STORAGE_KEYS.TAGS, JSON.stringify(tags));
     return {
       categoryGroups: groups,
       tags,
@@ -500,10 +479,11 @@ export const cmsRepository = {
   },
 
   clearAllClips(): void {
-    localStorage.setItem(STORAGE_KEYS.SOURCES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.FOOTAGE, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.EPISODES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE, 'true');
+    safeLocalStorageRemove(STORAGE_KEYS.SOURCES);
+    safeLocalStorageRemove(STORAGE_KEYS.FOOTAGE);
+    safeLocalStorageRemove(STORAGE_KEYS.EPISODES);
+    safeLocalStorageSet(STORAGE_KEYS.PRODUCTION_CLEAN_SLATE, 'true');
+    void idbStorageService.clearClipsStores();
   },
 
   resetToSeedData(): {
@@ -527,3 +507,4 @@ export const cmsRepository = {
     };
   },
 };
+

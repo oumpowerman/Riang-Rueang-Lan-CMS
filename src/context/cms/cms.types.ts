@@ -1,5 +1,9 @@
 import React from 'react';
-import { BatchChunkProgress } from '../../firebase/firestoreService';
+import {
+  ArchiveSummaryStats,
+  BatchChunkProgress,
+  ServerCollectionCounts,
+} from '../../firebase/firestoreService';
 import {
   Episode,
   EpisodeProductionTarget,
@@ -388,9 +392,11 @@ export interface CMSContextType {
   clearAllClips: () => Promise<void>;
   isClearingClips: boolean;
 
-  // Cloud Database Sync
+  // Cloud Database Sync & High-Scale Summary Stats
   isCloudConnected: boolean;
   isCloudSynced: boolean;
   isSeedingToCloud: boolean;
   seedToCloud: () => Promise<void>;
+  serverCounts: ServerCollectionCounts | null;
+  archiveSummaryStats: ArchiveSummaryStats | null;
 }

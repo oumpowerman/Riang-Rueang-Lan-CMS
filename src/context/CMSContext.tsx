@@ -1,4 +1,8 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
+import { ArchiveSummaryStats, firestoreService } from '../firebase/firestoreService';
+import { idbStorageService } from '../services/idbStorageService';
+import { evaluateEpisodeCompleteness } from '../utils/episodeValidator';
+import { extractEpisodeSeriesInfo } from '../utils/seriesExtractor';
 import {
   ActiveNavTab,
   BuilderPreselectRequest,
@@ -32,7 +36,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 1. Navigation, Global Modals & Cross-View Builder Preselect State
   const navigationState = useCMSNavigationState();
 
-  // 2. Core Data Entities, LocalStorage Persistence & Firestore Cloud Sync
+  // 2. Core Data Entities, IndexedDB Persistence & Firestore Cloud Sync
   const {
     categoryGroups,
     setCategoryGroups,
@@ -46,6 +50,11 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEpisodes,
     settings,
     setSettings,
+    serverCounts,
+    archiveSummaryStats,
+    setArchiveSummaryStats,
+    hasFullCloudEpisodesRef,
+    hasFullCloudFootageRef,
     isCloudConnected,
     isCloudSynced,
     isSeedingToCloud,
@@ -64,6 +73,94 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     episodes,
     settings,
   });
+
+  // 3.5 Background Central Summary Document Sync (system_settings/archive_summary_stats)
+  const lastSyncedSummarySigRef = useRef<string>('');
+  useEffect(() => {
+    if (!hasFullCloudEpisodesRef.current || !hasFullCloudFootageRef.current) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      let completeEpisodesCount = 0;
+      let incompleteEpisodesCount = 0;
+      let incompleteFootageEpisodesCount = 0;
+      const seriesKeys = new Set<string>();
+
+      for (let i = 0; i < episodes.length; i++) {
+        const ep = episodes[i];
+        const comp = evaluateEpisodeCompleteness(ep);
+        if (comp.isComplete) completeEpisodesCount++;
+        else incompleteEpisodesCount++;
+        if (!comp.hasFullFiveSlots) incompleteFootageEpisodesCount++;
+        seriesKeys.add(extractEpisodeSeriesInfo(ep, analytics.tagMap).seriesKey);
+      }
+
+      let usedFootageCount = 0;
+      let readyFootageCount = 0;
+      let newFootageCount = 0;
+      let coolingFootageCount = 0;
+      for (let i = 0; i < analytics.computedFootage.length; i++) {
+        const ft = analytics.computedFootage[i];
+        if (ft.totalUsageCount > 0) usedFootageCount++;
+        if (ft.cooldownStatus === 'NEW_UNTOUCHED') newFootageCount++;
+        else if (ft.cooldownStatus === 'READY_FRESH') readyFootageCount++;
+        else coolingFootageCount++;
+      }
+
+      const nextStats: ArchiveSummaryStats = {
+        totalEpisodes: episodes.length,
+        completeEpisodesCount,
+        incompleteEpisodesCount,
+        incompleteFootageEpisodesCount,
+        distinctSeriesCount: seriesKeys.size,
+        totalFootage: analytics.computedFootage.length,
+        usedFootageCount,
+        readyFootageCount,
+        newFootageCount,
+        coolingFootageCount,
+        untaggedFootageCount: analytics.untaggedFootages.length,
+        missingDriveCount: analytics.missingDriveFootages.length,
+        totalSources: sources.length,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const sig = [
+        nextStats.totalEpisodes,
+        nextStats.completeEpisodesCount,
+        nextStats.incompleteEpisodesCount,
+        nextStats.incompleteFootageEpisodesCount,
+        nextStats.distinctSeriesCount,
+        nextStats.totalFootage,
+        nextStats.usedFootageCount,
+        nextStats.readyFootageCount,
+        nextStats.newFootageCount,
+        nextStats.coolingFootageCount,
+        nextStats.untaggedFootageCount,
+        nextStats.missingDriveCount,
+        nextStats.totalSources,
+      ].join('|');
+
+      if (sig === lastSyncedSummarySigRef.current) return;
+      lastSyncedSummarySigRef.current = sig;
+
+      setArchiveSummaryStats(nextStats);
+      void idbStorageService.setMeta('archive_summary_stats', nextStats);
+      void firestoreService.saveArchiveSummaryStats(nextStats);
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    episodes,
+    analytics.computedFootage,
+    analytics.untaggedFootages.length,
+    analytics.missingDriveFootages.length,
+    analytics.tagMap,
+    sources.length,
+    hasFullCloudEpisodesRef,
+    hasFullCloudFootageRef,
+    setArchiveSummaryStats,
+  ]);
 
   // 4. Actions: Tier 0 Category Groups, Tier 1/2 Tags & System Settings
   const categoryActions = useCMSCategoryActions({
@@ -130,6 +227,8 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isCloudSynced,
         isSeedingToCloud,
         seedToCloud,
+        serverCounts,
+        archiveSummaryStats,
       }}
     >
       {children}
