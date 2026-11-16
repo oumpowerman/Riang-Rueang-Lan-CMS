@@ -7,6 +7,9 @@ import {
   GitMerge,
   Link2,
   Loader2,
+  Play,
+  RotateCcw,
+  SkipForward,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -17,6 +20,8 @@ import {
   buildMergedSurvivorPreview,
   DuplicateCluster,
   getDuplicateReasonLabel,
+  getExternalSourcePlatformLabel,
+  isDistinctExternalOriginalUrl,
 } from '../../../utils/duplicateClusterScanner';
 import { extractDefaultRankFields } from '../../../utils/episodeScriptGenerator';
 import { formatThaiDate, hasRealDriveLink } from '../../../utils/fileNameGenerator';
@@ -31,9 +36,13 @@ interface DuplicateClusterCardProps {
   episodes: Episode[];
   tagMap: Record<string, CategoryTag>;
   isMerging: boolean;
+  isSkipped?: boolean;
   onSelectSurvivor: (clusterId: string, survivorId: string) => void;
   onToggleExcludeDuplicate: (clusterId: string, footageId: string) => void;
   onMergeCluster: (cluster: DuplicateCluster) => void;
+  onSkipCluster?: (clusterId: string) => void;
+  onRestoreSkippedCluster?: (clusterId: string) => void;
+  onPreviewFootage?: (footageId: string) => void;
 }
 
 export const DuplicateClusterCard: React.FC<DuplicateClusterCardProps> = ({
@@ -44,9 +53,13 @@ export const DuplicateClusterCard: React.FC<DuplicateClusterCardProps> = ({
   episodes,
   tagMap,
   isMerging,
+  isSkipped = false,
   onSelectSurvivor,
   onToggleExcludeDuplicate,
   onMergeCluster,
+  onSkipCluster,
+  onRestoreSkippedCluster,
+  onPreviewFootage,
 }) => {
   const excludedSet = useMemo(
     () => new Set(excludedDuplicateIds),
@@ -70,13 +83,24 @@ export const DuplicateClusterCard: React.FC<DuplicateClusterCardProps> = ({
   );
 
   return (
-    <div className="bg-white border border-[#E8DFD3] rounded-2xl overflow-hidden shadow-2xs">
+    <div
+      className={`bg-white border rounded-2xl overflow-hidden shadow-2xs transition-colors ${
+        isSkipped ? 'border-[#F0DFC8]' : 'border-[#E8DFD3]'
+      }`}
+    >
       {/* Cluster Header */}
       <div className="px-3.5 sm:px-4 py-2.5 bg-[#FDFBF7] border-b border-[#EFE7DC] flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-[#F5EDE2] border border-[#E4D5C1] text-[#5D4938] font-mono text-[11px] font-extrabold tabular-nums">
             กลุ่ม #{clusterIndex + 1} · {cluster.items.length} คลิป
           </span>
+
+          {isSkipped && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#FEF6E8] border border-[#F0DFC8] text-[#7D5622] text-[11px] font-bold">
+              <SkipForward className="w-3 h-3 shrink-0" />
+              <span>ข้ามชั่วคราว</span>
+            </span>
+          )}
 
           {cluster.reasons.map((reason) => (
             <span
@@ -92,21 +116,50 @@ export const DuplicateClusterCard: React.FC<DuplicateClusterCardProps> = ({
           </span>
         </div>
 
-        <button
-          type="button"
-          disabled={isMerging || duplicatesToMerge.length === 0}
-          onClick={() => onMergeCluster(cluster)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#DDF0E2] hover:bg-[#CBE7D2] disabled:opacity-50 disabled:cursor-not-allowed border border-[#A8D5BA] text-[#1E5631] text-xs font-extrabold transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-        >
-          {isMerging ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+          {isSkipped && onRestoreSkippedCluster ? (
+            <button
+              type="button"
+              disabled={isMerging}
+              onClick={() => onRestoreSkippedCluster(cluster.clusterId)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FEF6E8] hover:bg-[#F9EBD0] disabled:opacity-50 border border-[#F0DFC8] text-[#7D5622] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
+              title="นำกลุ่มนี้กลับเข้าคิวตรวจทีละกลุ่ม"
+            >
+              <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+              <span>คืนค่าเข้าคิว</span>
+            </button>
           ) : (
-            <GitMerge className="w-3.5 h-3.5 shrink-0" />
+            !isSkipped &&
+            onSkipCluster && (
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={() => onSkipCluster(cluster.clusterId)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FAF5EE] hover:bg-[#EFE7DC] disabled:opacity-50 border border-[#E2D5C4] text-[#5D4938] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
+                title="พักกลุ่มนี้ไว้ชั่วคราวเพื่อไปตรวจกลุ่มถัดไป"
+              >
+                <SkipForward className="w-3.5 h-3.5 shrink-0" />
+                <span>ข้ามชั่วคราว</span>
+              </button>
+            )
           )}
-          <span>
-            รวมกลุ่มนี้ ({duplicatesToMerge.length} ตัวซ้ำ ➔ {survivor.id})
-          </span>
-        </button>
+
+          <button
+            type="button"
+            disabled={isMerging || duplicatesToMerge.length === 0}
+            onClick={() => onMergeCluster(cluster)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#DDF0E2] hover:bg-[#CBE7D2] disabled:opacity-50 disabled:cursor-not-allowed border border-[#A8D5BA] text-[#1E5631] text-xs font-extrabold transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            {isMerging ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+            ) : (
+              <GitMerge className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span>
+              รวมกลุ่มนี้ ({duplicatesToMerge.length} ตัวซ้ำ ➔ {survivor.id})
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Member Cards Grid/List */}
@@ -117,7 +170,16 @@ export const DuplicateClusterCard: React.FC<DuplicateClusterCardProps> = ({
             const isExcluded = !isSurvivor && excludedSet.has(ft.id);
             const isRecommended = ft.id === cluster.recommendedSurvivorId;
             const hasDrive = hasRealDriveLink(ft.driveFileUrl);
-            const hasOrig = Boolean(ft.originalUrl?.trim());
+            const cleanDriveUrl = (ft.driveFileUrl || '').trim();
+            const isValidDriveHttpUrl =
+              hasDrive && /^https?:\/\//i.test(cleanDriveUrl);
+            const hasExternalOrig = isDistinctExternalOriginalUrl(
+              ft.originalUrl,
+              ft.driveFileUrl
+            );
+            const externalPlatform = hasExternalOrig
+              ? getExternalSourcePlatformLabel(ft.originalUrl)
+              : null;
             const { punchlineNote } = extractDefaultRankFields(ft);
             const realTags = Array.from(
               new Set((ft.tags || []).filter((t) => !isStagingTagId(t)))
@@ -205,30 +267,64 @@ export const DuplicateClusterCard: React.FC<DuplicateClusterCardProps> = ({
                   )}
                 </div>
 
-                {/* Metadata: Links + EP Usage + Date */}
+                {/* Metadata: Links + Preview + EP Usage + Date */}
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span
-                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border font-semibold ${
-                      hasDrive
-                        ? 'bg-white border-[#C4DEC9] text-[#235732]'
-                        : 'bg-white/80 border-[#EAD8C3] text-[#9A6324]'
-                    }`}
-                  >
-                    <GoogleDriveIcon className="w-2.5 h-2.5 shrink-0" />
-                    <span>{hasDrive ? 'มีลิงก์ Drive' : 'ไม่มี Drive'}</span>
-                  </span>
+                  {isValidDriveHttpUrl ? (
+                    <a
+                      href={cleanDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-semibold bg-white border-[#C4DEC9] text-[#235732] hover:bg-[#E7F4EB] hover:border-[#8EC7A4] transition-colors"
+                      title={`เปิดไฟล์ Google Drive: ${cleanDriveUrl}`}
+                    >
+                      <GoogleDriveIcon className="w-2.5 h-2.5 shrink-0" />
+                      <span>เปิดไฟล์ Drive</span>
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-75" />
+                    </a>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border font-semibold ${
+                        hasDrive
+                          ? 'bg-white border-[#C4DEC9] text-[#235732]'
+                          : 'bg-white/80 border-[#EAD8C3] text-[#9A6324]'
+                      }`}
+                    >
+                      <GoogleDriveIcon className="w-2.5 h-2.5 shrink-0" />
+                      <span>{hasDrive ? 'มีลิงก์ Drive' : 'ไม่มี Drive'}</span>
+                    </span>
+                  )}
 
-                  {hasOrig && (
+                  {onPreviewFootage && (isValidDriveHttpUrl || hasExternalOrig) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPreviewFootage(ft.id);
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FAF2E1] hover:bg-[#F3E5C8] border border-[#DEC190] text-[#6E4919] font-bold transition-colors cursor-pointer"
+                      title="เล่นพรีวิววิดีโอเพื่อเปรียบเทียบคลิปนี้"
+                    >
+                      <Play className="w-2.5 h-2.5 fill-current shrink-0" />
+                      <span>พรีวิว</span>
+                    </button>
+                  )}
+
+                  {hasExternalOrig && (
                     <a
                       href={ft.originalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white border border-[#D4DFEE] text-[#2F538C] hover:bg-[#F3F8FF] font-semibold max-w-[180px]"
-                      title={ft.originalUrl}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white border border-[#D4DFEE] text-[#2F538C] hover:bg-[#F3F8FF] font-semibold max-w-[190px]"
+                      title={`เปิดลิงก์ต้นฉบับ${externalPlatform ? ` (${externalPlatform})` : ''}: ${ft.originalUrl}`}
                     >
                       <Link2 className="w-2.5 h-2.5 shrink-0" />
-                      <span className="truncate">ลิงก์ต้นฉบับ</span>
+                      <span className="truncate">
+                        {externalPlatform
+                          ? `ต้นฉบับ · ${externalPlatform}`
+                          : 'ลิงก์ต้นฉบับ'}
+                      </span>
                       <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                     </a>
                   )}

@@ -95,16 +95,13 @@ export const SeriesNavigationFilterBar: React.FC<SeriesNavigationFilterBarProps>
   }, [categoriesInGroup, seriesSearch, sortField, sortDirection]);
 
   return (
-    <div className="bg-[#FAF7F2] border border-[#E8DFD3] rounded-2xl p-3 sm:p-4 shadow-2xs space-y-3">
+    <div className="bg-[#FAF7F2] border border-[#E8DFD3] rounded-2xl p-3 space-y-2.5 shadow-2xs">
       {/* LEVEL 1: Independent Master Archive Categories */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2 px-0.5">
           <span className="text-xs font-extrabold text-[#2D2926] flex items-center gap-1.5">
             <FolderKanban className="w-3.5 h-3.5 text-[#8A5A22] shrink-0" />
             <span>1. หมวดคลังคลิป</span>
-            <span className="hidden sm:inline text-[11px] font-normal text-[#787066]">
-              · แยกอิสระจากแท็กฟุตเทจ ({archiveCategoryStats.length} หมวด)
-            </span>
           </span>
         </div>
 
@@ -115,25 +112,21 @@ export const SeriesNavigationFilterBar: React.FC<SeriesNavigationFilterBarProps>
               onSelectGroup('ALL');
               onSelectCategory('ALL');
             }}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap border ${
+            className={`px-2.5 sm:px-3 py-1 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap border ${
               selectedGroupId === 'ALL'
                 ? 'bg-[#F8ECDA] text-[#664214] border-[#DEC190] shadow-2xs'
                 : 'bg-white text-[#4D4740] hover:bg-[#FAF3E8] border-[#E4DDD3]'
             }`}
           >
-            <span className="sm:hidden">ทุกหมวด</span>
-            <span className="hidden sm:inline">ทุกหมวดคลังคลิป</span>
+            <span>ทุกหมวด</span>
             <span
-              className={`font-mono tabular-nums text-[10px] ${
+              className={`font-mono tabular-nums text-[11px] ${
                 selectedGroupId === 'ALL'
                   ? 'text-[#5C3A0E] font-bold'
                   : 'text-[#6E665E]'
               }`}
             >
-              <span className="sm:hidden">({episodes.length})</span>
-              <span className="hidden sm:inline">
-                ({totalDistinctSeriesCount} รายการ · {episodes.length} คลิป)
-              </span>
+              · {episodes.length}
             </span>
           </button>
 
@@ -149,7 +142,8 @@ export const SeriesNavigationFilterBar: React.FC<SeriesNavigationFilterBarProps>
                   onSelectGroup(grp.id);
                   onSelectCategory('ALL');
                 }}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs shrink-0 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap border ${
+                title={`${grp.name} (${stat.seriesCount} รายการ · ${stat.episodeCount} คลิป)`}
+                className={`px-2.5 sm:px-3 py-1 rounded-xl text-xs shrink-0 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap border ${
                   isSelected
                     ? 'bg-[#F8ECDA] text-[#664214] border-[#DEC190] font-bold shadow-2xs'
                     : 'bg-white text-[#4D4740] hover:bg-[#FAF3E8] border-[#E4DDD3] font-medium'
@@ -157,16 +151,13 @@ export const SeriesNavigationFilterBar: React.FC<SeriesNavigationFilterBarProps>
               >
                 <span>{grp.name}</span>
                 <span
-                  className={`font-mono tabular-nums text-[10px] ${
+                  className={`font-mono tabular-nums text-[11px] ${
                     isSelected
                       ? 'text-[#5C3A0E] font-bold'
                       : 'text-[#6E665E]'
                   }`}
                 >
-                  <span className="sm:hidden">({stat.episodeCount})</span>
-                  <span className="hidden sm:inline">
-                    ({stat.seriesCount} รายการ · {stat.episodeCount} คลิป)
-                  </span>
+                  · {stat.episodeCount}
                 </span>
               </button>
             );

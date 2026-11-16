@@ -214,7 +214,7 @@ export const PaginationBar: React.FC<PaginationBarProps> = ({
                 value={jumpInput}
                 onChange={(e) => setJumpInput(e.target.value)}
                 onBlur={handleJumpSubmit}
-                className="w-12 h-7 px-1.5 text-center font-mono font-bold text-xs bg-[#F5EFE6] border border-[#DFD3C3] rounded-lg text-[#2D2926] focus:outline-none focus:border-[#9BBF99] focus:bg-white transition-colors"
+                className="w-14 h-7 px-1.5 text-center font-mono font-bold text-xs bg-[#F5EFE6] border border-[#DFD3C3] rounded-lg text-[#2D2926] focus:outline-none focus:border-[#9BBF99] focus:bg-white transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 title={`พิมพ์เลขหน้าระหว่าง 1 ถึง ${totalPages} แล้วกด Enter`}
               />
               <span className="text-[11px] font-mono text-[#8C8277]">

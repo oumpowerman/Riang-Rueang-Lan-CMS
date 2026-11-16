@@ -16,7 +16,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
-import { formatThaiDate } from '../../utils/fileNameGenerator';
+import {
+  formatThaiDate,
+  generateMasterEpisodeFileName,
+} from '../../utils/fileNameGenerator';
 import { deriveSeriesTitleFromEpisodeTitle } from '../../utils/episodeValidator';
 import {
   extractDefaultRankFields,
@@ -32,7 +35,7 @@ import { EpisodeScriptExporterPanel } from './detail/EpisodeScriptExporterPanel'
 import { EpisodeMasterLinksForm } from './detail/EpisodeMasterLinksForm';
 import { EpisodeDeleteConfirmModal } from './detail/EpisodeDeleteConfirmModal';
 import { FootagePickerSubModal } from './detail/FootagePickerSubModal';
-import type { EpisodeRankingSlot } from '../../types/episode.types';
+import type { EpisodeRankingSlot, PublishSlot } from '../../types/episode.types';
 import type { RankNumber } from './builder/builder.types';
 
 export const EpisodeDetailModal: React.FC = () => {
@@ -63,6 +66,9 @@ export const EpisodeDetailModal: React.FC = () => {
   // Editable fields draft state
   const [draftTitle, setDraftTitle] = useState('');
   const [draftSeriesTitle, setDraftSeriesTitle] = useState('');
+  const [draftPublishDate, setDraftPublishDate] = useState('');
+  const [draftPublishSlot, setDraftPublishSlot] =
+    useState<PublishSlot>('MORNING_0600');
   const [draftRankings, setDraftRankings] = useState<EpisodeRankingSlot[]>([]);
 
   // Sub-modal for picking footage
@@ -82,6 +88,8 @@ export const EpisodeDetailModal: React.FC = () => {
     if (episode) {
       setDraftTitle(episode.title || '');
       setDraftSeriesTitle(episode.seriesTitle || '');
+      setDraftPublishDate(episode.publishDate || '');
+      setDraftPublishSlot(episode.publishSlot || 'MORNING_0600');
       setDraftRankings(JSON.parse(JSON.stringify(episode.rankings || [])));
 
       setMasterDriveUrl(episode.masterVideoInfo?.masterDriveUrl || '');
@@ -258,6 +266,15 @@ export const EpisodeDetailModal: React.FC = () => {
     const cleanSeriesTitle =
       draftSeriesTitle.trim() ||
       deriveSeriesTitleFromEpisodeTitle(cleanTitle, episode.seriesTitle);
+    const cleanPublishDate = /^\d{4}-\d{2}-\d{2}$/.test(draftPublishDate)
+      ? draftPublishDate
+      : episode.publishDate;
+    const nextMasterFileName = generateMasterEpisodeFileName(
+      episode.id,
+      cleanPublishDate,
+      draftPublishSlot,
+      cleanTitle
+    );
 
     const resolvedDraftRankings = draftRankings.map((slot) => {
       const ft = slot.footageId ? computedFootageMap[slot.footageId] : null;
@@ -274,7 +291,13 @@ export const EpisodeDetailModal: React.FC = () => {
       ...episode,
       title: cleanTitle,
       seriesTitle: cleanSeriesTitle,
+      publishDate: cleanPublishDate,
+      publishSlot: draftPublishSlot,
       rankings: resolvedDraftRankings,
+      masterVideoInfo: {
+        ...episode.masterVideoInfo,
+        masterFileName: nextMasterFileName,
+      },
     });
     setIsEditMode(false);
     setSavedNotice(true);
@@ -284,6 +307,8 @@ export const EpisodeDetailModal: React.FC = () => {
   const handleCancelEdits = () => {
     setDraftTitle(episode.title || '');
     setDraftSeriesTitle(episode.seriesTitle || '');
+    setDraftPublishDate(episode.publishDate || '');
+    setDraftPublishSlot(episode.publishSlot || 'MORNING_0600');
     setDraftRankings(JSON.parse(JSON.stringify(episode.rankings || [])));
     setIsEditMode(false);
   };
@@ -406,6 +431,10 @@ export const EpisodeDetailModal: React.FC = () => {
                 onChangeTitle={setDraftTitle}
                 seriesTitle={draftSeriesTitle}
                 onChangeSeriesTitle={setDraftSeriesTitle}
+                publishDate={draftPublishDate}
+                onChangePublishDate={setDraftPublishDate}
+                publishSlot={draftPublishSlot}
+                onChangePublishSlot={setDraftPublishSlot}
                 episode={episode}
                 mainTag={tagMap[episode.mainCategoryTagId]}
               />

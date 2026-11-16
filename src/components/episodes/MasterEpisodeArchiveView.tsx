@@ -54,6 +54,8 @@ export const MasterEpisodeArchiveView: React.FC = () => {
   const [batchFixResultCount, setBatchFixResultCount] = useState<number | null>(
     null
   );
+  const [isRankingSummaryOpen, setIsRankingSummaryOpen] = useState(false);
+  const [isThreeTierDrawerOpen, setIsThreeTierDrawerOpen] = useState(false);
 
   // Count how many episodes do not yet conform to "5 อันดับ ... สุดฮา! EP.n" (with exemptions)
   const templateNeedsUpdateCount = useMemo(() => {
@@ -228,18 +230,7 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         batchFixResultCount={batchFixResultCount}
       />
 
-      {/* 2. "5 อันดับ [ชื่อรายการ]" Ranking & Footage Utilization Drawer */}
-      <CategoryUtilizationDrawer
-        categoryRanking={categoryRanking}
-        maxEpisodesInAnyCategory={maxEpisodesInAnyCategory}
-        categoryFilter={categoryFilter}
-        onCategoryFilterChange={setCategoryFilter}
-        launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
-        archiveCategoryMap={archiveCategoryMap}
-        onOpenTagBinding={(row) => setBindingTargetSeriesKey(row.seriesKey)}
-      />
-
-      {/* 3. 2-Level Master Archive Categories & Smart "5 อันดับ" Series Bar */}
+      {/* 2. 2-Level Master Archive Categories & Smart "5 อันดับ" Series Bar */}
       <SeriesNavigationFilterBar
         selectedGroupId={selectedGroupId}
         onSelectGroup={setSelectedGroupId}
@@ -251,42 +242,49 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         onOpenManageCategories={() => setIsCategoryModalOpen(true)}
       />
 
-      {/* 4. Collapsible 3-Tier Footage Tag Filter Drawer (AND / OR) */}
-      <ArchiveThreeTierTagDrawer
-        selectedFootageTagIds={selectedFootageTagIds}
-        onToggleFootageTag={handleToggleFootageTag}
-        onClearFootageTags={handleClearFootageTags}
-        footageTagMatchMode={footageTagMatchMode}
-        onChangeFootageTagMatchMode={setFootageTagMatchMode}
-        tagEpisodeCounts={tagEpisodeCounts}
-        matchedEpisodesCount={sortedEpisodes.length}
-      />
-
-      {/* 5. Tab Views: Series Shelf vs Episodes List */}
+      {/* 3. Tab Views: Episodes List vs Series Shelf */}
       {archiveTab === 'SERIES_SHELF' ? (
-        <SeriesShelfView
-          shelfSeriesItems={shelfSeriesItems}
-          activeSeriesCount={categoryRanking.length}
-          unproducedSeriesCount={unproducedSeriesRanking.length}
-          showUnproducedSeries={showUnproducedSeries}
-          onToggleShowUnproducedSeries={() =>
-            setShowUnproducedSeries((prev) => !prev)
-          }
-          selectedGroupId={selectedGroupId}
-          archiveCategories={archiveCategories}
-          archiveCategoryMap={archiveCategoryMap}
-          onAssignSeriesToCategory={handleAssignSeriesToArchiveCategory}
-          latestEpisodeByCategoryMap={latestEpisodeByCategoryMap}
-          onViewCategoryEpisodes={(seriesKey) => {
-            setCategoryFilter(seriesKey);
-            setArchiveTab('EPISODES');
-          }}
-          launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
-          onOpenManageCategories={() => setIsCategoryModalOpen(true)}
-        />
+        <div className="space-y-3.5">
+          <CategoryUtilizationDrawer
+            isExpanded={isRankingSummaryOpen}
+            onClose={() => setIsRankingSummaryOpen(false)}
+            categoryRanking={categoryRanking}
+            maxEpisodesInAnyCategory={maxEpisodesInAnyCategory}
+            categoryFilter={categoryFilter}
+            onCategoryFilterChange={setCategoryFilter}
+            launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
+            archiveCategoryMap={archiveCategoryMap}
+            onOpenTagBinding={(row) => setBindingTargetSeriesKey(row.seriesKey)}
+          />
+
+          <SeriesShelfView
+            shelfSeriesItems={shelfSeriesItems}
+            activeSeriesCount={categoryRanking.length}
+            unproducedSeriesCount={unproducedSeriesRanking.length}
+            showUnproducedSeries={showUnproducedSeries}
+            onToggleShowUnproducedSeries={() =>
+              setShowUnproducedSeries((prev) => !prev)
+            }
+            selectedGroupId={selectedGroupId}
+            archiveCategories={archiveCategories}
+            archiveCategoryMap={archiveCategoryMap}
+            onAssignSeriesToCategory={handleAssignSeriesToArchiveCategory}
+            latestEpisodeByCategoryMap={latestEpisodeByCategoryMap}
+            onViewCategoryEpisodes={(seriesKey) => {
+              setCategoryFilter(seriesKey);
+              setArchiveTab('EPISODES');
+            }}
+            launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
+            onOpenManageCategories={() => setIsCategoryModalOpen(true)}
+            isRankingSummaryOpen={isRankingSummaryOpen}
+            onToggleRankingSummary={() =>
+              setIsRankingSummaryOpen((prev) => !prev)
+            }
+          />
+        </div>
       ) : (
         <div className="space-y-3.5">
-          {/* Precision Filter Controls Bar */}
+          {/* Precision Search & Consolidated Drawer Triggers Bar */}
           <EpisodeFilterControls
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -317,6 +315,40 @@ export const MasterEpisodeArchiveView: React.FC = () => {
             issueFilterOnly={issueFilterOnly}
             onToggleIssueFilter={() => setIssueFilterOnly((prev) => !prev)}
             issueCount={auditSummary.issueCount}
+            isRankingSummaryOpen={isRankingSummaryOpen}
+            onToggleRankingSummary={() =>
+              setIsRankingSummaryOpen((prev) => !prev)
+            }
+            seriesRankingCount={categoryRanking.length}
+            isThreeTierDrawerOpen={isThreeTierDrawerOpen}
+            onToggleThreeTierDrawer={() =>
+              setIsThreeTierDrawerOpen((prev) => !prev)
+            }
+          />
+
+          {/* Expandable Drawers Opened from the Search Bar */}
+          <CategoryUtilizationDrawer
+            isExpanded={isRankingSummaryOpen}
+            onClose={() => setIsRankingSummaryOpen(false)}
+            categoryRanking={categoryRanking}
+            maxEpisodesInAnyCategory={maxEpisodesInAnyCategory}
+            categoryFilter={categoryFilter}
+            onCategoryFilterChange={setCategoryFilter}
+            launchEpisodeBuilderForCategory={launchEpisodeBuilderForCategory}
+            archiveCategoryMap={archiveCategoryMap}
+            onOpenTagBinding={(row) => setBindingTargetSeriesKey(row.seriesKey)}
+          />
+
+          <ArchiveThreeTierTagDrawer
+            isExpanded={isThreeTierDrawerOpen}
+            onClose={() => setIsThreeTierDrawerOpen(false)}
+            selectedFootageTagIds={selectedFootageTagIds}
+            onToggleFootageTag={handleToggleFootageTag}
+            onClearFootageTags={handleClearFootageTags}
+            footageTagMatchMode={footageTagMatchMode}
+            onChangeFootageTagMatchMode={setFootageTagMatchMode}
+            tagEpisodeCounts={tagEpisodeCounts}
+            matchedEpisodesCount={sortedEpisodes.length}
           />
 
           {/* Cards or Table View with Jump-to-Page Pagination */}

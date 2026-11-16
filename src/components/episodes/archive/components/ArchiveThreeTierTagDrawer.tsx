@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   Check,
   ChevronDown,
+  ChevronUp,
   ChevronsDownUp,
   ChevronsUpDown,
   Filter,
@@ -10,7 +11,6 @@ import {
   RotateCcw,
   Search,
   Sparkles,
-  Tag,
   X,
 } from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
@@ -25,6 +25,8 @@ import { TIER_THEME_CONFIGS } from '../../../tags/three-tier/IndependentTierColu
 import { TagPill, getEntityIcon } from '../../../ui/TagPill';
 
 interface ArchiveThreeTierTagDrawerProps {
+  isExpanded: boolean;
+  onClose: () => void;
   selectedFootageTagIds: string[];
   onToggleFootageTag: (tagId: string) => void;
   onClearFootageTags: () => void;
@@ -37,6 +39,8 @@ interface ArchiveThreeTierTagDrawerProps {
 export const ArchiveThreeTierTagDrawer: React.FC<
   ArchiveThreeTierTagDrawerProps
 > = ({
+  isExpanded,
+  onClose,
   selectedFootageTagIds,
   onToggleFootageTag,
   onClearFootageTags,
@@ -46,7 +50,6 @@ export const ArchiveThreeTierTagDrawer: React.FC<
   matchedEpisodesCount,
 }) => {
   const { tags, tagMap, settings } = useCMS();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [tagSearch, setTagSearch] = useState('');
   const [expandedSubKeys, setExpandedSubKeys] = useState<
     Record<string, boolean>
@@ -269,73 +272,15 @@ export const ArchiveThreeTierTagDrawer: React.FC<
     );
   };
 
+  if (!isExpanded && selectedFootageTagIds.length === 0) {
+    return null;
+  }
+
   return (
     <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl shadow-2xs overflow-hidden">
-      {/* Drawer Header */}
-      <div
-        onClick={() => setIsDrawerOpen((prev) => !prev)}
-        className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-[#FAF7F2] hover:bg-[#F3ECE0] transition-colors cursor-pointer flex items-center justify-between gap-2"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-[#E6F2E6] text-[#224A2D] border border-[#B5D6B3] flex items-center justify-center shrink-0">
-            <Tag className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0 truncate">
-            <span className="text-xs sm:text-sm font-extrabold text-[#2D2926]">
-              <span className="sm:hidden">กรองด้วยแท็กฟุตเทจ 3 ชั้น</span>
-              <span className="hidden sm:inline">
-                ค้นหาคลิปหลักจากแท็กฟุตเทจย่อย 3 ชั้น (Filter by Footage Tags)
-              </span>
-            </span>
-            <span className="hidden lg:inline text-xs text-[#786B5C] ml-2">
-              เช็กว่าคลิป Master ตอนไหนมีฟุตเทจที่ติดแท็ก Tier 1 / Tier 2 / Tier 3 ที่ต้องการ
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {selectedFootageTagIds.length > 0 && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClearFootageTags();
-              }}
-              className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-bold text-[#8E3B3B] bg-[#FDF2F2] border border-[#F5D0D0] rounded-lg hover:bg-[#F9E2E2] cursor-pointer transition-colors whitespace-nowrap"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>ล้าง ({selectedFootageTagIds.length})</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsDrawerOpen((prev) => !prev);
-            }}
-            className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl text-xs font-bold text-[#4D4740] bg-white border border-[#E2D8C9] hover:bg-[#FAF6F0] transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <span className="sm:hidden">
-              {isDrawerOpen ? 'ซ่อนแท็ก' : 'เลือกแท็ก'}
-            </span>
-            <span className="hidden sm:inline">
-              {isDrawerOpen ? 'ซ่อนถาดแท็ก' : 'เปิดเลือกแท็ก 3 ชั้น'}
-            </span>
-            <motion.span
-              animate={{ rotate: isDrawerOpen ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="inline-flex"
-            >
-              <ChevronDown className="w-3.5 h-3.5" />
-            </motion.span>
-          </button>
-        </div>
-      </div>
-
       {/* Active Selected Footage Tags Strip */}
       {selectedFootageTagIds.length > 0 && (
-        <div className="px-3.5 sm:px-4 py-2.5 bg-[#EEF6F0] border-t border-[#CBE3CF] flex flex-wrap items-center justify-between gap-2">
+        <div className="px-3.5 sm:px-4 py-2 bg-[#EEF6F0] flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-extrabold text-[#1F4828] flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-[#2D623C]" />
@@ -362,15 +307,25 @@ export const ArchiveThreeTierTagDrawer: React.FC<
             })}
           </div>
 
-          <span className="text-xs font-mono font-bold text-[#1F4828] tabular-nums">
-            พบ {matchedEpisodesCount} ตอน
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-mono font-bold text-[#1F4828] tabular-nums">
+              พบ {matchedEpisodesCount} ตอน
+            </span>
+            <button
+              type="button"
+              onClick={onClearFootageTags}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-[#8E3B3B] bg-white border border-[#F5D0D0] rounded-lg hover:bg-[#FDF2F2] cursor-pointer transition-colors whitespace-nowrap"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>ล้างแท็ก</span>
+            </button>
+          </div>
         </div>
       )}
 
       {/* Expandable 3-Tier Tag Columns Body */}
       <AnimatePresence initial={false}>
-        {isDrawerOpen && (
+        {isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -378,7 +333,13 @@ export const ArchiveThreeTierTagDrawer: React.FC<
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="border-t border-[#E5DED4] p-3.5 space-y-3 bg-[#FAF8F5]">
+            <div
+              className={`p-3.5 space-y-3 bg-[#FAF8F5] ${
+                selectedFootageTagIds.length > 0
+                  ? 'border-t border-[#E5DED4]'
+                  : ''
+              }`}
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="relative flex-1 min-w-[200px] max-w-md">
                   <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -444,6 +405,14 @@ export const ArchiveThreeTierTagDrawer: React.FC<
                   >
                     <ChevronsDownUp className="w-3.5 h-3.5 text-[#786B5C]" />
                     <span>พับทั้งหมด</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-white hover:bg-[#FAF6F0] text-[#4D4740] border border-[#E2D8C9] transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <span>ซ่อนถาดแท็ก</span>
+                    <ChevronUp className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>

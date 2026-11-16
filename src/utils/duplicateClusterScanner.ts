@@ -63,7 +63,7 @@ function isMeaningfulUrl(url?: string | null): boolean {
   return true;
 }
 
-function isGoogleDriveUrl(url?: string | null): boolean {
+export function isGoogleDriveUrl(url?: string | null): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
   return (
@@ -71,6 +71,37 @@ function isGoogleDriveUrl(url?: string | null): boolean {
     lower.includes('docs.google.com') ||
     extractDriveFileId(url) !== null
   );
+}
+
+/**
+ * Checks whether `originalUrl` is a genuine external social/source link
+ * (e.g., YouTube, TikTok, Facebook, Instagram) and NOT empty, NOT a Google Drive link,
+ * and NOT duplicating `driveFileUrl`.
+ */
+export function isDistinctExternalOriginalUrl(
+  originalUrl?: string | null,
+  driveFileUrl?: string | null
+): boolean {
+  if (!isMeaningfulUrl(originalUrl)) return false;
+  const trimmed = originalUrl!.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  if (isGoogleDriveUrl(trimmed)) return false;
+  if (driveFileUrl && isMeaningfulUrl(driveFileUrl)) {
+    const normOrig = normalizeUrlForComparison(trimmed);
+    const normDrive = normalizeUrlForComparison(driveFileUrl);
+    if (normOrig && normDrive && normOrig === normDrive) return false;
+  }
+  return true;
+}
+
+export function getExternalSourcePlatformLabel(url?: string | null): string | null {
+  if (!url) return null;
+  const lower = url.toLowerCase();
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'YouTube';
+  if (lower.includes('tiktok.com')) return 'TikTok';
+  if (lower.includes('facebook.com') || lower.includes('fb.watch')) return 'Facebook';
+  if (lower.includes('instagram.com')) return 'IG';
+  return null;
 }
 
 export function getDuplicateReasonLabel(reason: DuplicateMatchReason): string {

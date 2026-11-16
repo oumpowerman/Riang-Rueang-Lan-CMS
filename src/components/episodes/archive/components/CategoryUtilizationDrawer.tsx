@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart3, ChevronDown, RotateCcw, Tag } from 'lucide-react';
+import { BarChart3, ChevronUp, RotateCcw, Tag } from 'lucide-react';
 import type { MixRecipeId } from '../../../../utils/collisionDetector';
 import type { ArchiveSeriesCategory } from '../../../../types/tag.types';
 import type { CategoryRankingItem } from '../hooks/useMasterArchiveMetrics';
 
 interface CategoryUtilizationDrawerProps {
+  isExpanded: boolean;
+  onClose: () => void;
   categoryRanking: CategoryRankingItem[];
   maxEpisodesInAnyCategory: number;
   categoryFilter: string;
@@ -16,6 +18,8 @@ interface CategoryUtilizationDrawerProps {
 }
 
 export const CategoryUtilizationDrawer: React.FC<CategoryUtilizationDrawerProps> = ({
+  isExpanded,
+  onClose,
   categoryRanking,
   maxEpisodesInAnyCategory,
   categoryFilter,
@@ -24,99 +28,53 @@ export const CategoryUtilizationDrawer: React.FC<CategoryUtilizationDrawerProps>
   archiveCategoryMap,
   onOpenTagBinding,
 }) => {
-  const [isComparisonExpanded, setIsComparisonExpanded] = useState(false);
-
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl shadow-2xs overflow-hidden">
-      <div
-        onClick={() => setIsComparisonExpanded((prev) => !prev)}
-        className="p-3 sm:p-4 bg-gradient-to-r from-[#FAF7F2] via-[#FDFBF7] to-[#F7F1E5] hover:from-[#F5EFE6] hover:to-[#F3E9D8] transition-colors cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <motion.div
-            whileHover={{ rotate: 8, scale: 1.05 }}
-            className="w-8 h-8 rounded-xl bg-[#F3E9D8] border border-[#DFCEB4] text-[#785324] flex items-center justify-center shrink-0 shadow-2xs"
-          >
-            <BarChart3 className="w-4 h-4" />
-          </motion.div>
-          <div className="min-w-0">
-            <h2 className="text-xs sm:text-sm font-extrabold text-[#2D2926] truncate">
-              <span className="sm:hidden">
-                สรุป {categoryRanking.length} รายการ & สต็อกฟุตเทจ
-              </span>
-              <span className="hidden sm:inline">
-                จัดอันดับรายการ &ldquo;5 อันดับ&rdquo; ที่ผลิตจริง ({categoryRanking.length}{' '}
-                รายการ) & อัตราใช้ฟุตเทจ
-              </span>
-            </h2>
-            <p className="hidden sm:block text-xs text-[#716960]">
-              {isComparisonExpanded
-                ? 'คลิกแถวเพื่อกรองดูคลิปในรายการนั้น หรือกด "+ จัดเพิ่ม" เพื่อนำฟุตเทจไปสร้างตอนใหม่'
-                : 'คลิกเพื่อกางดูตารางสรุปทุกรายการ "5 อันดับ" ว่ามีกี่คลิปและอยู่หมวดคลังคลิปใด'}
-            </p>
-          </div>
-        </div>
+    <AnimatePresence initial={false}>
+      {isExpanded && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden"
+        >
+          <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl shadow-2xs overflow-hidden">
+            {/* Compact Panel Header when opened */}
+            <div className="px-3.5 py-2.5 bg-[#FAF7F2] border-b border-[#E8DFD3] flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <BarChart3 className="w-4 h-4 text-[#785324] shrink-0" />
+                <span className="text-xs sm:text-sm font-extrabold text-[#2D2926] truncate">
+                  สรุปอันดับรายการ 5 อันดับ ({categoryRanking.length} รายการ)
+                </span>
+                <span className="hidden md:inline text-xs text-[#716960]">
+                  · คลิกแถวเพื่อกรองดูคลิป หรือกด + จัดเพิ่ม
+                </span>
+              </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {categoryFilter !== 'ALL' && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCategoryFilterChange('ALL');
-              }}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-[#785324] bg-[#FBF4E6] hover:bg-[#F3E7CE] border border-[#E5D4B3] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span className="hidden sm:inline">แสดงทั้งหมด</span>
-            </button>
-          )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {categoryFilter !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => onCategoryFilterChange('ALL')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#785324] bg-[#FBF4E6] hover:bg-[#F3E7CE] border border-[#E5D4B3] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>แสดงทั้งหมด</span>
+                  </button>
+                )}
 
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsComparisonExpanded((prev) => !prev);
-            }}
-            className={`inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
-              isComparisonExpanded
-                ? 'bg-[#E8F3E8] text-[#244B2F] border-[#A9C7A7] shadow-2xs'
-                : 'bg-white text-[#4D4740] border-[#E2D8C9] hover:bg-[#FAF6F0]'
-            }`}
-          >
-            <span className="sm:hidden">
-              {isComparisonExpanded
-                ? 'ย่อตาราง'
-                : `ดูตาราง (${categoryRanking.length})`}
-            </span>
-            <span className="hidden sm:inline">
-              {isComparisonExpanded
-                ? 'ย่อตารางรายการ'
-                : `ดูสรุปทั้ง ${categoryRanking.length} รายการ`}
-            </span>
-            <motion.span
-              animate={{ rotate: isComparisonExpanded ? 180 : 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 22 }}
-              className="inline-flex"
-            >
-              <ChevronDown className="w-3.5 h-3.5" />
-            </motion.span>
-          </motion.button>
-        </div>
-      </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-[#FAF6F0] text-[#4D4740] border border-[#E2D8C9] transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <span>ย่อตาราง</span>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
 
-      <AnimatePresence initial={false}>
-        {isComparisonExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-[#E8DFD3] p-3 sm:p-4 space-y-2 bg-[#FDFBF7] max-h-[520px] overflow-y-auto scrollbar-earth pr-2">
+            <div className="p-3 sm:p-4 space-y-2 bg-[#FDFBF7] max-h-[480px] overflow-y-auto scrollbar-earth pr-2">
               {/* Concise Legend clarifying Slot Completeness vs Footage Stock */}
               <div className="px-2.5 py-1.5 text-[11px] text-[#6E665E] flex flex-wrap items-center justify-between gap-2 border-b border-[#EFE8DC] pb-2">
                 <span>
@@ -311,9 +269,9 @@ export const CategoryUtilizationDrawer: React.FC<CategoryUtilizationDrawerProps>
                 );
               })}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

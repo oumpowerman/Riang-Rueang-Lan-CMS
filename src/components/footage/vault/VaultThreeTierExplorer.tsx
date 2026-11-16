@@ -260,7 +260,7 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
               {theme.subtitle}
             </p>
           </div>
-          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/80 text-[#524538] border border-black/5 tabular-nums shrink-0">
+          <span className="text-[11px] font-mono font-semibold text-[#5C5042] tabular-nums shrink-0 whitespace-nowrap">
             {totalInTier} แท็ก
           </span>
         </div>
@@ -307,7 +307,7 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                       {subCategory}
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-white text-[#6E5F52] border border-black/10 tabular-nums shrink-0">
+                  <span className="text-[11px] font-mono font-semibold text-[#6E5F52] tabular-nums shrink-0">
                     {subTags.length}
                   </span>
                 </button>
@@ -485,12 +485,12 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
             })}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F4828] bg-white px-2.5 py-1 rounded-xl border border-[#BFE0C8] tabular-nums">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-mono font-bold text-[#1F4828] tabular-nums">
               <span className="hidden sm:inline">พบ {scopedFootageCount} คลิป · พร้อมใช้ {scopedUsableCount} คลิป</span>
-              <span className="sm:hidden">{scopedFootageCount} คลิป (พร้อมใช้ {scopedUsableCount})</span>
+              <span className="sm:hidden">{scopedFootageCount} คลิป · พร้อมใช้ {scopedUsableCount}</span>
               {producibleEpisodesFromCombo > 0
-                ? ` (${producibleEpisodesFromCombo} EP)`
+                ? ` · ${producibleEpisodesFromCombo} EP`
                 : ''}
             </span>
 

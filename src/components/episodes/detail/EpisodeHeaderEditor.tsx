@@ -7,6 +7,10 @@ import {
   Wand2,
   Link2,
   Unlink,
+  Calendar,
+  Sun,
+  Moon,
+  FileVideo,
 } from 'lucide-react';
 import {
   validateEpisodeStandard,
@@ -16,7 +20,11 @@ import {
   DEFAULT_TEMPLATE_OPTIONS,
   formatEpisodeToStandardTemplate,
 } from '../../../utils/episodeTemplateStandardizer';
-import type { Episode } from '../../../types/episode.types';
+import {
+  formatThaiDate,
+  generateMasterEpisodeFileName,
+} from '../../../utils/fileNameGenerator';
+import type { Episode, PublishSlot } from '../../../types/episode.types';
 import type { CategoryTag } from '../../../types/tag.types';
 
 interface EpisodeHeaderEditorProps {
@@ -24,6 +32,10 @@ interface EpisodeHeaderEditorProps {
   onChangeTitle: (val: string) => void;
   seriesTitle: string;
   onChangeSeriesTitle: (val: string) => void;
+  publishDate: string;
+  onChangePublishDate: (val: string) => void;
+  publishSlot: PublishSlot;
+  onChangePublishSlot: (val: PublishSlot) => void;
   episode: Episode;
   mainTag: CategoryTag | undefined;
 }
@@ -33,18 +45,36 @@ export const EpisodeHeaderEditor: React.FC<EpisodeHeaderEditorProps> = ({
   onChangeTitle,
   seriesTitle,
   onChangeSeriesTitle,
+  publishDate,
+  onChangePublishDate,
+  publishSlot,
+  onChangePublishSlot,
   episode,
   mainTag,
 }) => {
   // Auto-sync seriesTitle from title by default (strip EP.x and hashtags)
   const [isManualSeriesOverride, setIsManualSeriesOverride] = useState(false);
 
+  const effectivePublishDate =
+    /^\d{4}-\d{2}-\d{2}$/.test(publishDate) ? publishDate : episode.publishDate;
+
   const currentEpMock: Episode = {
     ...episode,
     title,
     seriesTitle,
+    publishDate: effectivePublishDate,
+    publishSlot,
   };
   const validation = validateEpisodeStandard(currentEpMock);
+  const previewMasterFileName = generateMasterEpisodeFileName(
+    episode.id,
+    effectivePublishDate,
+    publishSlot,
+    title.trim() || episode.title
+  );
+  const hasDateOrSlotChanged =
+    effectivePublishDate !== episode.publishDate ||
+    publishSlot !== episode.publishSlot;
 
   const handleTitleInputChange = (nextTitle: string) => {
     onChangeTitle(nextTitle);
@@ -97,9 +127,9 @@ export const EpisodeHeaderEditor: React.FC<EpisodeHeaderEditorProps> = ({
               {mainTag?.name || 'หมวด'} · EP.{episode.categoryEpisodeNo || 1}
             </span>
           </span>
-          <span className="text-[#8C8277]">
-            รอบเผยแพร่: {episode.publishDate} (
-            {episode.publishSlot === 'MORNING_0600' ? 'เช้า 06:00' : 'เย็น 18:00'})
+          <span className="text-[#8C8277] font-mono tabular-nums">
+            รอบเผยแพร่: {formatThaiDate(effectivePublishDate)} (
+            {publishSlot === 'MORNING_0600' ? 'เช้า 06:00 น.' : 'เย็น 18:00 น.'})
           </span>
         </div>
 
@@ -225,6 +255,88 @@ export const EpisodeHeaderEditor: React.FC<EpisodeHeaderEditorProps> = ({
           <p className="text-[11px] text-[#787066]">
             ระบบใช้ชื่อซีรีส์นี้ในการจัดกลุ่มรายการ &ldquo;5 อันดับ&rdquo; และซิงก์หมวดหมู่กับ YouTube / Kontent OS
           </p>
+        </div>
+
+        {/* Publish Date & Slot Controls */}
+        <div className="pt-2 border-t border-[#EFE8DC] grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* Publish Date Picker */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-bold text-[#2D2926] flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-[#8A5A22]" />
+                <span>วันที่เผยแพร่คลิปหลัก</span>
+              </label>
+              <span className="text-[11px] font-mono tabular-nums text-[#6B4616] font-semibold">
+                {publishDate ? formatThaiDate(publishDate) : 'กรุณาเลือกวันที่'}
+              </span>
+            </div>
+            <input
+              type="date"
+              value={publishDate}
+              onChange={(e) => onChangePublishDate(e.target.value)}
+              className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono tabular-nums font-bold bg-white border border-[#E2D8C9] rounded-xl focus:outline-hidden focus:border-[#C5AB84] focus:ring-2 focus:ring-[#D5C2A5]/30 text-[#2D2926]"
+            />
+          </div>
+
+          {/* Publish Slot Toggle (Morning / Evening) */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[#2D2926] flex items-center gap-1.5">
+              <Sun className="w-3.5 h-3.5 text-[#B57B2E]" />
+              <span>รอบเวลาเผยแพร่</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onChangePublishSlot('MORNING_0600')}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                  publishSlot === 'MORNING_0600'
+                    ? 'bg-[#FAF2E1] text-[#6E4919] border-[#DEC190] shadow-2xs'
+                    : 'bg-white text-[#6E6459] border-[#E2D8C9] hover:bg-[#FAF7F2]'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5 text-[#B57B2E]" />
+                <span>รอบเช้า 06:00</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onChangePublishSlot('EVENING_1800')}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                  publishSlot === 'EVENING_1800'
+                    ? 'bg-[#EDF5F8] text-[#23546E] border-[#BBD6E6] shadow-2xs'
+                    : 'bg-white text-[#6E6459] border-[#E2D8C9] hover:bg-[#FAF7F2]'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5 text-[#4F758B]" />
+                <span>รอบเย็น 18:00</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Master FileName & Cooldown Sync Preview */}
+          <div
+            className={`md:col-span-2 rounded-xl border px-3 py-2.5 text-[11px] flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+              hasDateOrSlotChanged
+                ? 'bg-[#EEF5EE] border-[#BAD8BF] text-[#1C4824]'
+                : 'bg-white border-[#EAE0D2] text-[#6E665E]'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <FileVideo className="w-3.5 h-3.5 shrink-0 opacity-80" />
+              <span className="font-semibold shrink-0">
+                ชื่อไฟล์ Master:
+              </span>
+              <span
+                className="font-mono truncate font-bold text-[#2D2926]"
+                title={previewMasterFileName}
+              >
+                {previewMasterFileName}
+              </span>
+            </div>
+            <span className="shrink-0 font-medium">
+              บันทึกแล้วจะอัปเดตชื่อไฟล์และคำนวณ Cooldown ฟุตเทจใหม่อัตโนมัติ
+            </span>
+          </div>
         </div>
       </div>
     </div>

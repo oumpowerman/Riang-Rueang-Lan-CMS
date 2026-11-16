@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Layers,
+  BarChart3,
+  Tag,
 } from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
 import type { EpisodeProductionTarget } from '../../../../types/episode.types';
@@ -53,6 +55,11 @@ interface EpisodeFilterControlsProps {
   issueFilterOnly?: boolean;
   onToggleIssueFilter?: () => void;
   issueCount?: number;
+  isRankingSummaryOpen?: boolean;
+  onToggleRankingSummary?: () => void;
+  seriesRankingCount?: number;
+  isThreeTierDrawerOpen?: boolean;
+  onToggleThreeTierDrawer?: () => void;
 }
 
 const COMPLETENESS_FILTER_LABELS: Record<EpisodeCompletenessFilter, string> = {
@@ -141,6 +148,11 @@ export const EpisodeFilterControls: React.FC<EpisodeFilterControlsProps> = ({
   issueFilterOnly = false,
   onToggleIssueFilter,
   issueCount = 0,
+  isRankingSummaryOpen = false,
+  onToggleRankingSummary,
+  seriesRankingCount,
+  isThreeTierDrawerOpen = false,
+  onToggleThreeTierDrawer,
 }) => {
   const { tagMap } = useCMS();
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -168,9 +180,9 @@ export const EpisodeFilterControls: React.FC<EpisodeFilterControlsProps> = ({
 
   return (
     <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl p-4 shadow-2xs space-y-3">
-      {/* ROW 1: Full-Width Search + Contextual Filter Trigger */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 min-w-0">
+      {/* ROW 1: Search Input + Consolidated Ranking Summary, 3-Tier Tag Drawer & Secondary Filter Triggers */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 text-[#8C8277] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
@@ -191,31 +203,82 @@ export const EpisodeFilterControls: React.FC<EpisodeFilterControlsProps> = ({
           )}
         </div>
 
-        {/* Toggle button for secondary filters when no main series is selected */}
-        {categoryFilter === 'ALL' && (
-          <button
-            type="button"
-            onClick={() => setIsAdvancedOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
-              showContextualRow
-                ? 'bg-[#FAF2E1] text-[#6B4616] border-[#DEC190]'
-                : 'bg-[#FAF7F2] text-[#5C5349] border-[#E2D8C9] hover:bg-[#F4EFE6] hover:text-[#2D2926]'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5 text-[#8A5A22]" />
-            <span>ตัวกรองย่อย</span>
-            {activeSecondaryCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-md bg-[#E6D0A7] text-[#59380E] font-mono tabular-nums text-[11px] font-bold">
-                {activeSecondaryCount}
+        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
+          {onToggleRankingSummary && (
+            <button
+              type="button"
+              onClick={onToggleRankingSummary}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                isRankingSummaryOpen
+                  ? 'bg-[#FAF2E1] text-[#6B4616] border-[#DEC190] shadow-2xs'
+                  : 'bg-[#FAF7F2] text-[#5C5349] border-[#E2D8C9] hover:bg-[#F4EFE6] hover:text-[#2D2926]'
+              }`}
+              title="กางดูสรุปอันดับรายการ 5 อันดับและอัตราใช้ฟุตเทจ"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-[#8A5A22] shrink-0" />
+              <span>
+                สรุป {(seriesRankingCount ?? categoryRanking.length).toLocaleString()} รายการ
               </span>
-            )}
-            {showContextualRow ? (
-              <ChevronUp className="w-3.5 h-3.5 opacity-70" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-            )}
-          </button>
-        )}
+              {isRankingSummaryOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 opacity-70" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              )}
+            </button>
+          )}
+
+          {onToggleThreeTierDrawer && (
+            <button
+              type="button"
+              onClick={onToggleThreeTierDrawer}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                isThreeTierDrawerOpen || selectedFootageTagIds.length > 0
+                  ? 'bg-[#E8F3E8] text-[#224A2D] border-[#9EC49C] shadow-2xs'
+                  : 'bg-[#FAF7F2] text-[#5C5349] border-[#E2D8C9] hover:bg-[#F4EFE6] hover:text-[#2D2926]'
+              }`}
+              title="เปิดถาดเลือกแท็กฟุตเทจ 3 ชั้นเพื่อค้นหาคลิปหลัก"
+            >
+              <Tag className="w-3.5 h-3.5 text-[#2D633B] shrink-0" />
+              <span>แท็ก 3 ชั้น</span>
+              {selectedFootageTagIds.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-md bg-[#CFE6CF] text-[#1D4227] font-mono tabular-nums text-[11px] font-bold">
+                  {selectedFootageTagIds.length}
+                </span>
+              )}
+              {isThreeTierDrawerOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 opacity-70" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              )}
+            </button>
+          )}
+
+          {/* Toggle button for secondary filters when no main series is selected */}
+          {categoryFilter === 'ALL' && (
+            <button
+              type="button"
+              onClick={() => setIsAdvancedOpen((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                showContextualRow
+                  ? 'bg-[#FAF2E1] text-[#6B4616] border-[#DEC190]'
+                  : 'bg-[#FAF7F2] text-[#5C5349] border-[#E2D8C9] hover:bg-[#F4EFE6] hover:text-[#2D2926]'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5 text-[#8A5A22]" />
+              <span>ตัวกรองย่อย</span>
+              {activeSecondaryCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-md bg-[#E6D0A7] text-[#59380E] font-mono tabular-nums text-[11px] font-bold">
+                  {activeSecondaryCount}
+                </span>
+              )}
+              {showContextualRow ? (
+                <ChevronUp className="w-3.5 h-3.5 opacity-70" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* CONTEXTUAL SECONDARY FILTERS (Subcategory & Production Format) */}

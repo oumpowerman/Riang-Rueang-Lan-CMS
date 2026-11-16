@@ -42,7 +42,7 @@ export const VaultResultsHeaderBar: React.FC<VaultResultsHeaderBarProps> = ({
       <div className="flex items-center gap-2 text-xs text-slate-600 min-w-0">
         {isCustomScope && (
           <>
-            <span className="font-bold text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-md truncate max-w-[140px] sm:max-w-[260px]">
+            <span className="font-bold text-indigo-800 truncate max-w-[160px] sm:max-w-[280px]">
               {activeScopeDescription.label}
             </span>
             <span className="text-slate-300 shrink-0">·</span>

@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   CopyCheck,
-  GitMerge,
-  Loader2,
+  Layers,
+  LayoutList,
+  RotateCcw,
   Search,
-  Sparkles,
+  SkipForward,
   X,
 } from 'lucide-react';
 import { useCMS } from '../../../context/CMSContext';
@@ -19,6 +20,11 @@ import {
 } from '../../../utils/duplicateClusterScanner';
 import { BaseModal } from '../../ui/BaseModal';
 import { DuplicateClusterCard } from './DuplicateClusterCard';
+import {
+  DuplicateMergeFooter,
+  DuplicateModalViewMode,
+} from './DuplicateMergeFooter';
+import { DuplicateQueueNavigator } from './DuplicateQueueNavigator';
 
 interface DuplicateMergeModalProps {
   isOpen: boolean;
@@ -33,10 +39,20 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
   onClose,
   duplicateScan,
 }) => {
-  const { episodes, tagMap, mergeDuplicateFootages } = useCMS();
+  const {
+    episodes,
+    tagMap,
+    mergeDuplicateFootages,
+    previewFootageId,
+    setPreviewFootageId,
+  } = useCMS();
 
+  const [viewMode, setViewMode] =
+    useState<DuplicateModalViewMode>('SINGLE_QUEUE');
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState<ReasonFilter>('ALL');
+  const [skippedClusterIds, setSkippedClusterIds] = useState<string[]>([]);
+  const [activeClusterIndex, setActiveClusterIndex] = useState(0);
   const [survivorByClusterId, setSurvivorByClusterId] = useState<
     Record<string, string>
   >({});
@@ -55,7 +71,14 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
     }
     setLastMergeResult(null);
     setIsConfirmingAutoMergeAll(false);
+    setSkippedClusterIds([]);
+    setActiveClusterIndex(0);
   }, [isOpen]);
+
+  useEffect(() => {
+    setActiveClusterIndex(0);
+    setIsConfirmingAutoMergeAll(false);
+  }, [reasonFilter, searchQuery]);
 
   const filteredClusters = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -73,6 +96,25 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
       );
     });
   }, [duplicateScan.clusters, reasonFilter, searchQuery]);
+
+  const skippedSet = useMemo(
+    () => new Set(skippedClusterIds),
+    [skippedClusterIds]
+  );
+
+  const queueClusters = useMemo(
+    () => filteredClusters.filter((c) => !skippedSet.has(c.clusterId)),
+    [filteredClusters, skippedSet]
+  );
+
+  const skippedInFilteredCount = filteredClusters.length - queueClusters.length;
+
+  const safeActiveIndex =
+    queueClusters.length === 0
+      ? 0
+      : Math.min(activeClusterIndex, queueClusters.length - 1);
+
+  const activeCluster = queueClusters[safeActiveIndex] || null;
 
   const getSelectedSurvivorId = (cluster: DuplicateCluster): string => {
     const chosen = survivorByClusterId[cluster.clusterId];
@@ -116,6 +158,22 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
     });
   };
 
+  const handleSkipCluster = (clusterId: string) => {
+    setIsConfirmingAutoMergeAll(false);
+    setSkippedClusterIds((prev) =>
+      prev.includes(clusterId) ? prev : [...prev, clusterId]
+    );
+  };
+
+  const handleRestoreSkippedCluster = (clusterId: string) => {
+    setSkippedClusterIds((prev) => prev.filter((id) => id !== clusterId));
+  };
+
+  const handleRestoreAllSkipped = () => {
+    setSkippedClusterIds([]);
+    setActiveClusterIndex(0);
+  };
+
   const buildPlanForCluster = (
     cluster: DuplicateCluster
   ): DuplicateMergePlan | null => {
@@ -128,6 +186,10 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
     if (duplicateIds.length === 0) return null;
     return { survivorId, duplicateIds };
   };
+
+  const activeClusterPlan = activeCluster
+    ? buildPlanForCluster(activeCluster)
+    : null;
 
   const allPendingPlans = useMemo(() => {
     return filteredClusters
@@ -149,6 +211,9 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
     try {
       const result = await mergeDuplicateFootages([plan]);
       setLastMergeResult(result);
+      setSkippedClusterIds((prev) =>
+        prev.filter((id) => id !== cluster.clusterId)
+      );
     } finally {
       setIsMerging(false);
     }
@@ -210,7 +275,7 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
       maxWidthClass="max-w-5xl"
       heightClass="max-h-[92dvh]"
       closeOnBackdropClick={!isMerging}
-      closeOnEsc={!isMerging}
+      closeOnEsc={!isMerging && !previewFootageId}
       icon={<CopyCheck className="w-4 h-4" />}
       title="สแกนและจัดการฟุตเทจซ้ำในคลัง"
       subtitle="เลือกตัวหลัก (Survivor) ที่ต้องการเก็บไว้ ระบบจะรวมแท็ก ลิงก์ คำสร้อย และย้ายประวัติ EP ทั้งหมดมาที่ตัวหลักก่อนลบตัวซ้ำอัตโนมัติ"
@@ -228,15 +293,16 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
       }
       headerContent={
         duplicateScan.duplicateClusterCount > 0 ? (
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pt-1">
             {/* Reason Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5 sm:pb-0">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5 lg:pb-0">
               {reasonTabOptions.map((tab) => {
                 const isActive = reasonFilter === tab.id;
                 return (
                   <button
                     key={tab.id}
                     type="button"
+                    disabled={isMerging}
                     onClick={() => setReasonFilter(tab.id)}
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                       isActive
@@ -257,106 +323,91 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
               })}
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64 shrink-0">
-              <Search className="w-3.5 h-3.5 text-[#8A7B6E] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหารหัส FT หรือชื่อคลิป..."
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-[#E2D5C4] rounded-xl text-[#3D332A] focus:outline-none focus:border-[#C27D38]"
-              />
-              {searchQuery && (
+            {/* Mode Switcher + Search Input */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+              <div
+                className="inline-flex items-center bg-[#F4EFE6] border border-[#E4D9CB] rounded-xl p-0.5 self-start sm:self-auto shrink-0"
+                role="tablist"
+                aria-label="รูปแบบการแสดงรายการกลุ่มซ้ำ"
+              >
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A7B6E] hover:text-[#3D332A] cursor-pointer"
+                  role="tab"
+                  aria-selected={viewMode === 'SINGLE_QUEUE'}
+                  disabled={isMerging}
+                  onClick={() => {
+                    setViewMode('SINGLE_QUEUE');
+                    setIsConfirmingAutoMergeAll(false);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                    viewMode === 'SINGLE_QUEUE'
+                      ? 'bg-white border border-[#DFD4C7] text-[#3D332A] shadow-2xs'
+                      : 'text-[#6F6053] hover:text-[#3D332A] border border-transparent'
+                  }`}
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span>ทีละกลุ่ม</span>
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === 'ALL_LIST'}
+                  disabled={isMerging}
+                  onClick={() => setViewMode('ALL_LIST')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                    viewMode === 'ALL_LIST'
+                      ? 'bg-white border border-[#DFD4C7] text-[#3D332A] shadow-2xs'
+                      : 'text-[#6F6053] hover:text-[#3D332A] border border-transparent'
+                  }`}
+                >
+                  <LayoutList className="w-3.5 h-3.5 shrink-0" />
+                  <span>ดูทั้งหมด</span>
+                </button>
+              </div>
+
+              <div className="relative w-full sm:w-56 shrink-0">
+                <Search className="w-3.5 h-3.5 text-[#8A7B6E] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ค้นหารหัส FT หรือชื่อคลิป..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-[#E2D5C4] rounded-xl text-[#3D332A] focus:outline-none focus:border-[#C27D38]"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A7B6E] hover:text-[#3D332A] cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : undefined
       }
       bodyClassName="p-3.5 sm:p-5 bg-[#FAF8F5] space-y-3"
       footer={
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="text-[11px] sm:text-xs text-[#6F6053] font-medium">
-            {duplicateScan.duplicateClusterCount > 0 ? (
-              <span>
-                เลือกแสดง{' '}
-                <strong className="font-mono tabular-nums text-[#3D332A]">
-                  {allPendingPlans.length}
-                </strong>{' '}
-                กลุ่ม · พร้อมยุบรวมและลบตัวซ้ำ{' '}
-                <strong className="font-mono tabular-nums text-[#9B2C38]">
-                  {totalPendingDuplicatesCount}
-                </strong>{' '}
-                คลิป
-              </span>
-            ) : (
-              <span>ไม่พบคลิปที่ชื่อซ้ำหรือลิงก์ซ้ำในคลังแล้ว</span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 flex-wrap">
-            {allPendingPlans.length > 0 && !isConfirmingAutoMergeAll && (
-              <button
-                type="button"
-                disabled={isMerging}
-                onClick={() => setIsConfirmingAutoMergeAll(true)}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-[#E89B4C] hover:bg-[#DC8B38] disabled:opacity-50 text-[#2F1A07] font-extrabold text-xs transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-              >
-                <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  รวมทั้งหมดอัตโนมัติ ({allPendingPlans.length} กลุ่ม · ลบ{' '}
-                  {totalPendingDuplicatesCount} ตัวซ้ำ)
-                </span>
-              </button>
-            )}
-
-            {isConfirmingAutoMergeAll && (
-              <div className="flex items-center gap-1.5 bg-[#FDF1F2] border border-[#F0C8CE] px-2.5 py-1 rounded-xl">
-                <span className="text-xs font-bold text-[#9B2C38]">
-                  ยืนยันรวม {allPendingPlans.length} กลุ่ม (ลบ{' '}
-                  {totalPendingDuplicatesCount} คลิป)?
-                </span>
-                <button
-                  type="button"
-                  disabled={isMerging}
-                  onClick={handleExecuteAutoMergeAll}
-                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#C9404F] hover:bg-[#B23240] text-white font-extrabold text-xs cursor-pointer whitespace-nowrap"
-                >
-                  {isMerging ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <GitMerge className="w-3.5 h-3.5" />
-                  )}
-                  <span>ยืนยันรวมทั้งหมด</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isMerging}
-                  onClick={() => setIsConfirmingAutoMergeAll(false)}
-                  className="px-2 py-1 rounded-lg bg-white border border-[#E2D5C4] text-[#5D4938] text-xs font-bold cursor-pointer"
-                >
-                  ยกเลิก
-                </button>
-              </div>
-            )}
-
-            <button
-              type="button"
-              disabled={isMerging}
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white hover:bg-[#F3ECE2] border border-[#DFD4C7] text-[#3D332A] font-bold text-xs transition-colors cursor-pointer"
-            >
-              ปิด
-            </button>
-          </div>
-        </div>
+        <DuplicateMergeFooter
+          viewMode={viewMode}
+          totalClustersCount={filteredClusters.length}
+          queueClustersCount={queueClusters.length}
+          skippedCount={skippedInFilteredCount}
+          allPendingPlansCount={allPendingPlans.length}
+          totalPendingDuplicatesCount={totalPendingDuplicatesCount}
+          activeCluster={activeCluster}
+          activeClusterPlan={activeClusterPlan}
+          isMerging={isMerging}
+          isConfirmingAutoMergeAll={isConfirmingAutoMergeAll}
+          onSetConfirmingAutoMergeAll={setIsConfirmingAutoMergeAll}
+          onExecuteAutoMergeAll={handleExecuteAutoMergeAll}
+          onMergeActiveCluster={handleMergeSingleCluster}
+          onSkipActiveCluster={handleSkipCluster}
+          onClose={onClose}
+        />
       }
     >
       {/* Result Toast / Banner after Merge */}
@@ -382,7 +433,7 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
         </div>
       )}
 
-      {/* Clusters List or Clean Empty State */}
+      {/* Main Content: Empty / Single Queue / All List */}
       {filteredClusters.length === 0 ? (
         <div className="bg-white border border-[#E8DFD3] rounded-2xl p-8 text-center space-y-2">
           <div className="w-11 h-11 rounded-2xl bg-[#EDF7F1] border border-[#A8D5BA] text-[#2E7D4A] flex items-center justify-center mx-auto">
@@ -399,8 +450,100 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
               : 'ลองล้างคำค้นหาหรือเลือกดูตัวกรองทั้งหมดเพื่อตรวจสอบกลุ่มที่เหลือ'}
           </p>
         </div>
+      ) : viewMode === 'SINGLE_QUEUE' ? (
+        queueClusters.length === 0 || !activeCluster ? (
+          <div className="bg-white border border-[#F0DFC8] rounded-2xl p-8 text-center space-y-3">
+            <div className="w-11 h-11 rounded-2xl bg-[#FEF6E8] border border-[#F0DFC8] text-[#7D5622] flex items-center justify-center mx-auto">
+              <SkipForward className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-extrabold text-[#3D332A]">
+                ข้ามทุกกลุ่มในคิวนี้ไว้ชั่วคราวแล้ว ({skippedInFilteredCount}{' '}
+                กลุ่ม)
+              </h3>
+              <p className="text-xs text-[#7D6E61] max-w-md mx-auto">
+                ข้อมูลฟุตเทจในกลุ่มที่ข้ามยังไม่ถูกลบหรือแก้ไข คุณสามารถดึงกลับมาตรวจต่อทีละกลุ่ม หรือสลับไปดูรายการทั้งหมดได้ทันที
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={handleRestoreAllSkipped}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FEF6E8] hover:bg-[#F9EBD0] border border-[#F0DFC8] text-[#7D5622] text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                <span>เรียกกลุ่มที่ข้ามกลับมาตรวจ ({skippedInFilteredCount})</span>
+              </button>
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={() => setViewMode('ALL_LIST')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white hover:bg-[#F5EFE6] border border-[#DFD4C7] text-[#3D332A] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <LayoutList className="w-3.5 h-3.5 shrink-0" />
+                <span>ดูรายการทั้งหมด</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <DuplicateQueueNavigator
+              currentIndex={safeActiveIndex}
+              totalInQueue={queueClusters.length}
+              skippedCount={skippedInFilteredCount}
+              isMerging={isMerging}
+              onPrev={() =>
+                setActiveClusterIndex(Math.max(0, safeActiveIndex - 1))
+              }
+              onNext={() =>
+                setActiveClusterIndex(
+                  Math.min(queueClusters.length - 1, safeActiveIndex + 1)
+                )
+              }
+              onRestoreSkipped={handleRestoreAllSkipped}
+            />
+
+            <DuplicateClusterCard
+              key={activeCluster.clusterId}
+              cluster={activeCluster}
+              clusterIndex={safeActiveIndex}
+              selectedSurvivorId={getSelectedSurvivorId(activeCluster)}
+              excludedDuplicateIds={getExcludedIds(activeCluster)}
+              episodes={episodes}
+              tagMap={tagMap}
+              isMerging={isMerging}
+              onSelectSurvivor={handleSelectSurvivor}
+              onToggleExcludeDuplicate={handleToggleExcludeDuplicate}
+              onMergeCluster={handleMergeSingleCluster}
+              onSkipCluster={handleSkipCluster}
+              onPreviewFootage={setPreviewFootageId}
+            />
+          </div>
+        )
       ) : (
         <div className="space-y-3">
+          {skippedInFilteredCount > 0 && (
+            <div className="rounded-2xl bg-[#FEF6E8] border border-[#F0DFC8] px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#7D5622]">
+              <span className="font-semibold">
+                มีกลุ่มที่กดข้ามชั่วคราวไว้ในรอบนี้{' '}
+                <strong className="font-mono tabular-nums">
+                  {skippedInFilteredCount}
+                </strong>{' '}
+                กลุ่ม
+              </span>
+              <button
+                type="button"
+                disabled={isMerging}
+                onClick={handleRestoreAllSkipped}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#FAF2E1] border border-[#F0DFC8] text-[#7D5622] font-bold transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <RotateCcw className="w-3 h-3 shrink-0" />
+                <span>คืนค่าทั้งหมดเข้าคิว</span>
+              </button>
+            </div>
+          )}
+
           {filteredClusters.map((cluster, idx) => (
             <DuplicateClusterCard
               key={cluster.clusterId}
@@ -411,9 +554,13 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
               episodes={episodes}
               tagMap={tagMap}
               isMerging={isMerging}
+              isSkipped={skippedSet.has(cluster.clusterId)}
               onSelectSurvivor={handleSelectSurvivor}
               onToggleExcludeDuplicate={handleToggleExcludeDuplicate}
               onMergeCluster={handleMergeSingleCluster}
+              onSkipCluster={handleSkipCluster}
+              onRestoreSkippedCluster={handleRestoreSkippedCluster}
+              onPreviewFootage={setPreviewFootageId}
             />
           ))}
         </div>

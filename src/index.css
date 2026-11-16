@@ -74,19 +74,47 @@
 }
 
 /* ==========================================================================
-   Ultra-Slim 4px Soft Pastel Scrollbars (Minimalist & Calm)
+   Uniform Ultra-Slim 3px Nearly-Invisible Scrollbars (All X & Y Axes)
+   --------------------------------------------------------------------------
+   Note: Tailwind v4 emits `.scrollbar-thin { scrollbar-width: thin; }`, which
+   causes Chromium 121+ to disable `::-webkit-scrollbar` and fall back to the
+   thick dark-grey native scrollbar. Resetting `scrollbar-width: auto` keeps
+   `::-webkit-scrollbar` active everywhere while `@supports (-moz-appearance)`
+   handles Firefox cleanly.
    ========================================================================== */
-*::-webkit-scrollbar,
+*,
+html,
+body,
+.scrollbar-thin,
+.scrollbar-earth,
+.thin-scrollbar,
+.scrollbar-ultraslim {
+  scrollbar-width: auto !important;
+  scrollbar-color: auto !important;
+}
+
+@supports (-moz-appearance: none) {
+  *,
+  html,
+  body,
+  .scrollbar-thin,
+  .scrollbar-earth,
+  .thin-scrollbar,
+  .scrollbar-ultraslim {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(168, 155, 140, 0.16) transparent !important;
+  }
+}
+
 ::-webkit-scrollbar,
 .scrollbar-thin::-webkit-scrollbar,
 .scrollbar-earth::-webkit-scrollbar,
 .thin-scrollbar::-webkit-scrollbar,
 .scrollbar-ultraslim::-webkit-scrollbar {
-  width: 4px !important;
-  height: 4px !important;
+  width: 3px !important;
+  height: 3px !important;
 }
 
-*::-webkit-scrollbar-button,
 ::-webkit-scrollbar-button,
 .scrollbar-thin::-webkit-scrollbar-button,
 .scrollbar-earth::-webkit-scrollbar-button,
@@ -97,36 +125,50 @@
   height: 0 !important;
 }
 
-*::-webkit-scrollbar-track,
 ::-webkit-scrollbar-track,
+::-webkit-scrollbar-track-piece,
+::-webkit-scrollbar-corner,
 .scrollbar-thin::-webkit-scrollbar-track,
 .scrollbar-earth::-webkit-scrollbar-track,
 .thin-scrollbar::-webkit-scrollbar-track,
 .scrollbar-ultraslim::-webkit-scrollbar-track {
   background: transparent !important;
+  border: none !important;
 }
 
-*::-webkit-scrollbar-thumb,
 ::-webkit-scrollbar-thumb,
 .scrollbar-thin::-webkit-scrollbar-thumb,
 .scrollbar-earth::-webkit-scrollbar-thumb,
 .thin-scrollbar::-webkit-scrollbar-thumb,
 .scrollbar-ultraslim::-webkit-scrollbar-thumb {
-  background-color: rgba(188, 176, 162, 0.35) !important;
+  background-color: rgba(168, 155, 140, 0.12) !important;
   border-radius: 9999px !important;
 }
 
-*::-webkit-scrollbar-thumb:hover,
+*:hover::-webkit-scrollbar-thumb,
+.scrollbar-thin:hover::-webkit-scrollbar-thumb,
+.scrollbar-earth:hover::-webkit-scrollbar-thumb,
+.thin-scrollbar:hover::-webkit-scrollbar-thumb,
+.scrollbar-ultraslim:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(168, 155, 140, 0.24) !important;
+}
+
 ::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active,
 .scrollbar-thin::-webkit-scrollbar-thumb:hover,
 .scrollbar-earth::-webkit-scrollbar-thumb:hover,
 .thin-scrollbar::-webkit-scrollbar-thumb:hover,
 .scrollbar-ultraslim::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(150, 136, 120, 0.6) !important;
+  background-color: rgba(140, 127, 112, 0.42) !important;
 }
 
-*::-webkit-scrollbar-corner,
-::-webkit-scrollbar-corner {
-  background: transparent !important;
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}

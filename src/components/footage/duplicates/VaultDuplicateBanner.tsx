@@ -40,39 +40,31 @@ export const VaultDuplicateBanner: React.FC<VaultDuplicateBannerProps> = ({
   ).filter(([, count]) => count > 0);
 
   return (
-    <div className="bg-[#FEF6EC] border border-[#F2D5B3] rounded-2xl p-3 sm:px-4 sm:py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 shadow-2xs">
-      <div className="flex items-start sm:items-center gap-2.5 min-w-0">
-        <div className="w-8 h-8 rounded-xl bg-[#FADDB8] border border-[#ECC08C] text-[#7A4112] flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
-          <CopyCheck className="w-4 h-4" />
+    <div className="bg-[#FEF6EC] border border-[#F2D5B3] rounded-2xl px-3.5 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2 shadow-2xs">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="w-7 h-7 rounded-xl bg-[#FADDB8] border border-[#ECC08C] text-[#7A4112] flex items-center justify-center shrink-0">
+          <CopyCheck className="w-3.5 h-3.5" />
         </div>
 
-        <div className="min-w-0 space-y-1">
-          <div className="text-xs sm:text-sm font-extrabold text-[#5D320E] flex flex-wrap items-center gap-1.5">
-            <span>
-              ตรวจพบฟุตเทจเข้าข่ายซ้ำ{' '}
-              <span className="font-mono tabular-nums">
-                {duplicateScan.duplicateClusterCount}
-              </span>{' '}
-              กลุ่ม
-            </span>
-            <span className="px-2 py-0.5 rounded-lg bg-white/90 border border-[#ECC08C] text-[#7A4112] font-mono tabular-nums text-[11px] font-bold">
-              รวม {duplicateScan.totalItemsInClusters} คลิป (ซ้ำเกิน{' '}
-              {duplicateScan.redundantCount})
-            </span>
+        <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs sm:text-sm">
+          <span className="font-extrabold text-[#5D320E] whitespace-nowrap">
+            พบฟุตเทจเข้าข่ายซ้ำ{' '}
+            <span className="font-mono tabular-nums">
+              {duplicateScan.duplicateClusterCount}
+            </span>{' '}
+            กลุ่ม
+          </span>
 
+          <span className="text-xs text-[#85582E] font-medium font-mono tabular-nums">
+            · รวม {duplicateScan.totalItemsInClusters} คลิป (ซ้ำเกิน{' '}
+            {duplicateScan.redundantCount})
             {activeReasons.map(([reason, count]) => (
-              <span
-                key={reason}
-                className="px-2 py-0.5 rounded-lg bg-[#FFFDF9] border border-[#EFE0CC] text-[#7D5622] text-[11px] font-semibold tabular-nums"
-              >
-                {getDuplicateReasonLabel(reason)} {count}
+              <span key={reason}>
+                {' '}
+                · {getDuplicateReasonLabel(reason)} {count}
               </span>
             ))}
-          </div>
-
-          <p className="text-[11px] sm:text-xs text-[#85582E]">
-            ตรวจสอบเปรียบเทียบ เลือกตัวหลัก และยุบรวมพร้อมย้ายประวัติ EP กับแท็กทั้งหมดได้ทันทีโดยข้อมูลไม่สูญหาย
-          </p>
+          </span>
         </div>
       </div>
 
@@ -80,12 +72,10 @@ export const VaultDuplicateBanner: React.FC<VaultDuplicateBannerProps> = ({
         <button
           type="button"
           onClick={onOpenMergeModal}
-          className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#E89B4C] hover:bg-[#DC8B38] text-[#2F1A07] font-extrabold text-xs transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+          className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E89B4C] hover:bg-[#DC8B38] text-[#2F1A07] font-extrabold text-xs transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
         >
           <GitMerge className="w-3.5 h-3.5 shrink-0" />
-          <span>
-            จัดการและรวมตัวซ้ำ ({duplicateScan.duplicateClusterCount})
-          </span>
+          <span>จัดการตัวซ้ำ ({duplicateScan.duplicateClusterCount})</span>
         </button>
 
         <button
@@ -109,9 +99,7 @@ export const VaultDuplicateBanner: React.FC<VaultDuplicateBannerProps> = ({
           ) : (
             <>
               <Filter className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                ดูเฉพาะคลิปซ้ำ ({duplicateScan.totalItemsInClusters})
-              </span>
+              <span>ดูเฉพาะคลิปซ้ำ</span>
             </>
           )}
         </button>

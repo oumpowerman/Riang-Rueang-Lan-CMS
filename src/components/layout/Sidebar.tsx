@@ -112,15 +112,15 @@ export const Sidebar: React.FC = () => {
           }`}
         >
           <motion.div
-            whileHover={{ rotate: -4, scale: 1.05 }}
+            whileHover={{ rotate: -4, scale: 1.06 }}
             onClick={() => setActiveTab('DASHBOARD')}
-            className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 shadow-xs cursor-pointer ring-2 ring-indigo-100 hover:ring-indigo-300 transition-all bg-amber-50"
+            className="w-11 h-11 flex items-center justify-center shrink-0 cursor-pointer"
             title="กลับหน้าภาพรวม"
           >
             <img
               src={logoImg}
               alt="โลโก้เรียงเรื่องลั่น"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain drop-shadow-xs"
               onError={(e) => {
                 e.currentTarget.src = '/logo.png';
               }}

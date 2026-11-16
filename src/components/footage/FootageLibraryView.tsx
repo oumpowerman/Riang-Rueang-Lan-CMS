@@ -20,23 +20,27 @@ export const FootageLibraryView: React.FC = () => {
   const [isDuplicateMergeModalOpen, setIsDuplicateMergeModalOpen] = useState(false);
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      {/* 0. Duplicate Footage Scanner Alert Banner */}
-      <VaultDuplicateBanner
-        duplicateScan={vault.duplicateScan}
-        actionFilter={vault.actionFilter}
-        onActionFilterChange={vault.setActionFilter}
-        onOpenMergeModal={() => setIsDuplicateMergeModalOpen(true)}
-      />
+    <div className="space-y-3 sm:space-y-4">
+      {(vault.duplicateScan.duplicateClusterCount > 0 ||
+        vault.missingDriveFootages.length > 0) && (
+        <div className="space-y-2">
+          {/* 0. Duplicate Footage Scanner Alert Banner */}
+          <VaultDuplicateBanner
+            duplicateScan={vault.duplicateScan}
+            actionFilter={vault.actionFilter}
+            onActionFilterChange={vault.setActionFilter}
+            onOpenMergeModal={() => setIsDuplicateMergeModalOpen(true)}
+          />
 
-      {/* 0.5 Missing Google Drive / Social Link Queue Banner */}
-      <MissingDriveQueueBanner
-        missingDriveFootages={vault.missingDriveFootages}
-        actionFilter={vault.actionFilter}
-        onActionFilterChange={vault.setActionFilter}
-        onOpenQuickDriveLinker={() => setIsQuickDriveLinkerOpen(true)}
-        onOpenLineOaModal={() => setIsLineOaModalOpen(true)}
-      />
+          {/* 0.5 Missing Google Drive / Social Link Queue Banner */}
+          <MissingDriveQueueBanner
+            missingDriveFootages={vault.missingDriveFootages}
+            actionFilter={vault.actionFilter}
+            onActionFilterChange={vault.setActionFilter}
+            onOpenQuickDriveLinker={() => setIsQuickDriveLinkerOpen(true)}
+          />
+        </div>
+      )}
 
       {/* 1. Header, Quick Actions & Contextual 4-Card KPI Summary */}
       <VaultHeaderKpiSection

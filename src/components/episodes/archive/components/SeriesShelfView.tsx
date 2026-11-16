@@ -1,5 +1,15 @@
 import React from 'react';
-import { Sparkles, ArrowRight, Plus, Eye, EyeOff, FolderKanban } from 'lucide-react';
+import {
+  Sparkles,
+  ArrowRight,
+  Plus,
+  Eye,
+  EyeOff,
+  FolderKanban,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
 import type { MixRecipeId } from '../../../../utils/collisionDetector';
 import type { ArchiveSeriesCategory } from '../../../../types/tag.types';
@@ -20,6 +30,8 @@ interface SeriesShelfViewProps {
   onViewCategoryEpisodes: (seriesKey: string) => void;
   launchEpisodeBuilderForCategory: (catId: string, recipeId?: MixRecipeId) => void;
   onOpenManageCategories: () => void;
+  isRankingSummaryOpen?: boolean;
+  onToggleRankingSummary?: () => void;
 }
 
 export const SeriesShelfView: React.FC<SeriesShelfViewProps> = ({
@@ -36,6 +48,8 @@ export const SeriesShelfView: React.FC<SeriesShelfViewProps> = ({
   onViewCategoryEpisodes,
   launchEpisodeBuilderForCategory,
   onOpenManageCategories,
+  isRankingSummaryOpen = false,
+  onToggleRankingSummary,
 }) => {
   const totalEpisodesShown = shelfSeriesItems.reduce(
     (sum, c) => sum + c.episodeCount,
@@ -69,6 +83,27 @@ export const SeriesShelfView: React.FC<SeriesShelfViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onToggleRankingSummary && (
+            <button
+              type="button"
+              onClick={onToggleRankingSummary}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                isRankingSummaryOpen
+                  ? 'bg-[#FAF2E1] text-[#6B4616] border-[#DEC190] shadow-2xs'
+                  : 'bg-[#FAF7F2] text-[#5C5349] border-[#E2D8C9] hover:bg-[#F3ECE0]'
+              }`}
+              title="กางดูสรุปอันดับรายการ 5 อันดับและอัตราใช้ฟุตเทจ"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-[#8A5A22]" />
+              <span>สรุป {activeSeriesCount.toLocaleString()} รายการ</span>
+              {isRankingSummaryOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 opacity-70" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              )}
+            </button>
+          )}
+
           {/* Toggle 0 EP Unproduced Tags */}
           <button
             type="button"

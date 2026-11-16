@@ -136,11 +136,11 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                 {/* Drawer Header: Brand + Ready Status + Close Button */}
                 <div className="flex items-center justify-between gap-2 pb-3.5 border-b border-slate-100">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-amber-50 ring-2 ring-indigo-100 flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="w-11 h-11 flex items-center justify-center shrink-0">
                       <img
                         src={logoImg}
                         alt="โลโก้เรียงเรื่องลั่น"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain drop-shadow-xs"
                         onError={(e) => {
                           e.currentTarget.src = '/logo.png';
                         }}

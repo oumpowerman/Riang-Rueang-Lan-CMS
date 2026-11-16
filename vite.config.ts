@@ -40,12 +40,6 @@ export default defineConfig(() => {
               type: 'image/png',
               purpose: 'any',
             },
-            {
-              src: '/logo.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
           ],
           share_target: {
             action: '/?share-target=1',

@@ -123,11 +123,10 @@ export const VaultHeaderKpiSection: React.FC<VaultHeaderKpiSectionProps> = ({
                 />
                 <span className="hidden sm:inline">คลิปไม่มีหมวดหมู่</span>
                 <span className="sm:hidden">ไม่มีหมวด</span>
+                <span className="opacity-50">·</span>
                 <span
-                  className={`px-1.5 py-0.5 rounded-md font-mono tabular-nums text-[11px] font-extrabold ${
-                    stagingCount > 0
-                      ? 'bg-amber-400/90 text-slate-950'
-                      : 'bg-slate-200/80 text-slate-600'
+                  className={`font-mono tabular-nums font-extrabold ${
+                    stagingCount > 0 ? 'text-amber-900' : 'text-slate-600'
                   }`}
                 >
                   {stagingCount}
