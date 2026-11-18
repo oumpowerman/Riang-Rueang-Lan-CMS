@@ -59,17 +59,21 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
     }
   }, [isOpen]);
 
-  // Real-time Cloud Sync subscription while modal is mounted
+  // Real-time Cloud Sync subscription only while Config modal is open
   useEffect(() => {
-    const unsub = firestoreService.subscribeSupabaseConfig((cloudConfig) => {
-      if (cloudConfig && (cloudConfig.url || cloudConfig.anonKey)) {
-        const normalized = normalizeSupabaseConfig(cloudConfig);
-        saveSupabaseConfig(normalized, false);
-        if (!isOpen) {
+    if (!isOpen) return;
+    const unsub = firestoreService.subscribeSupabaseConfig(
+      (cloudConfig) => {
+        if (cloudConfig && (cloudConfig.url || cloudConfig.anonKey)) {
+          const normalized = normalizeSupabaseConfig(cloudConfig);
+          saveSupabaseConfig(normalized, false);
           setConfig(normalized);
         }
+      },
+      (err) => {
+        console.warn('Supabase cloud config subscription warning:', err);
       }
-    });
+    );
     return () => unsub();
   }, [isOpen]);
 

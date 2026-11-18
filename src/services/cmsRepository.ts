@@ -38,6 +38,7 @@ const STORAGE_KEYS = {
   CATEGORIES_WIPED: 'rrl_cms_categories_wiped_v1',
   DELETED_TAG_IDS: 'rrl_cms_deleted_tag_ids_v1',
   DELETED_GROUP_IDS: 'rrl_cms_deleted_group_ids_v1',
+  LAST_CLOUD_SYNC_TS: 'rrl_cms_last_cloud_sync_ts_v1',
 };
 
 /**
@@ -505,6 +506,16 @@ export const cmsRepository = {
       episodes: [],
       settings: currentSettings,
     };
+  },
+
+  getLastCloudSyncTimestamp(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(STORAGE_KEYS.LAST_CLOUD_SYNC_TS) || null;
+  },
+
+  setLastCloudSyncTimestamp(ts: string): void {
+    safeLocalStorageSet(STORAGE_KEYS.LAST_CLOUD_SYNC_TS, ts);
+    void idbStorageService.setMeta('last_cloud_sync_ts', ts);
   },
 };
 

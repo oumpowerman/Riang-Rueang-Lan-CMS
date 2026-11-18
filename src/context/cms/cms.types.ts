@@ -24,6 +24,7 @@ import {
 import { MixRecipeId } from '../../utils/collisionDetector';
 import { DuplicateMergePlan } from '../../utils/duplicateClusterScanner';
 import { MergeDuplicateFootagesResult } from './useCMSDuplicateMerge';
+import { SupabaseSyncFilterPreset } from '../../types/supabaseSync.types';
 
 export type ActiveNavTab =
   | 'DASHBOARD'
@@ -148,6 +149,9 @@ export interface CMSContextType {
   setIsYouTubeDateSyncModalOpen: (open: boolean) => void;
   isSupabaseSyncModalOpen: boolean;
   setIsSupabaseSyncModalOpen: (open: boolean) => void;
+  supabaseSyncPresetFilter: SupabaseSyncFilterPreset | null;
+  clearSupabaseSyncPresetFilter: () => void;
+  openSupabaseSyncWithFilter: (preset?: SupabaseSyncFilterPreset | null) => void;
   isSupabaseConfigModalOpen: boolean;
   setIsSupabaseConfigModalOpen: (open: boolean) => void;
   selectedFootageIdsForBatch: string[];

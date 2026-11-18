@@ -9,15 +9,34 @@ import {
   SupabaseSyncRowState,
 } from '../types/supabaseSync.types';
 import {
-  formatEpRemark,
   isValidUUID,
   mapEpisodeToSupabasePayload,
+  SupabasePayloadMapperContext,
 } from '../utils/supabasePayloadMapper';
 import { firestoreService } from '../firebase/firestoreService';
+import {
+  idbStorageService,
+  safeLocalStorageRemove,
+  safeLocalStorageSet,
+} from './idbStorageService';
+import {
+  executeFetchRecentContents,
+  executeFullVerifyContentsCheck,
+  executeSmartDeltaContentsCheck,
+  FullVerifyDedupResult,
+  SmartDeltaDedupResult,
+} from './supabaseDedupService';
+import {
+  notifySupabaseSyncEnd,
+  notifySupabaseSyncStart,
+  verifySupabaseLiveHealth,
+} from './supabaseStatusMonitor';
+
+export type { FullVerifyDedupResult, SmartDeltaDedupResult };
 
 const STORAGE_KEY = 'riangrueanglan_supabase_config_v1';
 const ROW_DRAFTS_STORAGE_KEY = 'riangrueanglan_supabase_row_drafts_v1';
-const TITLE_CHUNK_SIZE = 150;
+const ROW_DRAFTS_IDB_KEY = 'supabase_row_drafts_v1';
 const BATCH_INSERT_SIZE = 50;
 const UPDATE_CONCURRENCY = 5;
 
@@ -38,6 +57,7 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConnectionConfig = {
   defaultIncludePillar: false,
   defaultIncludeCategory: false,
   defaultDescriptionMode: 'AUTO',
+  autoCheckOnModalOpen: false,
 };
 
 /**
@@ -81,6 +101,15 @@ export function normalizeSupabaseConfig(
     defaultTargetPlatforms: platforms,
     defaultIncludePillar: Boolean(parsed.defaultIncludePillar),
     defaultIncludeCategory: Boolean(parsed.defaultIncludeCategory),
+    autoCheckOnModalOpen: Boolean(parsed.autoCheckOnModalOpen),
+    lastDedupCheckedAt:
+      typeof parsed.lastDedupCheckedAt === 'string' && parsed.lastDedupCheckedAt
+        ? parsed.lastDedupCheckedAt
+        : undefined,
+    lastExportSyncedAt:
+      typeof parsed.lastExportSyncedAt === 'string' && parsed.lastExportSyncedAt
+        ? parsed.lastExportSyncedAt
+        : undefined,
     channels:
       Array.isArray(parsed.channels) && parsed.channels.length > 0
         ? parsed.channels
@@ -112,11 +141,8 @@ export function saveSupabaseConfig(
   syncToCloud = true
 ): void {
   const normalized = normalizeSupabaseConfig(config);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-  } catch (err) {
-    console.error('Failed to save Supabase config to localStorage:', err);
-  }
+  safeLocalStorageSet(STORAGE_KEY, JSON.stringify(normalized));
+  void verifySupabaseLiveHealth();
 
   if (syncToCloud) {
     void firestoreService.saveSupabaseConfigToCloud(normalized);
@@ -124,7 +150,7 @@ export function saveSupabaseConfig(
 }
 
 /**
- * Loads per-row draft overrides from localStorage
+ * Loads per-row draft overrides synchronously from localStorage (fast initial hydration)
  */
 export function loadSupabaseRowDrafts(): Record<string, SupabaseRowDraftOverride> {
   try {
@@ -142,17 +168,40 @@ export function loadSupabaseRowDrafts(): Record<string, SupabaseRowDraftOverride
 }
 
 /**
- * Saves per-row draft overrides to localStorage and optionally to Cloud Firestore
+ * Loads per-row draft overrides asynchronously from IndexedDB (scales to 10,000+ rows without 5MB localStorage limit),
+ * falling back to localStorage if IndexedDB is empty.
+ */
+export async function loadSupabaseRowDraftsAsync(): Promise<
+  Record<string, SupabaseRowDraftOverride>
+> {
+  try {
+    const idbDrafts = await idbStorageService.getMeta<
+      Record<string, SupabaseRowDraftOverride>
+    >(ROW_DRAFTS_IDB_KEY);
+    if (idbDrafts && typeof idbDrafts === 'object' && Object.keys(idbDrafts).length > 0) {
+      return idbDrafts;
+    }
+  } catch (err) {
+    console.warn('Failed to load Supabase row drafts from IndexedDB:', err);
+  }
+  return loadSupabaseRowDrafts();
+}
+
+/**
+ * Saves per-row draft overrides safely to IndexedDB + localStorage and optionally to Cloud Firestore
  */
 export function saveSupabaseRowDrafts(
   overrides: Record<string, SupabaseRowDraftOverride>,
   syncToCloud = true
 ): void {
-  try {
-    localStorage.setItem(ROW_DRAFTS_STORAGE_KEY, JSON.stringify(overrides));
-  } catch (err) {
-    console.error('Failed to save Supabase row drafts to localStorage:', err);
+  const serialized = JSON.stringify(overrides);
+  // Write to safe localStorage only when under ~2 MB to avoid crowding other settings keys
+  if (serialized.length <= 2 * 1024 * 1024) {
+    safeLocalStorageSet(ROW_DRAFTS_STORAGE_KEY, serialized);
+  } else {
+    safeLocalStorageRemove(ROW_DRAFTS_STORAGE_KEY);
   }
+  void idbStorageService.setMeta(ROW_DRAFTS_IDB_KEY, overrides);
 
   if (syncToCloud) {
     void firestoreService.saveSupabaseRowDraftsToCloud(overrides);
@@ -160,14 +209,11 @@ export function saveSupabaseRowDrafts(
 }
 
 /**
- * Clears all saved per-row draft overrides in localStorage and Cloud Firestore
+ * Clears all saved per-row draft overrides in localStorage, IndexedDB, and Cloud Firestore
  */
 export function clearSupabaseRowDrafts(syncToCloud = true): void {
-  try {
-    localStorage.removeItem(ROW_DRAFTS_STORAGE_KEY);
-  } catch (err) {
-    console.error('Failed to clear Supabase row drafts from localStorage:', err);
-  }
+  safeLocalStorageRemove(ROW_DRAFTS_STORAGE_KEY);
+  void idbStorageService.setMeta(ROW_DRAFTS_IDB_KEY, {});
 
   if (syncToCloud) {
     void firestoreService.saveSupabaseRowDraftsToCloud({});
@@ -175,13 +221,14 @@ export function clearSupabaseRowDrafts(syncToCloud = true): void {
 }
 
 /**
- * Extracts only the fields that differ from the default row state so the Cloud payload stays compact
+ * Extracts ONLY the fields that actually differ from the default row state
+ * so per-row overrides stay ~10x smaller for Cloud 1 MB budget & 10,000+ scale.
  */
 export function extractRowDraftOverride(
   row: SupabaseSyncRowState,
   config: SupabaseConnectionConfig
 ): SupabaseRowDraftOverride | null {
-  const defaultIsSelected = row.matchStatus !== 'DUPLICATE';
+  const defaultIsSelected = row.matchStatus === 'NEW';
   const defaultChannelId = config.targetChannelId || '';
   const defaultStatus = config.defaultStatus || '01_IDEA/DRAFT_💡';
   const defaultPlatforms =
@@ -196,30 +243,47 @@ export function extractRowDraftOverride(
     row.targetPlatforms.length !== defaultPlatforms.length ||
     row.targetPlatforms.some((p) => !defaultPlatforms.includes(p));
 
-  const hasDiff =
-    row.isSelected !== defaultIsSelected ||
-    row.channelId !== defaultChannelId ||
-    row.status !== defaultStatus ||
-    platformsChanged ||
-    row.includeAssets !== defaultIncludeAssets ||
-    row.includePillar !== defaultIncludePillar ||
-    row.includeCategory !== defaultIncludeCategory ||
-    Boolean(row.description.trim()) ||
-    row.upsertMode !== 'SKIP';
+  const override: SupabaseRowDraftOverride = {};
+  let hasDiff = false;
 
-  if (!hasDiff) return null;
+  if (row.isSelected !== defaultIsSelected) {
+    override.isSelected = row.isSelected;
+    hasDiff = true;
+  }
+  if (row.channelId !== defaultChannelId) {
+    override.channelId = row.channelId;
+    hasDiff = true;
+  }
+  if (row.status !== defaultStatus) {
+    override.status = row.status;
+    hasDiff = true;
+  }
+  if (platformsChanged) {
+    override.targetPlatforms = row.targetPlatforms;
+    hasDiff = true;
+  }
+  if (row.includeAssets !== defaultIncludeAssets) {
+    override.includeAssets = row.includeAssets;
+    hasDiff = true;
+  }
+  if (row.includePillar !== defaultIncludePillar) {
+    override.includePillar = row.includePillar;
+    hasDiff = true;
+  }
+  if (row.includeCategory !== defaultIncludeCategory) {
+    override.includeCategory = row.includeCategory;
+    hasDiff = true;
+  }
+  if (row.description && row.description.trim()) {
+    override.description = row.description;
+    hasDiff = true;
+  }
+  if (row.upsertMode !== 'SKIP') {
+    override.upsertMode = row.upsertMode;
+    hasDiff = true;
+  }
 
-  return {
-    isSelected: row.isSelected,
-    channelId: row.channelId,
-    status: row.status,
-    targetPlatforms: row.targetPlatforms,
-    includeAssets: row.includeAssets,
-    includePillar: row.includePillar,
-    includeCategory: row.includeCategory,
-    description: row.description,
-    upsertMode: row.upsertMode,
-  };
+  return hasDiff ? override : null;
 }
 
 /**
@@ -261,6 +325,7 @@ export async function testSupabaseConnection(
     };
   }
 
+  notifySupabaseSyncStart('กำลังทดสอบการเชื่อมต่อ Kontent OS...');
   try {
     // 1. Test query on `contents` table
     const { error: contentsErr } = await client
@@ -269,9 +334,11 @@ export async function testSupabaseConnection(
       .limit(1);
 
     if (contentsErr) {
+      const msg = `เชื่อมต่อไม่สำเร็จกับตาราง contents: ${contentsErr.message}`;
+      notifySupabaseSyncEnd(false, msg);
       return {
         success: false,
-        message: `เชื่อมต่อไม่สำเร็จกับตาราง contents: ${contentsErr.message}`,
+        message: msg,
       };
     }
 
@@ -293,142 +360,104 @@ export async function testSupabaseConnection(
       // Channels query is optional if RLS prevents reading channels
     }
 
+    const okMsg =
+      'เชื่อมต่อกับฐานข้อมูล Supabase สำเร็จ พร้อมเข้าถึงตาราง contents';
+    notifySupabaseSyncEnd(true, okMsg);
     return {
       success: true,
-      message: 'เชื่อมต่อกับฐานข้อมูล Supabase สำเร็จ พร้อมเข้าถึงตาราง contents',
+      message: okMsg,
       detectedChannels,
     };
   } catch (err: any) {
+    const errMsg = `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err.message || String(err)}`;
+    notifySupabaseSyncEnd(false, errMsg);
     return {
       success: false,
-      message: `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err.message || String(err)}`,
+      message: errMsg,
     };
   }
 }
 
 /**
- * Enterprise-grade Chunked Batch Deduplication Check
- * Scales to 10,000+ or 100,000+ records in Supabase by querying `.in('title', chunk)`
- * and `.in('remark', remarkChunk)` in batches of 150 items rather than relying on `.limit(1000)`.
+ * Smart Incremental + Delta Sync Dedup Check (delegated to supabaseDedupService)
+ */
+export async function fetchSmartDeltaContentsForEpisodes(
+  config: SupabaseConnectionConfig,
+  episodes: Episode[],
+  sinceIso?: string,
+  onProgress?: (info: {
+    completedChunks: number;
+    totalChunks: number;
+    label: string;
+  }) => void
+): Promise<SmartDeltaDedupResult> {
+  notifySupabaseSyncStart('กำลังเช็คคลิปใหม่และดึงข้อมูล Delta...');
+  try {
+    const res = await executeSmartDeltaContentsCheck(
+      createSupabaseClient(config),
+      episodes,
+      sinceIso,
+      onProgress
+    );
+    notifySupabaseSyncEnd(true, 'เช็คคลิปใหม่และซิงก์ข้อมูลล่าสุดเรียบร้อย');
+    return res;
+  } catch (err: any) {
+    notifySupabaseSyncEnd(false, err?.message);
+    throw err;
+  }
+}
+
+/**
+ * Full Re-Verify Dedup Check (delegated to supabaseDedupService)
+ */
+export async function fetchFullVerifyContentsForEpisodes(
+  config: SupabaseConnectionConfig,
+  episodes: Episode[],
+  onProgress?: (info: {
+    completedChunks: number;
+    totalChunks: number;
+    label: string;
+  }) => void
+): Promise<FullVerifyDedupResult> {
+  notifySupabaseSyncStart('กำลังสแกนทวนสอบข้อมูลทั้งฐานข้อมูล...');
+  try {
+    const res = await executeFullVerifyContentsCheck(
+      createSupabaseClient(config),
+      episodes,
+      onProgress
+    );
+    notifySupabaseSyncEnd(
+      res.verificationSucceeded,
+      res.verificationSucceeded
+        ? 'ทวนสอบฐานข้อมูล Kontent OS เรียบร้อย'
+        : 'การเชื่อมต่อขัดข้องบางส่วนขณะทวนสอบ'
+    );
+    return res;
+  } catch (err: any) {
+    notifySupabaseSyncEnd(false, err?.message);
+    throw err;
+  }
+}
+
+/**
+ * Legacy-compatible full fetch wrapper
  */
 export async function fetchExistingContentsForEpisodes(
   config: SupabaseConnectionConfig,
   episodes: Episode[],
-  channelId?: string,
-  onProgress?: (info: { completedChunks: number; totalChunks: number; label: string }) => void
+  _channelId?: string,
+  onProgress?: (info: {
+    completedChunks: number;
+    totalChunks: number;
+    label: string;
+  }) => void
 ): Promise<any[]> {
-  const client = createSupabaseClient(config);
-  if (!client || episodes.length === 0) return [];
-
-  const validChannelId =
-    channelId && isValidUUID(channelId.trim()) ? channelId.trim() : null;
-
-  const mergedMap = new Map<string, any>();
-
-  // Extract unique titles and expected EP_REF remarks from local episodes
-  const uniqueTitles = Array.from(
-    new Set(
-      episodes
-        .map((ep) => ep.title?.trim())
-        .filter((t): t is string => Boolean(t))
-    )
+  const res = await fetchFullVerifyContentsForEpisodes(
+    config,
+    episodes,
+    onProgress
   );
-
-  const uniqueRemarks = Array.from(
-    new Set(
-      episodes
-        .map((ep) => (ep.id ? formatEpRemark(ep.id) : null))
-        .filter((r): r is string => Boolean(r))
-    )
-  );
-
-  const titleChunks = chunkArray(uniqueTitles, TITLE_CHUNK_SIZE);
-  const remarkChunks = chunkArray(uniqueRemarks, TITLE_CHUNK_SIZE);
-  const totalChunks = Math.max(1, titleChunks.length + remarkChunks.length);
-  let completedChunks = 0;
-
-  try {
-    // 1. Query by Title chunks (.in('title', chunk))
-    for (let i = 0; i < titleChunks.length; i++) {
-      const chunk = titleChunks[i];
-      onProgress?.({
-        completedChunks,
-        totalChunks,
-        label: `กำลังตรวจสอบชื่อคลิปแบบ Batch (${i + 1}/${titleChunks.length})...`,
-      });
-
-      let query = client
-        .from('contents')
-        .select('id, title, status, published_links, created_at, tags, channel_id, remark')
-        .in('title', chunk);
-
-      if (validChannelId) {
-        query = query.eq('channel_id', validChannelId);
-      }
-
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        data.forEach((rec) => {
-          if (rec && rec.id) mergedMap.set(rec.id, rec);
-        });
-      }
-
-      completedChunks++;
-    }
-
-    // 2. Query by immutable EP Reference tag in remark (.in('remark', chunk))
-    // This catches episodes even if their title was renamed after being exported
-    for (let i = 0; i < remarkChunks.length; i++) {
-      const chunk = remarkChunks[i];
-      onProgress?.({
-        completedChunks,
-        totalChunks,
-        label: `กำลังตรวจสอบรหัสอ้างอิง EP (${i + 1}/${remarkChunks.length})...`,
-      });
-
-      let query = client
-        .from('contents')
-        .select('id, title, status, published_links, created_at, tags, channel_id, remark')
-        .in('remark', chunk);
-
-      if (validChannelId) {
-        query = query.eq('channel_id', validChannelId);
-      }
-
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        data.forEach((rec) => {
-          if (rec && rec.id) mergedMap.set(rec.id, rec);
-        });
-      }
-
-      completedChunks++;
-    }
-
-    // 3. Lightweight recent records fetch (up to 1,000) to support published_links URL matching
-    // and case-insensitive title variations
-    let recentQuery = client
-      .from('contents')
-      .select('id, title, status, published_links, created_at, tags, channel_id, remark')
-      .order('created_at', { ascending: false })
-      .limit(1000);
-
-    if (validChannelId) {
-      recentQuery = recentQuery.eq('channel_id', validChannelId);
-    }
-
-    const { data: recentData, error: recentErr } = await recentQuery;
-    if (!recentErr && Array.isArray(recentData)) {
-      recentData.forEach((rec) => {
-        if (rec && rec.id) mergedMap.set(rec.id, rec);
-      });
-    }
-
-    return Array.from(mergedMap.values());
-  } catch (err) {
-    console.error('Failed during chunked deduplication check:', err);
-    return Array.from(mergedMap.values());
-  }
+  return res.records;
 }
 
 /**
@@ -438,30 +467,11 @@ export async function fetchExistingContents(
   config: SupabaseConnectionConfig,
   channelId?: string
 ): Promise<any[]> {
-  const client = createSupabaseClient(config);
-  if (!client) return [];
-
-  try {
-    let query = client
-      .from('contents')
-      .select('id, title, status, published_links, created_at, tags, channel_id, remark')
-      .order('created_at', { ascending: false })
-      .limit(1000);
-
-    if (channelId && isValidUUID(channelId.trim())) {
-      query = query.eq('channel_id', channelId.trim());
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      console.warn('Error fetching existing contents from Supabase:', error);
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    console.error('Failed to query existing contents:', err);
-    return [];
-  }
+  return executeFetchRecentContents(
+    createSupabaseClient(config),
+    config,
+    channelId
+  );
 }
 
 /**
@@ -473,7 +483,8 @@ export async function fetchExistingContents(
 export async function batchSyncToSupabase(
   config: SupabaseConnectionConfig,
   rows: SupabaseSyncRowState[],
-  onProgress?: (progress: SupabaseSyncProgress) => void
+  onProgress?: (progress: SupabaseSyncProgress) => void,
+  mapperContext?: SupabasePayloadMapperContext
 ): Promise<SupabaseSyncReport> {
   const client = createSupabaseClient(config);
   if (!client) {
@@ -492,26 +503,34 @@ export async function batchSyncToSupabase(
 
   const newRows = selectedRows.filter((r) => r.matchStatus === 'NEW');
   const duplicateSkipRows = selectedRows.filter(
-    (r) => r.matchStatus === 'DUPLICATE' && r.upsertMode === 'SKIP'
+    (r) =>
+      (r.matchStatus === 'DUPLICATE' || r.matchStatus === 'SENT') &&
+      r.upsertMode === 'SKIP'
   );
   const duplicateUpdateRows = selectedRows.filter(
-    (r) => r.matchStatus === 'DUPLICATE' && r.upsertMode === 'UPDATE'
+    (r) =>
+      (r.matchStatus === 'DUPLICATE' || r.matchStatus === 'SENT') &&
+      r.upsertMode === 'UPDATE'
   );
 
+  notifySupabaseSyncStart(
+    `กำลังส่งออกข้อมูลสู่ Kontent OS (${total} รายการ)...`
+  );
   onProgress?.({
     phase: 'SYNCING',
-    phaseLabel: `กำลังเตรียมส่งข้อมูลแบบ Batch สู่ตาราง public.contents (${total} รายการ)...`,
+    phaseLabel: `กำลังเตรียมส่งข้อมูลแบบ Batch สู่ Kontent OS (${total} รายการ)...`,
     completedItems: 0,
     totalItems: total,
     percent: 0,
   });
 
-  // 1. Handle skipped duplicate rows immediately
+  // 1. Handle skipped duplicate/sent rows immediately
   for (const skipRow of duplicateSkipRows) {
     skippedCount++;
     completedItems++;
     reportItems.push({
       id: skipRow.existingRecordId,
+      episodeId: skipRow.episode.id,
       title: skipRow.episode.title,
       action: 'SKIPPED',
     });
@@ -523,7 +542,9 @@ export async function batchSyncToSupabase(
 
     for (let cIdx = 0; cIdx < insertChunks.length; cIdx++) {
       const chunk = insertChunks[cIdx];
-      const payloads = chunk.map((row) => mapEpisodeToSupabasePayload(row, config));
+      const payloads = chunk.map((row) =>
+        mapEpisodeToSupabasePayload(row, config, mapperContext)
+      );
 
       onProgress?.({
         phase: 'SYNCING',
@@ -549,6 +570,9 @@ export async function batchSyncToSupabase(
             completedItems++;
             reportItems.push({
               id: insertedData[idx]?.id,
+              episodeId: row.episode.id,
+              channelId: payloads[idx]?.channel_id || row.channelId || '',
+              status: payloads[idx]?.status || row.status,
               title: row.episode.title,
               action: 'INSERTED',
             });
@@ -568,6 +592,7 @@ export async function batchSyncToSupabase(
               if (singleErr) {
                 failedCount++;
                 reportItems.push({
+                  episodeId: singleRow.episode.id,
                   title: singleRow.episode.title,
                   action: 'FAILED',
                   error: singleErr.message,
@@ -576,6 +601,9 @@ export async function batchSyncToSupabase(
                 insertedCount++;
                 reportItems.push({
                   id: singleData?.id,
+                  episodeId: singleRow.episode.id,
+                  channelId: singlePayload.channel_id || singleRow.channelId || '',
+                  status: singlePayload.status || singleRow.status,
                   title: singleRow.episode.title,
                   action: 'INSERTED',
                 });
@@ -583,6 +611,7 @@ export async function batchSyncToSupabase(
             } catch (rowErr: any) {
               failedCount++;
               reportItems.push({
+                episodeId: singleRow.episode.id,
                 title: singleRow.episode.title,
                 action: 'FAILED',
                 error: rowErr.message || 'Insert failed',
@@ -597,6 +626,7 @@ export async function batchSyncToSupabase(
           failedCount++;
           completedItems++;
           reportItems.push({
+            episodeId: row.episode.id,
             title: row.episode.title,
             action: 'FAILED',
             error: chunkErr.message || 'Network batch error',
@@ -609,7 +639,7 @@ export async function batchSyncToSupabase(
     }
   }
 
-  // 3. Concurrent Batched Updates for DUPLICATE rows set to UPDATE
+  // 3. Concurrent Batched Updates for DUPLICATE/SENT rows set to UPDATE
   if (duplicateUpdateRows.length > 0) {
     const updateChunks = chunkArray(duplicateUpdateRows, UPDATE_CONCURRENCY);
 
@@ -631,13 +661,18 @@ export async function batchSyncToSupabase(
             skippedCount++;
             completedItems++;
             reportItems.push({
+              episodeId: row.episode.id,
               title: row.episode.title,
               action: 'SKIPPED',
             });
             return;
           }
 
-          const payload = mapEpisodeToSupabasePayload(row, config);
+          const payload = mapEpisodeToSupabasePayload(
+            row,
+            config,
+            mapperContext
+          );
 
           try {
             const { error: updateErr } = await client
@@ -664,6 +699,7 @@ export async function batchSyncToSupabase(
               failedCount++;
               reportItems.push({
                 id: row.existingRecordId,
+                episodeId: row.episode.id,
                 title: row.episode.title,
                 action: 'FAILED',
                 error: updateErr.message,
@@ -672,6 +708,9 @@ export async function batchSyncToSupabase(
               updatedCount++;
               reportItems.push({
                 id: row.existingRecordId,
+                episodeId: row.episode.id,
+                channelId: payload.channel_id || row.channelId || '',
+                status: payload.status || row.status,
                 title: row.episode.title,
                 action: 'UPDATED',
               });
@@ -680,6 +719,7 @@ export async function batchSyncToSupabase(
             failedCount++;
             reportItems.push({
               id: row.existingRecordId,
+              episodeId: row.episode.id,
               title: row.episode.title,
               action: 'FAILED',
               error: err.message || 'Update network error',
@@ -691,6 +731,13 @@ export async function batchSyncToSupabase(
       );
     }
   }
+
+  notifySupabaseSyncEnd(
+    failedCount === 0 || insertedCount + updatedCount > 0,
+    failedCount === 0
+      ? `ส่งออกสำเร็จ (${insertedCount + updatedCount} รายการ)`
+      : `ส่งออกเสร็จสิ้น (พบข้อผิดพลาด ${failedCount} รายการ)`
+  );
 
   onProgress?.({
     phase: 'DONE',

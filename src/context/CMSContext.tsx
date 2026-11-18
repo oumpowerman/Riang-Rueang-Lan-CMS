@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { ArchiveSummaryStats, firestoreService } from '../firebase/firestoreService';
 import { idbStorageService } from '../services/idbStorageService';
+import { cmsRepository } from '../services/cmsRepository';
 import { evaluateEpisodeCompleteness } from '../utils/episodeValidator';
 import { extractEpisodeSeriesInfo } from '../utils/seriesExtractor';
 import {
@@ -145,6 +146,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastSyncedSummarySigRef.current = sig;
 
       setArchiveSummaryStats(nextStats);
+      cmsRepository.setLastCloudSyncTimestamp(nextStats.updatedAt);
       void idbStorageService.setMeta('archive_summary_stats', nextStats);
       void firestoreService.saveArchiveSummaryStats(nextStats);
     }, 800);

@@ -158,120 +158,163 @@ export function useCMSCloudAndStorageSync(
       flushPendingSnapshots();
     });
 
+    const handleSubError = (sourceName: string, err: Error) => {
+      setIsCloudConnected(false);
+      setIsCloudSynced(false);
+      console.warn(`Firestore ${sourceName} subscription note:`, err?.message || err);
+    };
+
+    let isDeltaSyncing = false;
+
+    const performSmartSync = async (cloudSummary: ArchiveSummaryStats) => {
+      if (isDeltaSyncing || isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
+        return;
+      }
+      isDeltaSyncing = true;
+
+      try {
+        const localSyncTs = cmsRepository.getLastCloudSyncTimestamp();
+        const hasLocalFootage = footageCountRef.current > 0;
+        const hasLocalEpisodes = episodesCountRef.current > 0;
+        const isFreshMachine = !hasLocalFootage && !hasLocalEpisodes;
+
+        // Populate serverCounts directly from the summary stats (zero extra getCountFromServer reads)
+        setServerCounts({
+          totalEpisodes: cloudSummary.totalEpisodes,
+          totalFootage: cloudSummary.totalFootage,
+          totalSources: cloudSummary.totalSources,
+          fetchedAt: cloudSummary.updatedAt || new Date().toISOString(),
+        });
+
+        // 1. If timestamps match and local cache has data -> EXACT MATCH! 0 collection reads!
+        if (!isFreshMachine && localSyncTs && cloudSummary.updatedAt && localSyncTs === cloudSummary.updatedAt) {
+          setIsCloudConnected(true);
+          setIsCloudSynced(true);
+          hasFullCloudEpisodesRef.current = true;
+          hasFullCloudFootageRef.current = true;
+          hasFullCloudSourcesRef.current = true;
+          return;
+        }
+
+        // 2. If local cache already has data but timestamp wasn't set yet, adopt cloud timestamp
+        if (!isFreshMachine && !localSyncTs && cloudSummary.updatedAt) {
+          cmsRepository.setLastCloudSyncTimestamp(cloudSummary.updatedAt);
+          setIsCloudConnected(true);
+          setIsCloudSynced(true);
+          hasFullCloudEpisodesRef.current = true;
+          hasFullCloudFootageRef.current = true;
+          hasFullCloudSourcesRef.current = true;
+          return;
+        }
+
+        // 3. If cold brand-new machine with empty local cache -> Full initial seed/fetch
+        if (isFreshMachine) {
+          const [allFootages, allEpisodes, allSources, allCats, allGroups] = await Promise.all([
+            firestoreService.fetchFootagesDelta(),
+            firestoreService.fetchEpisodesDelta(),
+            firestoreService.fetchSourcesDelta(),
+            firestoreService.fetchCategoriesDelta(),
+            firestoreService.fetchCategoryGroupsDelta(),
+          ]);
+
+          if (allFootages.length > 0) {
+            setFootage(allFootages);
+            cmsRepository.saveFootage(allFootages);
+            hasFullCloudFootageRef.current = true;
+          }
+          if (allEpisodes.length > 0) {
+            setEpisodes(allEpisodes);
+            cmsRepository.saveEpisodes(allEpisodes);
+            hasFullCloudEpisodesRef.current = true;
+          }
+          if (allSources.length > 0) {
+            setSources(allSources);
+            cmsRepository.saveSources(allSources);
+            hasFullCloudSourcesRef.current = true;
+          }
+          if (allCats.length > 0) {
+            setTags(allCats);
+            cmsRepository.saveTags(allCats);
+          }
+          if (allGroups.length > 0) {
+            setCategoryGroups(allGroups);
+            cmsRepository.saveCategoryGroups(allGroups);
+          }
+          cmsRepository.setLastCloudSyncTimestamp(cloudSummary.updatedAt || new Date().toISOString());
+          setIsCloudConnected(true);
+          setIsCloudSynced(true);
+          return;
+        }
+
+        // 4. Incremental Delta Sync (Only fetch items modified since localSyncTs)
+        if (localSyncTs) {
+          const [deltaFootages, deltaEpisodes, deltaSources] = await Promise.all([
+            firestoreService.fetchFootagesDelta(localSyncTs),
+            firestoreService.fetchEpisodesDelta(localSyncTs),
+            firestoreService.fetchSourcesDelta(localSyncTs),
+          ]);
+
+          if (deltaFootages.length > 0) {
+            setFootage((prev) => {
+              const map = new Map(prev.map((f) => [f.id, f]));
+              deltaFootages.forEach((f) => map.set(f.id, f));
+              const merged = Array.from(map.values());
+              cmsRepository.saveFootage(merged);
+              return merged;
+            });
+          }
+          if (deltaEpisodes.length > 0) {
+            setEpisodes((prev) => {
+              const map = new Map(prev.map((e) => [e.id, e]));
+              deltaEpisodes.forEach((e) => map.set(e.id, e));
+              const merged = Array.from(map.values());
+              cmsRepository.saveEpisodes(merged);
+              return merged;
+            });
+          }
+          if (deltaSources.length > 0) {
+            setSources((prev) => {
+              const map = new Map(prev.map((s) => [s.id, s]));
+              deltaSources.forEach((s) => map.set(s.id, s));
+              const merged = Array.from(map.values());
+              cmsRepository.saveSources(merged);
+              return merged;
+            });
+          }
+        }
+
+        // Mark timestamp as up to date
+        if (cloudSummary.updatedAt) {
+          cmsRepository.setLastCloudSyncTimestamp(cloudSummary.updatedAt);
+        }
+        hasFullCloudEpisodesRef.current = true;
+        hasFullCloudFootageRef.current = true;
+        hasFullCloudSourcesRef.current = true;
+        setIsCloudConnected(true);
+        setIsCloudSynced(true);
+      } catch (err) {
+        console.warn('SmartSync error:', err);
+      } finally {
+        isDeltaSyncing = false;
+      }
+    };
+
+    // Single document subscription: system_settings/archive_summary_stats (1 read!)
     const unsubSummaryStats = firestoreService.subscribeArchiveSummaryStats(
       (cloudSummary) => {
         if (cloudSummary) {
           setArchiveSummaryStats(cloudSummary);
           void idbStorageService.setMeta('archive_summary_stats', cloudSummary);
-        }
-      },
-      (err) => console.warn('Firestore archive_summary_stats warning:', err)
-    );
-
-    const unsubCategoryGroups = firestoreService.subscribeCategoryGroups(
-      (cloudGroups) => {
-        setIsCloudConnected(true);
-        setIsCloudSynced(true);
-        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
-          pendingCategoryGroupsRef.current = cloudGroups;
-          return;
-        }
-        pendingCategoryGroupsRef.current = null;
-        setCategoryGroups(cloudGroups);
-        cmsRepository.saveCategoryGroups(cloudGroups);
-      },
-      (err) => console.warn('Firestore category_groups subscription warning:', err)
-    );
-
-    const unsubCategories = firestoreService.subscribeCategories(
-      (cloudCats) => {
-        const normalized = cmsRepository.normalizeAndRepairTags(
-          cloudCats,
-          cloudCats.length <= 1
-        );
-        setIsCloudConnected(true);
-        setIsCloudSynced(true);
-        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
-          pendingTagsRef.current = normalized;
-          return;
-        }
-        pendingTagsRef.current = null;
-        setTags(normalized);
-        cmsRepository.saveTags(normalized);
-      },
-      (err) => console.warn('Firestore categories subscription warning:', err)
-    );
-
-    const unsubSources = firestoreService.subscribeSources(
-      (cloudSources) => {
-        setIsCloudConnected(true);
-        setIsCloudSynced(true);
-        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
-          pendingSourcesRef.current = cloudSources;
-          return;
-        }
-        pendingSourcesRef.current = null;
-        hasFullCloudSourcesRef.current = true;
-        setSources(cloudSources);
-        cmsRepository.saveSources(cloudSources);
-      },
-      (err) => console.warn('Firestore sources subscription warning:', err)
-    );
-
-    const unsubFootages = firestoreService.subscribeFootagesProgressive(
-      () => footageCountRef.current > 0,
-      (firstWindowFootages) => {
-        if (
-          !hasFullCloudFootageRef.current &&
-          footageCountRef.current === 0 &&
-          firstWindowFootages.length > 0
-        ) {
+          void performSmartSync(cloudSummary);
+        } else {
           setIsCloudConnected(true);
-          setFootage(firstWindowFootages);
+          setIsCloudSynced(true);
         }
       },
-      (cloudFootages) => {
-        setIsCloudConnected(true);
-        setIsCloudSynced(true);
-        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
-          pendingFootageRef.current = cloudFootages;
-          return;
-        }
-        pendingFootageRef.current = null;
-        hasFullCloudFootageRef.current = true;
-        setFootage(cloudFootages);
-        cmsRepository.saveFootage(cloudFootages);
-      },
-      (err) => console.warn('Firestore footages subscription warning:', err)
+      (err) => handleSubError('archive_summary_stats', err)
     );
 
-    const unsubEpisodes = firestoreService.subscribeEpisodesProgressive(
-      () => episodesCountRef.current > 0,
-      (firstWindowEpisodes) => {
-        if (
-          !hasFullCloudEpisodesRef.current &&
-          episodesCountRef.current === 0 &&
-          firstWindowEpisodes.length > 0
-        ) {
-          setIsCloudConnected(true);
-          setEpisodes(firstWindowEpisodes);
-        }
-      },
-      (cloudEpisodes) => {
-        setIsCloudConnected(true);
-        setIsCloudSynced(true);
-        if (isWipingCloudRef.current || firestoreService.isBatchWriteInProgress()) {
-          pendingEpisodesRef.current = cloudEpisodes;
-          return;
-        }
-        pendingEpisodesRef.current = null;
-        hasFullCloudEpisodesRef.current = true;
-        setEpisodes(cloudEpisodes);
-        cmsRepository.saveEpisodes(cloudEpisodes);
-      },
-      (err) => console.warn('Firestore episodes subscription warning:', err)
-    );
-
+    // Single document subscription: system_settings/global_rules (1 read!)
     const unsubSettings = firestoreService.subscribeSettings(
       (cloudSettings) => {
         if (cloudSettings) {
@@ -282,17 +325,12 @@ export function useCMSCloudAndStorageSync(
         setIsCloudConnected(true);
         setIsCloudSynced(true);
       },
-      (err) => console.warn('Firestore settings subscription warning:', err)
+      (err) => handleSubError('settings', err)
     );
 
     return () => {
       unsubBatchComplete();
       unsubSummaryStats();
-      unsubCategoryGroups();
-      unsubCategories();
-      unsubSources();
-      unsubFootages();
-      unsubEpisodes();
       unsubSettings();
     };
   }, []);

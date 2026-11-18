@@ -14,7 +14,6 @@ import {
   RotateCcw,
   ClipboardPaste,
   Film,
-  FileSpreadsheet,
   HelpCircle,
   X,
 } from 'lucide-react';
@@ -23,7 +22,6 @@ import { firestoreService } from '../../../firebase/firestoreService';
 import { Episode } from '../../../types/episode.types';
 import {
   parseAndMatchYouTubeDateData,
-  SAMPLE_YOUTUBE_AI_DATE_DATA,
 } from './youtubeDateSyncParser';
 
 type FilterTab = 'ALL' | 'MATCHED' | 'UNMATCHED';
@@ -156,10 +154,6 @@ export const YouTubeDateSyncTabContent: React.FC<
       }
       return next;
     });
-  };
-
-  const handleLoadSampleData = () => {
-    handleChangePastedText(SAMPLE_YOUTUBE_AI_DATE_DATA);
   };
 
   const handleClearPaste = () => {
@@ -298,28 +292,6 @@ export const YouTubeDateSyncTabContent: React.FC<
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {onSwitchToSheetTab && (
-                    <button
-                      type="button"
-                      onClick={onSwitchToSheetTab}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-[#3B6845]" />
-                      <span>← ย้อนไปขั้นที่ 1 (Sheet)</span>
-                    </button>
-                  )}
-
-                  {!hasData && (
-                    <button
-                      type="button"
-                      onClick={handleLoadSampleData}
-                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#FEF8ED] hover:bg-[#FAEED6] text-[#734B17] border border-[#EDD7AF] transition-colors cursor-pointer whitespace-nowrap"
-                      title="ทดลองวางตัวอย่างตารางวันที่และชื่อคลิปจาก YouTube"
-                    >
-                      ลองวางตัวอย่าง 2 คอลัมน์ (วันที่ + ชื่อ EP)
-                    </button>
-                  )}
-
                   {pastedText && (
                     <button
                       type="button"

@@ -1,110 +1,105 @@
-# แผนสถาปัตยกรรมรองรับข้อมูลระดับ 10,000+ แถว (High-Scale Data & Cache Engine)
+# แผนงานปรับปรุงสถาปัตยกรรม Smart Cache-First & Delta Sync (แก้ปัญหาโควตา Firestore เต็มถาวร)
 
-ยกระดับโครงสร้างการจัดเก็บข้อมูล การดึงข้อมูลจาก Cloud และการประมวลผลตัวกรอง/สถิติของระบบให้รองรับข้อมูลระดับ **10,000+ แถว** ทั้งใน **คลังคลิปหลัก (Master Archive)** และ **คลังฟุตเทจ (Footage Vault)** โดยไม่เกิดปัญหาพื้นที่เบราว์เซอร์เต็ม (`QuotaExceededError`) เปิดหน้าแรกได้รวดเร็วทันใจ และไม่กระตุกเมื่อค้นหาหรือสลับหน้า
+แผนงานยกระดับระบบประสานข้อมูล (Data Synchronization) ระหว่าง **เครื่องผู้ใช้ (IndexedDB)** กับ **Google Firebase Firestore (Cloud)** เพื่อแก้ไขปัญหาโควตาอ่านฟรี 50,000 Document Reads/วัน หมดเร็วอย่างถาวร โดยเปลี่ยนจากการดึงข้อมูลทุกคอลเลกชันใหม่ทั้ง 1,700 รายการทุกครั้งที่เปิดหน้าเว็บ มาเป็นการโหลดจากแคชในเครื่องทันที 100% แล้วตรวจเช็กเฉพาะ Timestamp จากเอกสารสรุปส่วนกลางเพียง **1 การอ่าน (1 Read)** ส่งผลให้ลดการใช้โควตาลงถึง 99.9% (จากเปิดได้ 30 ครั้ง/วัน เพิ่มเป็น 50,000 ครั้ง/วัน)
 
 ---
 
 ## User Review & Critical Decisions
 
-> [!IMPORTANT] แนวทางสถาปัตยกรรมที่ยืนยันแล้วจากผู้ใช้
-> แผนนี้ผสานคำตอบจากผู้ใช้ทั้ง 3 ข้อเข้ากับความต้องการเดิมครบทุกฟังก์ชัน
-
-- **การโหลดข้อมูลและเปลี่ยนหน้า (Progressive First-Paint + Background Sync)**: โหลดชุดข้อมูลหน้าปัจจุบันขึ้นแสดงผลบนหน้าจอทันทีเพื่อให้ใช้งานได้โดยไม่ต้องรอดึงทั้งหมื่นแถว จากนั้นทยอยดึงข้อมูลที่เหลือแบบแบ่งก้อน (Chunked Pagination) ลงเก็บใน `IndexedDB` เบื้องหลัง
-- **การดึงตัวเลขสถิติรวมบนหัวตารางและหมวดหมู่**: ใช้คำสั่งนับจำนวนแถวจากเซิร์ฟเวอร์โดยตรง (`getCountFromServer`) คู่กับเอกสารสรุปสถิติกลาง (`system_settings/archive_summary_stats`) เพื่อให้ตัวเลขรวมถูกต้องทันทีตั้งแต่วินาทีแรกที่เปิดแอป โดยไม่ต้องโหลดเอกสารจริงครบทุกแถวก่อน
-- **ขอบเขตการขยายระบบ**: ครอบคลุมทั้ง **คลังคลิปหลัก (Episodes)** และ **คลังฟุตเทจ (Footage)** พร้อมระบบป้องกัน `QuotaExceededError` และการคำนวณ/เรียงลำดับแบบไม่บล็อกหน้าจอหลัก
-
----
-
-## 1. Overview & Core Concept
-
-- **What It Does**: เปลี่ยนสถาปัตยกรรมข้อมูล 4 แกนหลักของระบบ:
-  1. **IndexedDB Storage Engine + Safe Quota Guard**: ย้ายการจัดเก็บข้อมูลชุดใหญ่ (`episodes`, `footage`, `sources`) จาก `localStorage` (ที่จำกัด ~5 MB) ไปสู่ `IndexedDB` ที่รองรับข้อมูลระดับหลายร้อย MB พร้อมระบบ Auto-Migration ดึงข้อมูลเดิมจาก `localStorage` มาเข้า `IndexedDB` อัตโนมัติและดักจับ Error ทุกจุดไม่ให้แอปพัง
-  2. **Two-Stage Progressive Firestore Loader**: แบ่งการซิงก์จาก Firestore เป็น **Stage 1 (Instant First Window)** ดึงชุดล่าสุดขึ้นแสดงผลทันที และ **Stage 2 (Background Chunked Hydration + Live Delta Listener)** ทยอยดึงก้อนถัดไปทีละชุดในเบื้องหลังพร้อมเปิดรับเฉพาะรายการที่มีการแก้ไขใหม่ (`updatedAt`)
-  3. **Server-Side Count & Central Summary Document**: ใช้ `getCountFromServer` นับจำนวนเอกสารรวมของคอลเลกชันด้วยต้นทุนต่ำ และซิงก์เอกสารสรุปสถิติกลาง (`archive_summary_stats`) สำหรับแสดงยอดรวมของแต่ละหมวด/สถานะทันทีตั้งแต่ยังซิงก์เบื้องหลังไม่เสร็จ
-  4. **Memoized Indexing & Non-Blocking Worker/Collator Pipeline**: สร้างดัชนีค้นหาล่วงหน้า (Pre-computed Search & Validation Index), ใช้ `Intl.Collator('th')` ประสิทธิภาพสูงแทนการเรียก `localeCompare` ซ้ำในลูป และใช้ Web Worker / Chunked Idle Scheduler คำนวณสถิติชุดใหญ่และตรวจสอบความซ้ำโดยไม่บล็อกเฟรมเรตของหน้าจอหลัก
-- **Target Audience / Persona**: ทีมโปรดักชันและผู้ดูแลระบบที่มีคลังฟุตเทจและคลังคลิปหลักสะสมต่อเนื่องตั้งแต่หลักพันไปจนถึง 10,000+ รายการ
-- **Key Value**: เปิดหน้าแอปเร็วขึ้นหลายเท่า ประหยัดโควตาการอ่านข้อมูล Firestore ตัดปัญหาเบราว์เซอร์ค้างหรือแครชเมื่อข้อมูลทะลุ 5 MB และทำให้การค้นหา/กรอง/สลับหน้าลื่นไหลในระดับ 60fps
+> [!IMPORTANT] สรุปหลักการทำงานสำคัญที่ยืนยันร่วมกัน:
+> - **Zero-Wait Local Paint**: เมื่อเปิดหน้าเว็บ ระบบจะโหลดข้อมูล 889 ฟุตเทจ, 118 ตอน EP, แท็ก และการตั้งค่าจาก IndexedDB ในเครื่องขึ้นมาแสดงผลทันทีภายใน 5–15ms โดยไม่ต้องรอ Network
+> - **Single-Document Health Check (1 Read)**: ตรวจสอบเฉพาะเอกสาร `system_settings/archive_summary_stats` เพียง 1 เอกสาร หาก `updatedAt` บน Cloud ตรงกับเวลาซิงก์ล่าสุดในเครื่อง จะ**ไม่ดาวน์โหลดคอลเลกชันใดๆ เลย** (ประหยัด 1,700 อ่านในทุกการเปิดหน้าเว็บ)
+> - **Delta-Only Sync (ดึงเฉพาะส่วนต่าง)**: กรณีที่พบว่ามีข้อมูลใหม่บน Cloud (เช่น มีการเพิ่มคลิปหรือตัดต่อตอนใหม่จากเครื่องอื่น) ระบบจะยิง Query เฉพาะเอกสารที่มี `updatedAt > localLastSyncTime` เช่น มีคลิปใหม่ 2 คลิป ก็จะอ่านเพียง 2 เอกสารเท่านั้น แทนที่จะโหลดซ้ำ 889 รายการ
+> - **ตัดคำสั่งโหลดซ้ำซ้อน (Eliminate Double-Fetch)**: ลบคำสั่ง `getDocs(limit(300))` ที่สั่งโหลดซ้อนกับ `onSnapshot` ใน `subscribeFootagesProgressive` และ `subscribeEpisodesProgressive` ออกถาวร
 
 ---
 
-## 2. User Experience & Visual Design
+## 1. ภาพรวมและหลักการทำงาน (Overview & Core Concept)
 
-- **Key User Flows**:
-  1. **เปิดเข้าแอปครั้งแรก / รีเฟรชหน้าจอ**:
-     - ระบบดึงข้อมูลจาก `IndexedDB` ในเครื่องขึ้นมาแสดงผลทันทีภายในเสี้ยววินาที (Zero-Wait Local Hydration)
-     - พร้อมกันนั้น ดึงตัวเลขยอดรวมจากเซิร์ฟเวอร์ (`getCountFromServer` + เอกสารสถิติกลาง) และดึงข้อมูลชุดแรก (First Window) จาก Firestore มาอัปเดตหน้าแรกทันที
-  2. **การทยอยโหลดเบื้องหลังและกดเปลี่ยนหน้า Pagination**:
-     - หากฐานข้อมูลมีรายการมากกว่าชุดแรก ระบบจะทยอยดึงก้อนถัดไป (ทีละชุด เช่น 500 รายการ) ในเบื้องหลังเงียบๆ และบันทึกลง `IndexedDB`
-     - หากผู้ใช้กดกระโดดไปยังหน้า Pagination ลึกๆ ก่อนที่เบื้องหลังจะดึงถึง ระบบจะดึงช่วงหน้านั้นขึ้นมาให้ทันทีโดยไม่ติดขัด
-  3. **การค้นหา กรอง และเรียงลำดับ 10,000 แถว**:
-     - เมื่อพิมพ์ค้นหา เลือกหมวดหมู่ หรือสลับสถานะ (`ทั้งหมด`, `พร้อมสมบูรณ์`, `ข้อมูลไม่ครบ`, `ฟุตไม่ครบ 5`) ระบบจะใช้ดัชนีที่คำนวณเก็บไว้ล่วงหน้า (`EpisodeSearchIndex` / `FootageSearchIndex`) และ `React.startTransition` เพื่อให้การพิมพ์และคลิกปุ่มตอบสนองทันทีโดยหน้าจอไม่ค้าง
-- **Visual Identity & Theme**:
-  - คงเอกลักษณ์ **Light Pastel Earth-Tone** ที่สะอาดตา ไม่มีแถบสถานะเทคนิคหรือหน้าต่างแจ้งเตือนรกตา
-  - ขณะกำลังทยอยซิงก์ข้อมูลก้อนใหญ่ในเบื้องหลัง ตัวเลขบนการ์ดสถิติและปุ่มตัวกรองจะแสดงค่าจริงจากเซิร์ฟเวอร์ทันทีด้วยฟอนต์ `tabular-nums` โดยไม่กระโดดไปมา
+### ปัญหาของระบบเดิม (Current Architecture Flaw)
+* ทุกครั้งที่มีการ Refresh หรือเปิดแท็บใหม่ โค้ดจะเปิด Listeners (`onSnapshot`) คลุมทั้งคอลเลกชัน:
+  * `footages`: 889 รายการ (+ `getDocs` อีก 300 รายการ) = **1,189 อ่าน**
+  * `episodes`: 118 รายการ (+ `getDocs` อีก 118 รายการ) = **236 อ่าน**
+  * `sources`: **100+ อ่าน**
+  * `categories`: **150+ อ่าน**
+  * `category_groups`: **15 อ่าน**
+  * **รวมเฉลี่ยต่อการเปิดหน้าเว็บ 1 ครั้ง = ~1,700 Document Reads**
+  * โควตาฟรี 50,000 ต่อวัน จึงหมดลงหลังจากการเปิดหน้าเว็บเพียง **29–30 ครั้ง** เท่านั้น
 
----
-
-## 3. Key Product Decisions & Trade-Offs
-
-- **Decision 1: IndexedDB เป็นคลังหลักในเครื่อง + Safe `localStorage` สำหรับข้อมูลตั้งค่าขนาดเล็ก**
-  - *Chosen Approach*: เก็บ `episodes`, `footage`, และ `sources` ใน `IndexedDB` แบบ Asynchronous Store พร้อม In-Memory Cache และคงเฉพาะ `settings`, `categoryGroups`, `tags` (ที่มีขนาดเล็กไม่กี่ KB) ไว้ใน `localStorage` ที่ครอบด้วยตัวดักจับ `try/catch` (`safeLocalStorageSet`)
-  - *Why*: `IndexedDB` รองรับข้อมูลขนาดใหญ่ระดับ 10,000–50,000+ แถวได้สบายและไม่บล็อก Main Thread เหมือน `JSON.stringify` ก้อนใหญ่ใน `localStorage`
-
-- **Decision 2: โหลดชุดแรกทันที + ทยอยซิงก์เบื้องหลัง + ฟังเฉพาะ Delta ที่เปลี่ยนใหม่**
-  - *Chosen Approach*:
-    1. โหลดแคชจาก `IndexedDB` ทันทีเมื่อเปิดแอป
-    2. ดึงหน้าต่างแรกจาก Firestore มาแสดงผลก่อน แล้วทยอยดึงก้อนที่เหลือด้วย Cursor Pagination (`limit` + `startAfter`) จนครบลง `IndexedDB`
-    3. เมื่อซิงก์ฐานข้อมูลเริ่มต้นครบแล้ว เปิด Realtime Listener เฉพาะเอกสารที่มีการแก้ไขใหม่หรือใช้ Snapshot Merge แบบประหยัดหน่วยความจำ
-  - *Why*: ทำให้หน้าจอแรกพร้อมใช้งานทันทีแม้เน็ตช้า และยังคงความสามารถในการค้นหาข้ามแท็ก 3 ชั้น การคำนวณคูลดาวน์ฟุตเทจ (1:N Traceability) และการตรวจจับฟุตเทจซ้ำได้ครบ 100% เหมือนเดิม
-
-- **Decision 3: คำสั่ง `getCountFromServer` คู่กับเอกสารสรุปสถิติกลาง (`archive_summary_stats`)**
-  - *Chosen Approach*: ใช้ `getCountFromServer` ดึงจำนวนแถวทั้งหมดของคอลเลกชัน `episodes`, `footages`, `sources` จากเซิร์ฟเวอร์โดยตรง และอัปเดตเอกสารสรุปสถิติกลางเมื่อมีการเพิ่ม/ลบ/แก้ไขข้อมูล
-  - *Why*: การนับด้วย `getCountFromServer` ใช้โควตาการอ่านต่ำมากและได้ตัวเลขรวมทั้ง 10,000 แถวกลับมาทันทีโดยไม่ต้องรอโหลดเอกสารทั้งหมด
-
-- **Decision 4: Pre-Computed Index Cache + `Intl.Collator` + Web Worker ประมวลผลเบื้องหลัง**
-  - *Chosen Approach*:
-    - สร้างตัวแปร Cache ตามรหัสเอกสาร (`id` + `updatedAt`) เพื่อไม่ต้องรัน `validateEpisodeStandard`, `evaluateEpisodeCompleteness`, หรือแยกชื่อซีรีส์ซ้ำทุกครั้งที่กดเปลี่ยนตัวกรอง
-    - ใช้ `new Intl.Collator('th', { sensitivity: 'base', numeric: true })` ตัวเดียวในการเรียงลำดับภาษาไทยและรหัส EP/FT (เร็วกว่า `localeCompare` แบบเดิม 5–10 เท่าบนข้อมูล 10,000 แถว)
-    - ใช้ Web Worker (พร้อม Fallback อัตโนมัติ) สำหรับงานคำนวณหนักในเบื้องหลังเพื่อไม่ให้รบกวนแอนิเมชันและการเลื่อนหน้าจอ
+### สถาปัตยกรรมใหม่ (Smart Cache-First & Delta Sync Architecture)
+1. **Local State (IndexedDB)** เป็น Source of Truth สำหรับการแสดงผลหน้าจอแบบเรียลไทม์
+2. **Cloud Version Stamp**: บันทึก `lastSyncedCloudTimestamp` ลงใน `idbStorageService` / `localStorage`
+3. **Lightweight Check**: ใช้ Snapshot Listener ตรวจเฉพาะเอกสารเดี่ยว `system_settings/archive_summary_stats` (1 Read)
+4. **Conditional Invalidation**:
+   * หาก `cloudSummary.updatedAt === localTimestamp` -> ปรับสถานะเป็น `Online · ซิงก์แล้ว` ทันที โดยไม่แตะต้องคอลเลกชันใหญ่
+   * หาก `cloudSummary.updatedAt !== localTimestamp` -> ยิงคำสั่งดึงเฉพาะส่วนต่าง (Delta) แล้วรวมเข้ากับ IndexedDB ในเครื่อง
 
 ---
 
-## 4. Technical Architecture & Data Strategy *(Technical Reference)*
+## 2. ประสบการณ์ใช้งานและการแสดงผล (User Experience & Visual Design)
 
-- **Architecture & Data Flow Diagram**:
+### สถานะการเชื่อมต่อบนแถบ Sidebar / Navbar
+- **สถานะปกติ (Online · ซิงก์แล้ว)**: จุดสีเขียวมรกตพาสเทล (`bg-emerald-500`) พร้อมข้อความ `Online` (เปิดหน้าเว็บได้ลื่นไหล ไม่กินโควตา)
+- **สถานะกำลังซิงก์ส่วนต่าง (Syncing Delta)**: ไอคอนหมุนนุ่มนวล พร้อมข้อความ `กำลังซิงก์ส่วนต่าง (N รายการ)...`
+- **สถานะออฟไลน์ / โควตาจำกัด (Local Mode)**: จุดสีเทาพาสเทล (`bg-slate-300`) พร้อมข้อความ `Local` ผู้ใช้ยังคงดูและบันทึกงานในเครื่องได้ 100% ข้อมูลไม่หาย
 
-```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                        Firestore Cloud Database                            │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  │
-│  │ episodes / footages  │  │ getCountFromServer() │  │ system_settings/ │  │
-│  │ (10,000+ Documents)  │  │ (Instant Row Counts) │  │ archive_summary  │  │
-│  └──────────┬───────────┘  └──────────┬───────────┘  └────────┬─────────┘  │
-└─────────────┼─────────────────────────┼───────────────────────┼────────────┘
-              │ 1. First Window (Fast)  │ 2. Server Counts      │ 3. Summary
-              │ + Background Chunks     ▼                       ▼
-              ▼              ┌───────────────────────────────────────────────┐
-┌─────────────────────────┐  │       Fast-Boot Summary & Count Store         │
-│   IndexedDB Repository  │  │  Instant KPI Totals, Completeness & Cooldown  │
-│  (idbStorageService)    │  └──────────────────────┬────────────────────────┘
-│  • episodes store       │                         │
-│  • footage store        │                         ▼
-│  • sources store        │  ┌───────────────────────────────────────────────┐
-│  • Safe Quota Guard     ├─►│   Incremental Analytics & Search Index Cache  │
-└─────────────────────────┘  │  • Per-Item Memoized Validation & Series Key  │
-                             │  • Reusable Thai Intl.Collator('th')          │
-                             │  • Background Worker / Idle Chunk Processor   │
-                             └──────────────────────┬────────────────────────┘
-                                                    │
-                                                    ▼
-                             ┌───────────────────────────────────────────────┐
-                             │    Master Archive & Footage Vault UI Views    │
-                             │  • Paginated Card Grid / Table (12-50 rows)   │
-                             │  • Non-blocking Filter & Status Dropdown      │
-                             └───────────────────────────────────────────────┘
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Browser (Local Client)                                          │
+│ ┌──────────────────────────┐    1. Instant Load (0 ms, 0 Read)  │
+│ │ IndexedDB / Local Cache  │ ─────────────────────────────────► │ UI Paints instantly
+│ │ (889 Footages, 118 EPs)  │                                    │ (คลิปและตอนพร้อมใช้)
+│ └──────────────────────────┘                                    │
+│              ▲                                                  │
+│              │ 4. Merge Delta Changes                           │
+│              │                                                  │
+│ ┌──────────────────────────┐    2. Health Check (1 Read Only)   │
+│ │ Cloud Sync Manager       │ ─────────────────────────────────► │ Firestore Cloud
+│ │                          │ ◄───────────────────────────────── │ system_settings/
+│ │ - Check updatedAt        │    3. Match? -> Finish (0 more)    │ archive_summary_stats
+│ │ - Fetch Delta if needed  │    3. Differ? -> Fetch Delta Only  │
+│ └──────────────────────────┘                                    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-- **Data Model & State Strategy**:
-  - **IndexedDB Stores**: สร้างฐานข้อมูล `rrl_cms_idb_v1` แยก Object Stores สำหรับ `episodes`, `footage`, `sources`, และ `meta` (เก็บเวลาซิงก์ล่าสุดและสถิติสรุป) พร้อมระบบย้ายข้อมูลจาก `localStorage` เดิมมาเข้า `IndexedDB` อัตโนมัติในครั้งแรกแล้วล้างกุญแจก้อนใหญ่ใน `localStorage` เพื่อคืนพื้นที่
-  - **Central Summary Document (`system_settings/archive_summary_stats`)**: เก็บตัวเลขสรุปยอดรวม เช่น `totalEpisodes`, `completeEpisodesCount`, `incompleteEpisodesCount`, `incompleteFootageEpisodesCount`, `distinctSeriesCount`, `totalFootage`, `readyFootageCount`, `newFootageCount`, `coolingFootageCount`, `untaggedFootageCount`, `missingDriveCount` เพื่อให้ส่วนหัวของทั้งสองคลังแสดงตัวเลขระดับ 10,000 แถวได้แม่นยำทันที
-  - **Incremental Item Cache**: เก็บผลลัพธ์การคำนวณของแต่ละ `Episode` และ `Footage` ผูกกับคู่คีย์ `${item.id}_${item.updatedAt}` เมื่อข้อมูลแถวใดไม่ได้แก้ไข ระบบจะดึงผลการตรวจสอบความสมบูรณ์ (`completeness`), ข้อมูลซีรีส์ (`seriesInfo`), และดัชนีคำค้นหา (`searchTokens`) จาก Cache ทันทีในระดับ $O(1)$
+---
+
+## 3. การตัดสินใจเชิงเทคนิค (Key Technical Decisions & Trade-Offs)
+
+1. **ทำไมไม่ปิด Firestore ไปเลยแล้วใช้แค่ IndexedDB?**:
+   - เพื่อให้ระบบยังคงความสามารถในการซิงก์ข้อมูลข้ามเครื่อง (Multi-Device Sync) ระหว่างทีมงาน และสามารถ Backup ข้อมูลขึ้น Cloud ได้อย่างปลอดภัย
+2. **ทำไมใช้ `archive_summary_stats.updatedAt` เป็นตัวเปรียบเทียบ?**:
+   - เพราะระบบมีเอกสารสรุปตัวนี้อยู่แล้ว ซึ่งจะถูกแสตมป์เวลาทุกครั้งที่มีการเพิ่ม/ลบ/แก้ไขตอนหรือฟุตเทจ การอ่านเอกสารเดี่ยวนี้ 1 ครั้ง มีค่าเท่ากับ 1 Read ทำให้ประหยัดโควตาถึง 1,700 เท่า
+3. **การจัดการเมื่อเปิดใช้งานบนเครื่องใหม่ครั้งแรก (Cold Device)**:
+   - หากตรวจพบว่า IndexedDB ในเครื่องยังว่างเปล่า (0 รายการ) ระบบจะทำ Full Initial Sync เพียงครั้งแรกครั้งเดียว จากนั้นจะเข้าสู่โหมด Smart Cache-First ตลอดไป
+
+---
+
+## 4. แผนการปรับปรุงโค้ด (Implementation Steps)
+
+### ขั้นตอนที่ 1: เพิ่มระบบบันทึกเวลาซิงก์ใน `src/services/cmsRepository.ts`
+- เพิ่มฟังก์ชัน `getLastCloudSyncTimestamp()` และ `setLastCloudSyncTimestamp(ts: string)`
+- จัดเก็บใน IndexedDB Meta เพื่อให้อยู่ถาวรแม้ปิดเบราว์เซอร์
+
+### ขั้นตอนที่ 2: เพิ่มฟังก์ชัน Delta Queries ใน `src/firebase/firestoreService.ts`
+- เพิ่มฟังก์ชันดึงเฉพาะรายการที่แก้ไขใหม่:
+  - `fetchFootagesDelta(sinceIso: string): Promise<Footage[]>`
+  - `fetchEpisodesDelta(sinceIso: string): Promise<Episode[]>`
+  - `fetchSourcesDelta(sinceIso: string): Promise<RawSource[]>`
+  - `fetchCategoriesDelta(sinceIso: string): Promise<CategoryTag[]>`
+- ตัดการสั่ง `getDocs(limit(300))` ที่ซ้ำซ้อนใน `subscribeFootagesProgressive` และ `subscribeEpisodesProgressive` ออก
+
+### ขั้นตอนที่ 3: ปรับปรุง `src/context/cms/useCMSCloudAndStorageSync.ts`
+- เปลี่ยน Flow ใน `useEffect` การเชื่อมต่อ Cloud:
+  1. ฟังเฉพาะ `subscribeArchiveSummaryStats` (1 Read)
+  2. เปรียบเทียบ `cloudSummary.updatedAt` กับ `localLastSync`
+  3. หากตรงกัน: ยืนยันสถานะ `Online` ทันทีโดยไม่เปิด Listeners คอลเลกชันใหญ่
+  4. หากไม่ตรงกัน หรือเป็นเครื่องใหม่: เรียกใช้ `fetchDelta` เฉพาะส่วนต่างแล้วอัปเดตลง IndexedDB
+
+### ขั้นตอนที่ 4: ปรับปรุง `useSavedDriveFolders.ts`
+- เก็บประวัติโฟลเดอร์ Google Drive ในแคชในเครื่อง แทนที่จะยิง `getAllDriveSyncRecords()` ทุกครั้งที่เปิด Modal
+
+### ขั้นตอนที่ 5: ตรวจสอบและทดสอบระบบ (Verification)
+- ตรวจสอบว่าแอปเปิดขึ้นมาแสดงข้อมูล 889 ฟุตเทจและ 118 ตอนได้ทันที
+- ตรวจสอบ Network / Firestore Requests ว่าไม่มีการยิง 1,700 อ่านอีกต่อไป
+- รัน `compile_applet` และ `lint_applet` เพื่อยืนยันความสมบูรณ์ 0 errors

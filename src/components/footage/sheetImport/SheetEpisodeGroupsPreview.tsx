@@ -223,52 +223,6 @@ export const SheetEpisodeGroupsPreview: React.FC<
   const rowPadClass =
     rowDensity === 'COMPACT' ? 'px-4 py-1.5' : 'px-4 py-2.5';
 
-  const epFilterButtons: Array<{
-    mode: EpisodeGroupFilterMode;
-    label: string;
-    count: number;
-    activeTextClass: string;
-    hasWarningIcon?: boolean;
-    show?: boolean;
-  }> = [
-    {
-      mode: 'ALL',
-      label: 'ทั้งหมด',
-      count: episodeGroups.length,
-      activeTextClass: 'text-[#3D332A]',
-      show: true,
-    },
-    {
-      mode: 'ISSUES_ONLY',
-      label: 'ไม่ครบ 5 อันดับ',
-      count: filterCounts.issues,
-      activeTextClass: 'text-[#8A4D1F]',
-      hasWarningIcon: true,
-      show: true,
-    },
-    {
-      mode: 'COMPLETE_ONLY',
-      label: 'ครบ 5 อันดับ',
-      count: filterCounts.complete,
-      activeTextClass: 'text-[#1C4824]',
-      show: true,
-    },
-    {
-      mode: 'NEW_EP_ONLY',
-      label: 'สร้างใหม่',
-      count: filterCounts.newEp,
-      activeTextClass: 'text-[#1C4824]',
-      show: true,
-    },
-    {
-      mode: 'UPDATE_EP_ONLY',
-      label: 'อัปเดตซ้ำ',
-      count: filterCounts.updateEp,
-      activeTextClass: 'text-[#734B17]',
-      show: filterCounts.updateEp > 0,
-    },
-  ];
-
   const transitionKey = `${filterMode}-${rankingOrder}-p${safePage}-s${pageSize}-${
     searchQuery.trim() ? 'q' : 'all'
   }`;
@@ -281,142 +235,38 @@ export const SheetEpisodeGroupsPreview: React.FC<
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className="flex-1 min-h-0 flex flex-col bg-white overflow-hidden"
     >
-      {/* Unified Single-Bar Filter & Ranking Toolbar */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2 px-4 sm:px-5 py-2 bg-[#FAF8F5] border-b border-[#E8DFD3] shrink-0">
-        {/* Left: Anomaly Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl text-xs">
-          {epFilterButtons
-            .filter((btn) => btn.show !== false)
-            .map((btn) => {
-              const isActive = filterMode === btn.mode;
-              return (
-                <button
-                  key={btn.mode}
-                  type="button"
-                  onClick={() => onChangeFilterMode(btn.mode)}
-                  className={`relative px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                    isActive
-                      ? btn.activeTextClass
-                      : 'text-[#6E5F52] hover:text-[#3D332A]'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.span
-                      layoutId="sheetEpFilterPill"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 420,
-                        damping: 32,
-                      }}
-                      className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-                    />
-                  )}
-                  <span className="relative z-10 inline-flex items-center gap-1">
-                    {btn.hasWarningIcon && (
-                      <AlertTriangle className="w-3 h-3 text-[#8A4D1F]" />
-                    )}
-                    <span>{btn.label}</span>
-                    <span className="font-mono">
-                      ({btn.count.toLocaleString()})
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-        </div>
+      {/* Slim Sticky Table Header for Episode Groups */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-2 bg-[#FDFBF7] border-b border-[#E8DFD3] text-xs font-bold text-[#6E5F52] shrink-0">
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={handleToggleAllFiltered}
+            className="rounded border-[#C5B49E] text-[#3B6845] focus:ring-[#3B6845] cursor-pointer"
+          />
+          <span>
+            รายการคลิปหลัก EP ({selectedCountInFiltered.toLocaleString()}/
+            {filteredGroups.length.toLocaleString()} เรื่อง)
+          </span>
+        </label>
 
-        {/* Right: Ranking Order + Search + Expand Page + Select All */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 p-1 bg-[#EFE7DC] rounded-xl text-xs">
-            <ListOrdered className="w-3.5 h-3.5 text-[#3B6845] ml-1.5" />
-            <button
-              type="button"
-              onClick={() => onChangeRankingOrder('RANK_5_TO_1')}
-              className={`relative px-2 py-1 rounded-lg font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                rankingOrder === 'RANK_5_TO_1'
-                  ? 'text-[#1C4824]'
-                  : 'text-[#6E5F52] hover:text-[#3D332A]'
-              }`}
-              title="แถวแรกในชีทคืออันดับ 5 ไล่ลงไปอันดับ 1"
-            >
-              {rankingOrder === 'RANK_5_TO_1' && (
-                <motion.span
-                  layoutId="sheetRankDirectionPill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                  className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-                />
-              )}
-              <span className="relative z-10">5 ➔ 1</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeRankingOrder('RANK_1_TO_5')}
-              className={`relative px-2 py-1 rounded-lg font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                rankingOrder === 'RANK_1_TO_5'
-                  ? 'text-[#1C4824]'
-                  : 'text-[#6E5F52] hover:text-[#3D332A]'
-              }`}
-              title="แถวแรกในชีทคืออันดับ 1 ไล่ลงไปอันดับ 5"
-            >
-              {rankingOrder === 'RANK_1_TO_5' && (
-                <motion.span
-                  layoutId="sheetRankDirectionPill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                  className="absolute inset-0 rounded-lg bg-white shadow-2xs"
-                />
-              )}
-              <span className="relative z-10">1 ➔ 5</span>
-            </button>
-          </div>
-
-          <div className="relative flex-1 sm:w-56">
-            <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onChangeSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อ EP, ชื่ออันดับ, คำสร้อย..."
-              className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#8FA892]"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => onChangeSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleToggleExpandCurrentPage}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#F2EBE0] text-[#3D332A] border border-[#E2D5C4] transition-colors cursor-pointer whitespace-nowrap"
-          >
-            {allPageExpanded ? (
-              <>
-                <ChevronUp className="w-3.5 h-3.5" />
-                <span>พับหน้านี้</span>
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-3.5 h-3.5" />
-                <span>กางทั้งหน้า</span>
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleToggleAllFiltered}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer whitespace-nowrap"
-          >
-            {allFilteredSelected
-              ? `ยกเลิกเลือก (${filteredGroups.length.toLocaleString()})`
-              : `เลือกทั้งหมด (${filteredGroups.length.toLocaleString()})`}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleToggleExpandCurrentPage}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-[#FAF7F2] text-[#3D332A] border border-[#E2D5C4] transition-colors cursor-pointer whitespace-nowrap"
+        >
+          {allPageExpanded ? (
+            <>
+              <ChevronUp className="w-3.5 h-3.5" />
+              <span>พับหน้านี้</span>
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-3.5 h-3.5" />
+              <span>กางดู 5 อันดับทั้งหน้า</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Full-Bleed Accordion Episode List */}

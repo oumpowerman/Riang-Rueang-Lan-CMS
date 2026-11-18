@@ -25,10 +25,10 @@ export const SupabaseSyncReportView: React.FC<SupabaseSyncReportViewProps> = ({
           <CheckCircle2 className="w-7 h-7" />
         </div>
         <h3 className="text-lg font-bold text-[#2D241E]">
-          ส่งข้อมูลสู่ Supabase เรียบร้อยแล้ว!
+          ส่งออกคอนเทนต์สู่ Kontent OS เรียบร้อยแล้ว!
         </h3>
         <p className="text-xs text-[#6E5F52]">
-          บันทึกเข้าตาราง public.contents สำเร็จตามโครงสร้างและสถานะที่ระบุ
+          บันทึกข้อมูลและจดจำสถานะ &quot;ส่งแล้ว&quot; ลงในคลิปที่ส่งสำเร็จเรียบร้อย เพื่อไม่ต้องเช็คซ้ำในการเปิดครั้งถัดไป
         </p>
       </div>
 

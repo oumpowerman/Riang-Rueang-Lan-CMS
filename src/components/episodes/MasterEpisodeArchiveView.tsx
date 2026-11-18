@@ -42,7 +42,7 @@ export const MasterEpisodeArchiveView: React.FC = () => {
     batchUpsertEpisodes,
     setSelectedEpisodeDetailId,
     launchEpisodeBuilderForCategory,
-    setIsSupabaseSyncModalOpen,
+    openSupabaseSyncWithFilter,
   } = useCMS();
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -213,7 +213,14 @@ export const MasterEpisodeArchiveView: React.FC = () => {
         categoryFilter={categoryFilter}
         onCategoryFilterChange={setCategoryFilter}
         sortedEpisodesCount={sortedEpisodes.length}
-        onOpenSupabaseSync={() => setIsSupabaseSyncModalOpen(true)}
+        onOpenSupabaseSync={() =>
+          openSupabaseSyncWithFilter({
+            seriesKey: categoryFilter !== 'ALL' ? categoryFilter : undefined,
+            archiveCategoryId:
+              selectedGroupId !== 'ALL' ? selectedGroupId : undefined,
+            searchQuery: searchQuery.trim() || undefined,
+          })
+        }
         onOpenManageCategories={() => setIsCategoryModalOpen(true)}
         onOpenTemplateStandardizer={() => setIsTemplateModalOpen(true)}
         templateNeedsUpdateCount={templateNeedsUpdateCount}

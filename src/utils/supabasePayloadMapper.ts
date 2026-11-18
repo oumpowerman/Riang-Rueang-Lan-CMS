@@ -1,10 +1,21 @@
-import { Episode, MasterVideoInfo } from '../types/episode.types';
+import { Episode } from '../types/episode.types';
+import { ComputedFootage } from '../types/footage.types';
+import { CategoryTag } from '../types/tag.types';
 import {
   SupabaseAssetItem,
   SupabaseConnectionConfig,
   SupabaseContentPayload,
   SupabaseSyncRowState,
 } from '../types/supabaseSync.types';
+import { hasRealMasterDriveLink } from './episodeValidator';
+import { isStagingTagId } from '../services/seedData';
+
+export interface SupabasePayloadMapperContext {
+  tagMap?: Record<string, CategoryTag>;
+  computedFootageMap?: Record<string, ComputedFootage>;
+}
+
+const INTERNAL_ID_PREFIX_REGEX = /^(?:TAG|GRP|ARC-CAT|SERIES)[-_::]/i;
 
 /**
  * Validates whether a given string is a valid UUID format
@@ -52,36 +63,94 @@ export function extractEpRefFromRemark(remark?: string | null): string | null {
 }
 
 /**
- * Cleans tags: removes leading '#' and deduplicates
+ * Resolves a human-readable category/series label for display & pillar/category columns,
+ * never leaking internal tag IDs like "TAG-0001".
  */
-export function extractCleanTags(ep: Episode): string[] {
-  const rawTags: string[] = [];
+export function resolveEpisodeDisplayCategory(
+  ep: Episode,
+  tagMap?: Record<string, CategoryTag>
+): string | null {
+  if (ep.seriesTitle && ep.seriesTitle.trim()) {
+    return ep.seriesTitle.trim();
+  }
+  if (
+    ep.mainCategoryTagId &&
+    !isStagingTagId(ep.mainCategoryTagId) &&
+    tagMap?.[ep.mainCategoryTagId]?.name
+  ) {
+    return tagMap[ep.mainCategoryTagId].name.replace(/^#+/, '').trim();
+  }
+  if (
+    ep.mainCategoryTagId &&
+    !isStagingTagId(ep.mainCategoryTagId) &&
+    !INTERNAL_ID_PREFIX_REGEX.test(ep.mainCategoryTagId)
+  ) {
+    return ep.mainCategoryTagId.trim();
+  }
+  return null;
+}
 
+/**
+ * Collects real human-readable 3-Tier Tag names + Series title for Kontent OS `tags` column.
+ * Never exports internal tag IDs (TAG-XXXX) or rank/punchline snapshotNotes.
+ */
+export function extractCleanTags(
+  ep: Episode,
+  context?: SupabasePayloadMapperContext
+): string[] {
+  const tagMap = context?.tagMap;
+  const computedFootageMap = context?.computedFootageMap;
+
+  const cleanedList: string[] = [];
+  const seenLower = new Set<string>();
+
+  const pushCleanTag = (raw?: string | null) => {
+    if (typeof raw !== 'string') return;
+    const clean = raw.replace(/^#+/, '').trim();
+    if (!clean) return;
+    if (INTERNAL_ID_PREFIX_REGEX.test(clean)) return;
+    const lower = clean.toLowerCase();
+    if (seenLower.has(lower)) return;
+    seenLower.add(lower);
+    cleanedList.push(clean);
+  };
+
+  // 1. Series title if available
   if (ep.seriesTitle) {
-    rawTags.push(ep.seriesTitle);
-  }
-  if (ep.mainCategoryTagId) {
-    rawTags.push(ep.mainCategoryTagId);
+    pushCleanTag(ep.seriesTitle);
   }
 
-  // Tags from ranking snapshots if available
-  if (Array.isArray(ep.rankings)) {
+  // 2. Episode-level Main & Subcategory tag names resolved from tagMap
+  if (ep.mainCategoryTagId && !isStagingTagId(ep.mainCategoryTagId)) {
+    const mainTagName = tagMap?.[ep.mainCategoryTagId]?.name;
+    if (mainTagName) {
+      pushCleanTag(mainTagName);
+    }
+  }
+  if (ep.targetSubcategoryId && !isStagingTagId(ep.targetSubcategoryId)) {
+    const subTagName = tagMap?.[ep.targetSubcategoryId]?.name;
+    if (subTagName) {
+      pushCleanTag(subTagName);
+    }
+  }
+
+  // 3. Collect all 3-Tier Tag names from each filled ranking footage
+  if (Array.isArray(ep.rankings) && computedFootageMap && tagMap) {
     ep.rankings.forEach((slot) => {
-      if (slot.snapshotNote) {
-        rawTags.push(slot.snapshotNote);
-      }
+      if (!slot.footageId) return;
+      const ft = computedFootageMap[slot.footageId];
+      if (!ft || !Array.isArray(ft.tags)) return;
+      ft.tags.forEach((tid) => {
+        if (!tid || isStagingTagId(tid)) return;
+        const tagObj = tagMap[tid];
+        if (tagObj?.name) {
+          pushCleanTag(tagObj.name);
+        }
+      });
     });
   }
 
-  const cleanedSet = new Set<string>();
-  rawTags.forEach((t) => {
-    if (typeof t === 'string') {
-      const clean = t.replace(/^#+/, '').trim();
-      if (clean) cleanedSet.add(clean);
-    }
-  });
-
-  return Array.from(cleanedSet);
+  return cleanedList;
 }
 
 /**
@@ -89,7 +158,8 @@ export function extractCleanTags(ep: Episode): string[] {
  */
 export function generateRowDescription(
   row: SupabaseSyncRowState,
-  config: SupabaseConnectionConfig
+  config: SupabaseConnectionConfig,
+  context?: SupabasePayloadMapperContext
 ): string | null {
   if (row.description && row.description.trim()) {
     return row.description.trim();
@@ -101,18 +171,21 @@ export function generateRowDescription(
 
   // AUTO Mode: informative production summary
   const ep = row.episode;
-  const clipCount = Array.isArray(ep.rankings) ? ep.rankings.length : 0;
-  const category = ep.seriesTitle || ep.mainCategoryTagId || 'ทั่วไป';
-  const tagsStr = extractCleanTags(ep).slice(0, 5).join(', ');
+  const clipCount = Array.isArray(ep.rankings)
+    ? ep.rankings.filter((slot) => Boolean(slot.footageId)).length
+    : 0;
+  const category =
+    resolveEpisodeDisplayCategory(ep, context?.tagMap) || 'ทั่วไป';
+  const tagsStr = extractCleanTags(ep, context).slice(0, 8).join(', ');
 
   const lines = [
     `🎬 คอนเทนต์ผลิตจากระบบเรียงเรื่องลั่น (5→1 Smart Mix)`,
     `• หมวดหมู่/ซีรีส์: ${category}`,
-    `• จำนวนฟุตเทจที่ใช้: ${clipCount} อันดับ`,
+    `• จำนวนฟุตเทจที่ใช้: ${clipCount}/5 อันดับ`,
   ];
 
   if (tagsStr) {
-    lines.push(`• หมวดหมู่/แท็ก: ${tagsStr}`);
+    lines.push(`• แท็ก 3 Tier: ${tagsStr}`);
   }
 
   if (ep.publishDate) {
@@ -123,13 +196,24 @@ export function generateRowDescription(
 }
 
 /**
+ * Checks whether a footage Drive URL is valid and non-placeholder
+ */
+function resolveRealDriveUrl(rawUrl?: string | null): string {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) return '';
+  return hasRealMasterDriveLink(trimmed) ? trimmed : '';
+}
+
+/**
  * Maps an Episode sync row state into a PostgreSQL payload conforming to `public.contents`
  */
 export function mapEpisodeToSupabasePayload(
   row: SupabaseSyncRowState,
-  config: SupabaseConnectionConfig
+  config: SupabaseConnectionConfig,
+  context?: SupabasePayloadMapperContext
 ): SupabaseContentPayload {
   const ep = row.episode;
+  const computedFootageMap = context?.computedFootageMap;
 
   // Published Links JSONB - default empty object {}, uppercase platform keys, Google Drive excluded
   const publishedLinks: Record<string, string> = {};
@@ -142,23 +226,28 @@ export function mapEpisodeToSupabasePayload(
   if (ep.masterVideoInfo?.facebookUrl && ep.masterVideoInfo.facebookUrl.trim()) {
     publishedLinks['FACEBOOK'] = ep.masterVideoInfo.facebookUrl.trim();
   }
-  if (ep.masterVideoInfo?.instagramUrl && ep.masterVideoInfo.instagramUrl.trim()) {
+  if (
+    ep.masterVideoInfo?.instagramUrl &&
+    ep.masterVideoInfo.instagramUrl.trim()
+  ) {
     publishedLinks['INSTAGRAM'] = ep.masterVideoInfo.instagramUrl.trim();
   }
 
-  // Assets JSONB: Google Drive attached as the primary 1st item, followed by ranking footage clips
+  // Assets JSONB: real Master Drive video (no placeholder URLs!) + filled ranking footages
   const assets: SupabaseAssetItem[] = [];
   const nowIso = new Date().toISOString();
 
-  // 1. Primary Item: Master Video in Google Drive
-  const masterDriveUrl = ep.masterVideoInfo?.masterDriveUrl?.trim();
-  if (masterDriveUrl) {
+  // 1. Primary Item: Master Video in Google Drive (only if real user URL, never MASTER-EP placeholder)
+  const realMasterDriveUrl = resolveRealDriveUrl(
+    ep.masterVideoInfo?.masterDriveUrl
+  );
+  if (realMasterDriveUrl) {
     const masterFileName =
       ep.masterVideoInfo?.masterFileName?.trim() ||
       `Master_${ep.title.replace(/\s+/g, '_')}.mp4`;
     assets.push({
       id: generateUUID(),
-      url: masterDriveUrl,
+      url: realMasterDriveUrl,
       name: masterFileName,
       type: 'LINK',
       category: 'Draft Video',
@@ -166,19 +255,20 @@ export function mapEpisodeToSupabasePayload(
     });
   }
 
-  // 2. Ranking footage clips (if includeAssets is true)
+  // 2. Ranking footage clips (if includeAssets is true) - only filled slots, resolved with real footage title & drive url
   if (row.includeAssets && Array.isArray(ep.rankings)) {
     ep.rankings.forEach((slot, index) => {
+      if (!slot.footageId) return;
       const clipRank = slot.rank || index + 1;
-      const clipTitle =
-        slot.snapshotNote?.trim() ||
-        (slot.footageId
-          ? `ฟุตเทจ ${slot.footageId} (อันดับ ${clipRank})`
-          : `ฟุตเทจอันดับ ${clipRank}`);
+      const ft = computedFootageMap?.[slot.footageId];
+      const realFootageTitle =
+        ft?.title?.trim() || slot.rankTitle?.trim() || slot.footageId;
+      const clipTitle = `[อันดับ ${clipRank}] ${realFootageTitle}`;
+      const clipDriveUrl = resolveRealDriveUrl(ft?.driveFileUrl);
 
       assets.push({
         id: generateUUID(),
-        url: '',
+        url: clipDriveUrl,
         name: clipTitle,
         type: 'LINK',
         category: 'Draft Video',
@@ -193,7 +283,7 @@ export function mapEpisodeToSupabasePayload(
     ? effectiveChannelId.trim()
     : null;
 
-  const resolvedCategory = ep.seriesTitle || ep.mainCategoryTagId || null;
+  const resolvedCategory = resolveEpisodeDisplayCategory(ep, context?.tagMap);
   const pillarVal = row.includePillar ? resolvedCategory : null;
   const categoryVal = row.includeCategory ? resolvedCategory : null;
 
@@ -206,9 +296,9 @@ export function mapEpisodeToSupabasePayload(
 
   return {
     title: ep.title.trim(),
-    description: generateRowDescription(row, config),
+    description: generateRowDescription(row, config, context),
     status: row.status || config.defaultStatus || '01_IDEA/DRAFT_💡',
-    tags: extractCleanTags(ep),
+    tags: extractCleanTags(ep, context),
     pillar: pillarVal,
     category: categoryVal,
     remark: formatEpRemark(ep.id),

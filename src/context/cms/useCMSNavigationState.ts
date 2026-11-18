@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { EpisodeProductionTarget } from '../../types/episode.types';
 import { RawSource } from '../../types/source.types';
 import { MixRecipeId } from '../../utils/collisionDetector';
+import { SupabaseSyncFilterPreset } from '../../types/supabaseSync.types';
 import { ActiveNavTab, BuilderPreselectRequest } from './cms.types';
 
 export function useCMSNavigationState() {
@@ -33,6 +34,8 @@ export function useCMSNavigationState() {
   const [isSheetTagImportModalOpen, setIsSheetTagImportModalOpen] = useState(false);
   const [isYouTubeDateSyncModalOpen, setIsYouTubeDateSyncModalOpen] = useState(false);
   const [isSupabaseSyncModalOpen, setIsSupabaseSyncModalOpen] = useState(false);
+  const [supabaseSyncPresetFilter, setSupabaseSyncPresetFilter] =
+    useState<SupabaseSyncFilterPreset | null>(null);
   const [isSupabaseConfigModalOpen, setIsSupabaseConfigModalOpen] = useState(false);
   const [selectedFootageIdsForBatch, setSelectedFootageIdsForBatch] = useState<string[]>([]);
   const [activeDragFootageIds, setActiveDragFootageIds] = useState<string[]>([]);
@@ -85,6 +88,15 @@ export function useCMSNavigationState() {
     setBuilderPreselectRequest(null);
   };
 
+  const clearSupabaseSyncPresetFilter = () => {
+    setSupabaseSyncPresetFilter(null);
+  };
+
+  const openSupabaseSyncWithFilter = (preset?: SupabaseSyncFilterPreset | null) => {
+    setSupabaseSyncPresetFilter(preset || null);
+    setIsSupabaseSyncModalOpen(true);
+  };
+
   return {
     activeTab,
     setActiveTab,
@@ -114,6 +126,9 @@ export function useCMSNavigationState() {
     setIsYouTubeDateSyncModalOpen,
     isSupabaseSyncModalOpen,
     setIsSupabaseSyncModalOpen,
+    supabaseSyncPresetFilter,
+    clearSupabaseSyncPresetFilter,
+    openSupabaseSyncWithFilter,
     isSupabaseConfigModalOpen,
     setIsSupabaseConfigModalOpen,
     selectedFootageIdsForBatch,

@@ -97,8 +97,10 @@ export function useSavedDriveFolders({
     }
   }, [settings.driveRootFolderUrl, settings.savedDriveFolders, isModalOpen]);
 
+  const hasLoadedDriveRecordsRef = useRef(false);
   useEffect(() => {
-    if (!isModalOpen) return;
+    if (!isModalOpen || hasLoadedDriveRecordsRef.current) return;
+    hasLoadedDriveRecordsRef.current = true;
 
     let isMounted = true;
     firestoreService

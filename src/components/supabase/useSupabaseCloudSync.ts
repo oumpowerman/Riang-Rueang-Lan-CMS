@@ -6,8 +6,10 @@ import {
 } from '../../types/supabaseSync.types';
 import {
   loadSupabaseConfig,
+  normalizeSupabaseConfig,
   saveSupabaseConfig,
   loadSupabaseRowDrafts,
+  loadSupabaseRowDraftsAsync,
   saveSupabaseRowDrafts,
   clearSupabaseRowDrafts,
   extractRowDraftOverride,
@@ -20,6 +22,7 @@ export function useSupabaseCloudSync(isOpen: boolean) {
     loadSupabaseRowDrafts
   );
   const [isCloudSynced, setIsCloudSynced] = useState(false);
+  const [isCloudDraftsCompacted, setIsCloudDraftsCompacted] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscribe to Firestore `system_settings/supabase_config` and `system_settings/supabase_row_drafts`
@@ -30,11 +33,10 @@ export function useSupabaseCloudSync(isOpen: boolean) {
         const localConfig = loadSupabaseConfig();
 
         if (cloudConfig && (cloudConfig.url || cloudConfig.anonKey)) {
-          // Update local storage and state with authoritative Cloud config
-          saveSupabaseConfig(cloudConfig, false);
-          setConfig(cloudConfig);
+          const normalized = normalizeSupabaseConfig(cloudConfig);
+          saveSupabaseConfig(normalized, false);
+          setConfig(normalized);
         } else if (localConfig.url && localConfig.anonKey) {
-          // Auto-migrate existing local config up to Cloud so other devices immediately receive it
           saveSupabaseConfig(localConfig, true);
           setConfig(localConfig);
         }
@@ -47,15 +49,16 @@ export function useSupabaseCloudSync(isOpen: boolean) {
     const unsubDrafts = firestoreService.subscribeSupabaseRowDrafts(
       (cloudDrafts) => {
         setIsCloudSynced(true);
-        const localDrafts = loadSupabaseRowDrafts();
-
         if (cloudDrafts !== null) {
           saveSupabaseRowDrafts(cloudDrafts, false);
           setRowDrafts(cloudDrafts);
-        } else if (Object.keys(localDrafts).length > 0) {
-          // Auto-migrate existing local row drafts up to Cloud
-          saveSupabaseRowDrafts(localDrafts, true);
-          setRowDrafts(localDrafts);
+        } else {
+          void loadSupabaseRowDraftsAsync().then((localDrafts) => {
+            if (Object.keys(localDrafts).length > 0) {
+              saveSupabaseRowDrafts(localDrafts, true);
+              setRowDrafts(localDrafts);
+            }
+          });
         }
       },
       (err) => {
@@ -72,25 +75,46 @@ export function useSupabaseCloudSync(isOpen: boolean) {
     };
   }, []);
 
-  // Re-sync local state when modal opens
+  // Re-sync local / IndexedDB state when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setConfig(loadSupabaseConfig());
-      setRowDrafts(loadSupabaseRowDrafts());
-    }
+    if (!isOpen) return;
+    setConfig(loadSupabaseConfig());
+    setIsCloudDraftsCompacted(false);
+    void loadSupabaseRowDraftsAsync().then((drafts) => {
+      setRowDrafts(drafts);
+    });
   }, [isOpen]);
 
-  // Persist a single row or multiple rows' overrides to localStorage immediately & debounce to Cloud
+  // Update config locally + persist immediately to Firestore (for toggle switches & timestamps)
+  const updateConfigAndSync = useCallback(
+    (
+      updater:
+        | Partial<SupabaseConnectionConfig>
+        | ((prev: SupabaseConnectionConfig) => SupabaseConnectionConfig)
+    ) => {
+      setConfig((prev) => {
+        const rawNext =
+          typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+        const normalized = normalizeSupabaseConfig(rawNext);
+        saveSupabaseConfig(normalized, true);
+        return normalized;
+      });
+    },
+    []
+  );
+
+  // Persist overrides locally (IndexedDB + safe localStorage) immediately & debounce to Cloud (1 MB safe)
   const persistRowsToDrafts = useCallback(
     (updatedRows: SupabaseSyncRowState[], currentConfig: SupabaseConnectionConfig) => {
       const nextDrafts: Record<string, SupabaseRowDraftOverride> = {};
 
-      updatedRows.forEach((row) => {
+      for (let i = 0; i < updatedRows.length; i++) {
+        const row = updatedRows[i];
         const override = extractRowDraftOverride(row, currentConfig);
         if (override) {
           nextDrafts[row.episode.id] = override;
         }
-      });
+      }
 
       setRowDrafts(nextDrafts);
       saveSupabaseRowDrafts(nextDrafts, false);
@@ -99,7 +123,9 @@ export function useSupabaseCloudSync(isOpen: boolean) {
         clearTimeout(debounceTimerRef.current);
       }
       debounceTimerRef.current = setTimeout(() => {
-        void firestoreService.saveSupabaseRowDraftsToCloud(nextDrafts);
+        void firestoreService.saveSupabaseRowDraftsToCloud(nextDrafts).then((res) => {
+          setIsCloudDraftsCompacted(res.truncated);
+        });
       }, 450);
     },
     []
@@ -110,14 +136,17 @@ export function useSupabaseCloudSync(isOpen: boolean) {
       clearTimeout(debounceTimerRef.current);
     }
     setRowDrafts({});
+    setIsCloudDraftsCompacted(false);
     clearSupabaseRowDrafts(true);
   }, []);
 
   return {
     config,
     setConfig,
+    updateConfigAndSync,
     rowDrafts,
     isCloudSynced,
+    isCloudDraftsCompacted,
     persistRowsToDrafts,
     handleResetAllRowDrafts,
   };

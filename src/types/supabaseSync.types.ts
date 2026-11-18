@@ -55,9 +55,12 @@ export interface SupabaseConnectionConfig {
   defaultIncludeCategory?: boolean; // whether to include category (default false = null)
   defaultDescriptionMode: 'AUTO' | 'EMPTY' | 'CUSTOM';
   customDescriptionTemplate?: string;
+  autoCheckOnModalOpen?: boolean; // default false (manual check on open unless toggled ON)
+  lastDedupCheckedAt?: string; // ISO 8601 timestamp of latest dedup/delta check
+  lastExportSyncedAt?: string; // ISO 8601 timestamp of latest successful export push
 }
 
-export type DeduplicationStatus = 'NEW' | 'DUPLICATE' | 'MODIFIED';
+export type DeduplicationStatus = 'NEW' | 'SENT' | 'DUPLICATE' | 'MODIFIED';
 
 export interface SupabaseSyncRowState {
   episode: Episode;
@@ -73,7 +76,7 @@ export interface SupabaseSyncRowState {
   includePillar: boolean; // per-row toggle (default false = null)
   includeCategory: boolean; // per-row toggle (default false = null)
   description: string;
-  upsertMode: 'SKIP' | 'UPDATE'; // when duplicate: skip or update
+  upsertMode: 'SKIP' | 'UPDATE'; // when duplicate/sent: skip or update
 }
 
 export interface SupabaseRowDraftOverride {
@@ -122,6 +125,9 @@ export interface SupabaseSyncProgress {
 
 export interface SupabaseSyncReportItem {
   id?: string;
+  episodeId?: string;
+  channelId?: string;
+  status?: string;
   title: string;
   action: 'INSERTED' | 'UPDATED' | 'SKIPPED' | 'FAILED';
   error?: string;
@@ -137,3 +143,30 @@ export interface SupabaseSyncReport {
   timestamp: number;
   channelId: string;
 }
+
+export type SupabaseReadinessFilter =
+  | 'ALL'
+  | 'READY_ONLY'
+  | 'MISSING_DRIVE'
+  | 'INCOMPLETE_SLOTS';
+
+export interface SupabaseSyncFilterPreset {
+  seriesKey?: string;
+  archiveCategoryId?: string;
+  readiness?: SupabaseReadinessFilter;
+  searchQuery?: string;
+}
+
+export interface SupabaseSeriesFilterOption {
+  seriesKey: string;
+  seriesName: string;
+  fullSeriesTitle: string;
+  count: number;
+}
+
+export interface SupabaseArchiveCategoryOption {
+  id: string;
+  name: string;
+  count: number;
+}
+

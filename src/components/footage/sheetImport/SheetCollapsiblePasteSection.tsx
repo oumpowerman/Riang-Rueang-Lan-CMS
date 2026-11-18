@@ -7,10 +7,6 @@ import {
   HelpCircle,
   X,
 } from 'lucide-react';
-import {
-  SAMPLE_10COL_SHEET_DATA,
-  SAMPLE_2COL_SHEET_DATA,
-} from './sheetImportParser';
 import { SheetSyncSummaryStats } from './sheetImport.types';
 
 interface SheetCollapsiblePasteSectionProps {
@@ -85,27 +81,6 @@ export const SheetCollapsiblePasteSection: React.FC<
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {!hasData && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onChangePastedText(SAMPLE_2COL_SHEET_DATA)}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#EEF5FB] hover:bg-[#E1EDF8] text-[#1E40AF] border border-[#C6DDF2] transition-colors cursor-pointer whitespace-nowrap"
-                  title="ทดลองวางตัวอย่างเฉพาะชื่อคลิปและแท็ก (คอลัมน์ A–B)"
-                >
-                  ลองวาง 2 คอลัมน์ (A–B)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangePastedText(SAMPLE_10COL_SHEET_DATA)}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#FEF6E8] hover:bg-[#FAEBD0] text-[#734B17] border border-[#EAD5AE] transition-colors cursor-pointer whitespace-nowrap"
-                  title="ทดลองวางตัวอย่างตารางหลัก 10 คอลัมน์ (A–J)"
-                >
-                  ลองวางตารางหลัก 10 คอลัมน์ (A–J)
-                </button>
-              </>
-            )}
-
             {pastedText && (
               <button
                 type="button"

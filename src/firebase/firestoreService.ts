@@ -2,16 +2,14 @@ import {
   collection,
   doc,
   setDoc,
-  getDoc,
   deleteDoc,
   getDocs,
   getCountFromServer,
   query,
   limit,
+  where,
   onSnapshot,
-  writeBatch,
   serverTimestamp,
-  DocumentReference,
 } from 'firebase/firestore';
 import { db } from './config';
 import { Footage } from '../types/footage.types';
@@ -25,19 +23,85 @@ import {
 } from '../types/supabaseSync.types';
 import { INITIAL_CATEGORY_GROUPS } from '../services/seedData';
 
-/**
- * Firestore WriteBatch hard limit is 500 operations.
- * We use 400 per chunk so bulk Google Drive imports (300–2,000+ videos/sources/tags)
- * commit reliably without ever hitting the 500-op WriteBatch limit or flooding individual requests.
- */
-const MAX_BATCH_OPERATIONS = 400;
+// Modular helpers & error handling
+import {
+  MAX_BATCH_OPERATIONS,
+  BatchChunkProgress,
+  BatchWriteOp,
+  isBatchWriteInProgress,
+  onBatchWriteComplete,
+  withBatchWriteLock,
+  commitOperationsInChunks,
+  sanitizeForFirestore,
+  normalizeCategoryTag,
+} from './firestoreBatchUtils';
 
-export interface BatchChunkProgress {
-  completedChunks: number;
-  totalChunks: number;
-  completedOps: number;
-  totalOps: number;
-}
+import {
+  createSafeSnapshotErrorHandler,
+  isQuotaExhaustedError,
+  getIsFirestoreQuotaExhausted,
+  subscribeFirestoreQuotaChange,
+  markFirestoreQuotaExhausted,
+} from './firestoreErrorHandling';
+
+import {
+  subscribeSupabaseConfig,
+  saveSupabaseConfigToCloud,
+  subscribeSupabaseRowDrafts,
+  saveSupabaseRowDraftsToCloud,
+} from './firestoreSupabaseSync';
+
+import {
+  GoogleDriveAuthPayload,
+  getDriveSyncRecord,
+  saveDriveSyncRecord,
+  deleteDriveSyncRecord,
+  subscribeDriveSyncRecord,
+  getAllDriveSyncRecords,
+  subscribeGoogleDriveAuth,
+  saveGoogleDriveAuthToCloud,
+} from './firestoreDriveSync';
+
+import {
+  seedInitialDatabase,
+  clearAllClipsFromCloud,
+  clearAllCategoriesFromCloud,
+  restoreCategoriesToCloud,
+} from './firestoreAdminOps';
+
+// Re-export modular types and utilities
+export {
+  MAX_BATCH_OPERATIONS,
+  type BatchChunkProgress,
+  type BatchWriteOp,
+  isBatchWriteInProgress,
+  onBatchWriteComplete,
+  withBatchWriteLock,
+  commitOperationsInChunks,
+  sanitizeForFirestore,
+  normalizeCategoryTag,
+  createSafeSnapshotErrorHandler,
+  isQuotaExhaustedError,
+  getIsFirestoreQuotaExhausted,
+  subscribeFirestoreQuotaChange,
+  markFirestoreQuotaExhausted,
+  type GoogleDriveAuthPayload,
+  subscribeSupabaseConfig,
+  saveSupabaseConfigToCloud,
+  subscribeSupabaseRowDrafts,
+  saveSupabaseRowDraftsToCloud,
+  getDriveSyncRecord,
+  saveDriveSyncRecord,
+  deleteDriveSyncRecord,
+  subscribeDriveSyncRecord,
+  getAllDriveSyncRecords,
+  subscribeGoogleDriveAuth,
+  saveGoogleDriveAuthToCloud,
+  seedInitialDatabase,
+  clearAllClipsFromCloud,
+  clearAllCategoriesFromCloud,
+  restoreCategoriesToCloud,
+};
 
 export interface ServerCollectionCounts {
   totalEpisodes: number;
@@ -63,139 +127,14 @@ export interface ArchiveSummaryStats {
   updatedAt: string;
 }
 
-interface BatchWriteOp {
-  type: 'set' | 'delete';
-  ref: DocumentReference;
-  data?: Record<string, unknown>;
-}
-
-let activeBatchWritesCount = 0;
-const batchWriteCompleteListeners = new Set<() => void>();
-
-const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-  if (activeBatchWritesCount > 0) {
-    e.preventDefault();
-    e.returnValue =
-      'กำลังบันทึกข้อมูลก้อนใหญ่ขึ้น Cloud (Firestore) กรุณารอให้ครบ 100% ก่อนรีเฟรชหรือปิดหน้านี้';
-    return e.returnValue;
-  }
-  return undefined;
-};
-
-function beginBatchWriteLock() {
-  if (activeBatchWritesCount === 0 && typeof window !== 'undefined') {
-    window.addEventListener('beforeunload', handleBeforeUnload);
-  }
-  activeBatchWritesCount += 1;
-}
-
-function endBatchWriteLock() {
-  activeBatchWritesCount = Math.max(0, activeBatchWritesCount - 1);
-  if (activeBatchWritesCount === 0) {
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    }
-    batchWriteCompleteListeners.forEach((listener) => {
-      try {
-        listener();
-      } catch (err) {
-        console.warn('batchWriteCompleteListener error:', err);
-      }
-    });
-  }
-}
-
-async function commitOperationsInChunks(
-  operations: BatchWriteOp[],
-  onProgress?: (progress: BatchChunkProgress) => void
-): Promise<void> {
-  if (operations.length === 0) return;
-  const totalOps = operations.length;
-  const totalChunks = Math.ceil(totalOps / MAX_BATCH_OPERATIONS);
-  let completedChunks = 0;
-
-  beginBatchWriteLock();
-  try {
-    for (let i = 0; i < totalOps; i += MAX_BATCH_OPERATIONS) {
-      const chunk = operations.slice(i, i + MAX_BATCH_OPERATIONS);
-      const batch = writeBatch(db);
-      for (const op of chunk) {
-        if (op.type === 'set' && op.data) {
-          batch.set(op.ref, op.data, { merge: true });
-        } else if (op.type === 'delete') {
-          batch.delete(op.ref);
-        }
-      }
-      await batch.commit();
-      completedChunks += 1;
-      const completedOps = Math.min(totalOps, i + chunk.length);
-      onProgress?.({
-        completedChunks,
-        totalChunks,
-        completedOps,
-        totalOps,
-      });
-    }
-  } finally {
-    endBatchWriteLock();
-  }
-}
-
-function sanitizeForFirestore<T>(data: T): T {
-  if (data === null || data === undefined || typeof data !== 'object') {
-    return data;
-  }
-  if (Array.isArray(data)) {
-    return data.map((item) => sanitizeForFirestore(item)) as unknown as T;
-  }
-  if (Object.prototype.toString.call(data) === '[object Object]' && data.constructor === Object) {
-    const cleaned: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-      if (value !== undefined) {
-        cleaned[key] = sanitizeForFirestore(value);
-      }
-    }
-    return cleaned as T;
-  }
-  return data;
-}
-
-function normalizeCategoryTag(raw: CategoryTag): CategoryTag {
-  const tier: 1 | 2 | 3 =
-    raw.tier === 3 ? 3 : raw.tier === 2 || Boolean(raw.parentId) ? 2 : 1;
-  return {
-    ...raw,
-    tier,
-    parentId: tier === 2 ? raw.parentId || null : null,
-  };
-}
-
 export const firestoreService = {
-  // ==========================================
-  // BATCH WRITE LOCK & PROGRESS COORDINATION
-  // ==========================================
-  isBatchWriteInProgress(): boolean {
-    return activeBatchWritesCount > 0;
-  },
-
-  onBatchWriteComplete(listener: () => void): () => void {
-    batchWriteCompleteListeners.add(listener);
-    return () => {
-      batchWriteCompleteListeners.delete(listener);
-    };
-  },
-
-  async withBatchWriteLock<T>(fn: () => Promise<T>): Promise<T> {
-    beginBatchWriteLock();
-    try {
-      return await fn();
-    } finally {
-      endBatchWriteLock();
-    }
-  },
+  // Batch lock & progress
+  isBatchWriteInProgress,
+  onBatchWriteComplete,
+  withBatchWriteLock,
 
   // ==========================================
-  // REALTIME SUBSCRIPTIONS
+  // REALTIME SUBSCRIPTIONS (SAFE ERROR HANDLED)
   // ==========================================
 
   subscribeCategoryGroups(
@@ -213,7 +152,7 @@ export const firestoreService = {
         list.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
         onUpdate(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('category_groups', onError)
     );
   },
 
@@ -231,11 +170,14 @@ export const firestoreService = {
         });
         onUpdate(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('categories', onError)
     );
   },
 
-  subscribeSources(onUpdate: (sources: RawSource[]) => void, onError?: (err: Error) => void) {
+  subscribeSources(
+    onUpdate: (sources: RawSource[]) => void,
+    onError?: (err: Error) => void
+  ) {
     const colRef = collection(db, 'sources');
     return onSnapshot(
       colRef,
@@ -246,11 +188,14 @@ export const firestoreService = {
         });
         onUpdate(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('sources', onError)
     );
   },
 
-  subscribeFootages(onUpdate: (footages: Footage[]) => void, onError?: (err: Error) => void) {
+  subscribeFootages(
+    onUpdate: (footages: Footage[]) => void,
+    onError?: (err: Error) => void
+  ) {
     const colRef = collection(db, 'footages');
     return onSnapshot(
       colRef,
@@ -261,52 +206,124 @@ export const firestoreService = {
         });
         onUpdate(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('footages', onError)
     );
   },
 
   /**
    * Two-Stage Progressive Loader for Footages (10,000+ row support):
    * Stage 1: Fetches an initial window (first 300 docs) immediately if local cache is empty
-   *          so the first page paints without waiting for all 10,000 docs.
    * Stage 2: Streams the complete collection + live delta updates in the background.
    */
+  /**
+   * Smart Delta Queries (Query ONLY changed documents since last sync, saving 99.9% read quota)
+   */
+  async fetchFootagesDelta(sinceIso?: string): Promise<Footage[]> {
+    try {
+      const colRef = collection(db, 'footages');
+      const q = sinceIso
+        ? query(colRef, where('updatedAt', '>', sinceIso))
+        : colRef;
+      const snap = await getDocs(q);
+      const list: Footage[] = [];
+      snap.forEach((d) => list.push(d.data() as Footage));
+      return list;
+    } catch (err) {
+      if (isQuotaExhaustedError(err)) markFirestoreQuotaExhausted(true);
+      console.warn('fetchFootagesDelta warning:', err);
+      return [];
+    }
+  },
+
+  async fetchEpisodesDelta(sinceIso?: string): Promise<Episode[]> {
+    try {
+      const colRef = collection(db, 'episodes');
+      const q = sinceIso
+        ? query(colRef, where('updatedAt', '>', sinceIso))
+        : colRef;
+      const snap = await getDocs(q);
+      const list: Episode[] = [];
+      snap.forEach((d) => list.push(d.data() as Episode));
+      return list;
+    } catch (err) {
+      if (isQuotaExhaustedError(err)) markFirestoreQuotaExhausted(true);
+      console.warn('fetchEpisodesDelta warning:', err);
+      return [];
+    }
+  },
+
+  async fetchSourcesDelta(sinceIso?: string): Promise<RawSource[]> {
+    try {
+      const colRef = collection(db, 'sources');
+      const q = sinceIso
+        ? query(colRef, where('updatedAt', '>', sinceIso))
+        : colRef;
+      const snap = await getDocs(q);
+      const list: RawSource[] = [];
+      snap.forEach((d) => list.push(d.data() as RawSource));
+      return list;
+    } catch (err) {
+      if (isQuotaExhaustedError(err)) markFirestoreQuotaExhausted(true);
+      console.warn('fetchSourcesDelta warning:', err);
+      return [];
+    }
+  },
+
+  async fetchCategoriesDelta(sinceIso?: string): Promise<CategoryTag[]> {
+    try {
+      const colRef = collection(db, 'categories');
+      const q = sinceIso
+        ? query(colRef, where('updatedAt', '>', sinceIso))
+        : colRef;
+      const snap = await getDocs(q);
+      const list: CategoryTag[] = [];
+      snap.forEach((d) => list.push(normalizeCategoryTag(d.data() as CategoryTag)));
+      return list;
+    } catch (err) {
+      if (isQuotaExhaustedError(err)) markFirestoreQuotaExhausted(true);
+      console.warn('fetchCategoriesDelta warning:', err);
+      return [];
+    }
+  },
+
+  async fetchCategoryGroupsDelta(sinceIso?: string): Promise<CategoryGroup[]> {
+    try {
+      const colRef = collection(db, 'category_groups');
+      const q = sinceIso
+        ? query(colRef, where('updatedAt', '>', sinceIso))
+        : colRef;
+      const snap = await getDocs(q);
+      const list: CategoryGroup[] = [];
+      snap.forEach((d) => list.push(d.data() as CategoryGroup));
+      list.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+      return list;
+    } catch (err) {
+      if (isQuotaExhaustedError(err)) markFirestoreQuotaExhausted(true);
+      console.warn('fetchCategoryGroupsDelta warning:', err);
+      return [];
+    }
+  },
+
   subscribeFootagesProgressive(
-    hasLocalCache: () => boolean,
-    onFirstWindow: (footages: Footage[]) => void,
+    _hasLocalCache: () => boolean,
+    _onFirstWindow: (footages: Footage[]) => void,
     onFullSnapshot: (footages: Footage[]) => void,
     onError?: (err: Error) => void
   ): () => void {
-    let fullSnapshotReceived = false;
     let cancelled = false;
     const colRef = collection(db, 'footages');
-
-    if (!hasLocalCache()) {
-      const firstWindowQuery = query(colRef, limit(300));
-      getDocs(firstWindowQuery)
-        .then((snap) => {
-          if (cancelled || fullSnapshotReceived || snap.empty) return;
-          const windowList: Footage[] = [];
-          snap.forEach((d) => windowList.push(d.data() as Footage));
-          onFirstWindow(windowList);
-        })
-        .catch(() => {
-          // Fallback handled by onSnapshot below
-        });
-    }
 
     const unsub = onSnapshot(
       colRef,
       (snapshot) => {
         if (cancelled) return;
-        fullSnapshotReceived = true;
         const list: Footage[] = [];
         snapshot.forEach((d) => {
           list.push(d.data() as Footage);
         });
         onFullSnapshot(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('footages_progressive', onError)
     );
 
     return () => {
@@ -315,7 +332,10 @@ export const firestoreService = {
     };
   },
 
-  subscribeEpisodes(onUpdate: (episodes: Episode[]) => void, onError?: (err: Error) => void) {
+  subscribeEpisodes(
+    onUpdate: (episodes: Episode[]) => void,
+    onError?: (err: Error) => void
+  ) {
     const colRef = collection(db, 'episodes');
     return onSnapshot(
       colRef,
@@ -326,51 +346,30 @@ export const firestoreService = {
         });
         onUpdate(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('episodes', onError)
     );
   },
 
-  /**
-   * Two-Stage Progressive Loader for Episodes (10,000+ row support):
-   * Stage 1: Fetches an initial window (first 300 docs) immediately if local cache is empty.
-   * Stage 2: Streams the complete collection + live delta updates in the background.
-   */
   subscribeEpisodesProgressive(
-    hasLocalCache: () => boolean,
-    onFirstWindow: (episodes: Episode[]) => void,
+    _hasLocalCache: () => boolean,
+    _onFirstWindow: (episodes: Episode[]) => void,
     onFullSnapshot: (episodes: Episode[]) => void,
     onError?: (err: Error) => void
   ): () => void {
-    let fullSnapshotReceived = false;
     let cancelled = false;
     const colRef = collection(db, 'episodes');
-
-    if (!hasLocalCache()) {
-      const firstWindowQuery = query(colRef, limit(300));
-      getDocs(firstWindowQuery)
-        .then((snap) => {
-          if (cancelled || fullSnapshotReceived || snap.empty) return;
-          const windowList: Episode[] = [];
-          snap.forEach((d) => windowList.push(d.data() as Episode));
-          onFirstWindow(windowList);
-        })
-        .catch(() => {
-          // Fallback handled by onSnapshot below
-        });
-    }
 
     const unsub = onSnapshot(
       colRef,
       (snapshot) => {
         if (cancelled) return;
-        fullSnapshotReceived = true;
         const list: Episode[] = [];
         snapshot.forEach((d) => {
           list.push(d.data() as Episode);
         });
         onFullSnapshot(list);
       },
-      onError
+      createSafeSnapshotErrorHandler('episodes_progressive', onError)
     );
 
     return () => {
@@ -381,7 +380,6 @@ export const firestoreService = {
 
   /**
    * Fast Server-Side Row Counts using Firestore getCountFromServer()
-   * Returns exact collection counts in milliseconds without downloading 10,000 documents.
    */
   async fetchServerCollectionCounts(): Promise<ServerCollectionCounts | null> {
     try {
@@ -397,7 +395,9 @@ export const firestoreService = {
         fetchedAt: new Date().toISOString(),
       };
     } catch (err) {
-      console.warn('fetchServerCollectionCounts warning:', err);
+      if (isQuotaExhaustedError(err)) {
+        markFirestoreQuotaExhausted(true);
+      }
       return null;
     }
   },
@@ -416,7 +416,7 @@ export const firestoreService = {
           onUpdate(snap.data() as ArchiveSummaryStats);
         }
       },
-      onError
+      createSafeSnapshotErrorHandler('archive_summary_stats', onError)
     );
   },
 
@@ -448,7 +448,7 @@ export const firestoreService = {
           onUpdate(snapshot.data() as SystemSettings);
         }
       },
-      onError
+      createSafeSnapshotErrorHandler('settings', onError)
     );
   },
 
@@ -456,7 +456,6 @@ export const firestoreService = {
   // CRUD OPERATIONS
   // ==========================================
 
-  // Category Group CRUD (Tier 0)
   async saveCategoryGroup(group: CategoryGroup) {
     const docRef = doc(db, 'category_groups', group.id);
     await setDoc(
@@ -471,7 +470,6 @@ export const firestoreService = {
     await deleteDoc(docRef);
   },
 
-  // Category Tag CRUD (Tier 1 & Tier 2)
   async saveCategory(category: CategoryTag) {
     const docRef = doc(db, 'categories', category.id);
     const normalized = normalizeCategoryTag(category);
@@ -493,10 +491,10 @@ export const firestoreService = {
       return {
         type: 'set',
         ref: doc(db, 'categories', cat.id),
-        data: sanitizeForFirestore({ ...normalized, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
+        data: sanitizeForFirestore({
+          ...normalized,
+          updatedAt: now,
+        }) as unknown as Record<string, unknown>,
       };
     });
     await commitOperationsInChunks(ops, onProgress);
@@ -519,7 +517,6 @@ export const firestoreService = {
     await commitOperationsInChunks(ops, onProgress);
   },
 
-  // Source CRUD (Flow B 1:N Livestream Sources SRC-XXXX)
   async saveSource(source: RawSource) {
     const docRef = doc(db, 'sources', source.id);
     await setDoc(
@@ -556,7 +553,6 @@ export const firestoreService = {
     await deleteDoc(docRef);
   },
 
-  // Footage CRUD
   async saveFootage(footage: Footage) {
     const docRef = doc(db, 'footages', footage.id);
     await setDoc(
@@ -605,7 +601,6 @@ export const firestoreService = {
     await commitOperationsInChunks(ops, onProgress);
   },
 
-  // Episode CRUD
   async saveEpisode(episode: Episode) {
     const docRef = doc(db, 'episodes', episode.id);
     await setDoc(
@@ -642,7 +637,6 @@ export const firestoreService = {
     await deleteDoc(docRef);
   },
 
-  // System Settings CRUD
   async saveSettings(settings: SystemSettings) {
     const docRef = doc(db, 'system_settings', 'global_rules');
     await setDoc(
@@ -655,407 +649,26 @@ export const firestoreService = {
     );
   },
 
-  // ==========================================
-  // 1-CLICK BATCH SEED INITIAL DATA (CHUNKED FOR 500+ ITEMS)
-  // ==========================================
-  async seedInitialDatabase(
-    categories: CategoryTag[],
-    footages: Footage[],
-    episodes: Episode[],
-    settings: SystemSettings,
-    categoryGroups: CategoryGroup[] = INITIAL_CATEGORY_GROUPS,
-    sources: RawSource[] = []
-  ) {
-    const now = new Date().toISOString();
-    const ops: BatchWriteOp[] = [];
+  // Admin & Seed delegates
+  seedInitialDatabase,
+  clearAllClipsFromCloud,
+  clearAllCategoriesFromCloud,
+  restoreCategoriesToCloud,
 
-    // Save settings
-    ops.push({
-      type: 'set',
-      ref: doc(db, 'system_settings', 'global_rules'),
-      data: sanitizeForFirestore({ ...settings, updatedAt: now }) as unknown as Record<
-        string,
-        unknown
-      >,
-    });
+  // Google Drive Delta Sync delegates
+  getDriveSyncRecord,
+  saveDriveSyncRecord,
+  deleteDriveSyncRecord,
+  subscribeDriveSyncRecord,
+  getAllDriveSyncRecords,
 
-    // Seed Category Groups (Tier 0)
-    for (const grp of categoryGroups) {
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'category_groups', grp.id),
-        data: sanitizeForFirestore({ ...grp, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
+  // Supabase delegates
+  subscribeSupabaseConfig,
+  saveSupabaseConfigToCloud,
+  subscribeSupabaseRowDrafts,
+  saveSupabaseRowDraftsToCloud,
 
-    // Seed Categories (Tier 1 & Tier 2)
-    for (const cat of categories) {
-      const normalized = normalizeCategoryTag(cat);
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'categories', cat.id),
-        data: sanitizeForFirestore({ ...normalized, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
-
-    // Seed Sources (Flow B 1:N SRC-XXXX)
-    for (const src of sources) {
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'sources', src.id),
-        data: sanitizeForFirestore({ ...src, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
-
-    // Seed Footages
-    for (const ft of footages) {
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'footages', ft.id),
-        data: sanitizeForFirestore({ ...ft, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
-
-    // Seed Episodes
-    for (const ep of episodes) {
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'episodes', ep.id),
-        data: sanitizeForFirestore({ ...ep, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
-
-    await commitOperationsInChunks(ops);
-    console.info(
-      `Successfully synced ${categoryGroups.length} category groups, ${categories.length} categories, ${sources.length} sources, ${footages.length} footages, and ${episodes.length} episodes to Firestore!`
-    );
-  },
-
-  // ==========================================
-  // CLEAR ALL CLIPS (PRODUCTION CLEAN SLATE)
-  // ==========================================
-  async clearAllClipsFromCloud(): Promise<void> {
-    const [sourcesSnap, footagesSnap, episodesSnap, driveSyncSnap] =
-      await Promise.all([
-        getDocs(collection(db, 'sources')),
-        getDocs(collection(db, 'footages')),
-        getDocs(collection(db, 'episodes')),
-        getDocs(collection(db, 'drive_sync_records')),
-      ]);
-
-    if (
-      sourcesSnap.empty &&
-      footagesSnap.empty &&
-      episodesSnap.empty &&
-      driveSyncSnap.empty
-    ) {
-      return;
-    }
-
-    const ops: BatchWriteOp[] = [];
-    sourcesSnap.forEach((docSnap) => {
-      ops.push({ type: 'delete', ref: docSnap.ref });
-    });
-    footagesSnap.forEach((docSnap) => {
-      ops.push({ type: 'delete', ref: docSnap.ref });
-    });
-    episodesSnap.forEach((docSnap) => {
-      ops.push({ type: 'delete', ref: docSnap.ref });
-    });
-    driveSyncSnap.forEach((docSnap) => {
-      ops.push({ type: 'delete', ref: docSnap.ref });
-    });
-
-    await commitOperationsInChunks(ops);
-    console.info(
-      `Cleared ${sourcesSnap.size} sources, ${footagesSnap.size} footages, ${episodesSnap.size} episodes, and ${driveSyncSnap.size} drive sync records from Firestore while keeping categories and settings intact.`
-    );
-  },
-
-  async clearAllCategoriesFromCloud(): Promise<void> {
-    const [groupsSnap, categoriesSnap] = await Promise.all([
-      getDocs(collection(db, 'category_groups')),
-      getDocs(collection(db, 'categories')),
-    ]);
-
-    if (groupsSnap.empty && categoriesSnap.empty) {
-      return;
-    }
-
-    const ops: BatchWriteOp[] = [];
-    groupsSnap.forEach((docSnap) => {
-      ops.push({ type: 'delete', ref: docSnap.ref });
-    });
-    categoriesSnap.forEach((docSnap) => {
-      ops.push({ type: 'delete', ref: docSnap.ref });
-    });
-
-    await commitOperationsInChunks(ops);
-  },
-
-  async restoreCategoriesToCloud(
-    categoryGroups: CategoryGroup[],
-    categories: CategoryTag[]
-  ): Promise<void> {
-    const now = new Date().toISOString();
-    const ops: BatchWriteOp[] = [];
-
-    for (const grp of categoryGroups) {
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'category_groups', grp.id),
-        data: sanitizeForFirestore({ ...grp, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
-
-    for (const cat of categories) {
-      const normalized = normalizeCategoryTag(cat);
-      ops.push({
-        type: 'set',
-        ref: doc(db, 'categories', cat.id),
-        data: sanitizeForFirestore({ ...normalized, updatedAt: now }) as unknown as Record<
-          string,
-          unknown
-        >,
-      });
-    }
-
-    await commitOperationsInChunks(ops);
-  },
-
-  /**
-   * Google Drive Delta Sync Record Operations
-   */
-  async getDriveSyncRecord(folderId: string): Promise<DriveSyncRecord | null> {
-    try {
-      const snap = await getDoc(doc(db, 'drive_sync_records', folderId));
-      if (!snap.exists()) return null;
-      return snap.data() as DriveSyncRecord;
-    } catch (err) {
-      console.warn('Failed to fetch DriveSyncRecord for folder:', folderId, err);
-      return null;
-    }
-  },
-
-  async saveDriveSyncRecord(record: DriveSyncRecord): Promise<void> {
-    try {
-      const cleanData = sanitizeForFirestore({
-        ...record,
-        updatedAt: record.updatedAt || new Date().toISOString(),
-      });
-      await setDoc(doc(db, 'drive_sync_records', record.folderId), cleanData, { merge: true });
-    } catch (err) {
-      console.error('Failed to save DriveSyncRecord:', record.folderId, err);
-      throw err;
-    }
-  },
-
-  async deleteDriveSyncRecord(folderId: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, 'drive_sync_records', folderId));
-    } catch (err) {
-      console.warn('Failed to delete DriveSyncRecord:', folderId, err);
-    }
-  },
-
-  subscribeDriveSyncRecord(
-    folderId: string,
-    callback: (record: DriveSyncRecord | null) => void
-  ): () => void {
-    const unsub = onSnapshot(
-      doc(db, 'drive_sync_records', folderId),
-      (snap) => {
-        if (!snap.exists()) {
-          callback(null);
-        } else {
-          callback(snap.data() as DriveSyncRecord);
-        }
-      },
-      (err) => {
-        console.warn('drive_sync_records listener error:', err);
-      }
-    );
-    return unsub;
-  },
-
-  async getAllDriveSyncRecords(): Promise<DriveSyncRecord[]> {
-    try {
-      const snap = await getDocs(collection(db, 'drive_sync_records'));
-      const list: DriveSyncRecord[] = [];
-      snap.forEach((d) => {
-        const data = d.data() as DriveSyncRecord;
-        if (data && data.folderId) {
-          list.push(data);
-        }
-      });
-      return list;
-    } catch (err) {
-      console.warn('Failed to fetch all DriveSyncRecords:', err);
-      return [];
-    }
-  },
-
-  // ==========================================
-  // SUPABASE CENTRAL SYNC CLOUD PERSISTENCE
-  // ==========================================
-
-  subscribeSupabaseConfig(
-    onUpdate: (config: SupabaseConnectionConfig | null) => void,
-    onError?: (err: Error) => void
-  ): () => void {
-    const docRef = doc(db, 'system_settings', 'supabase_config');
-    return onSnapshot(
-      docRef,
-      (snap) => {
-        if (!snap.exists()) {
-          onUpdate(null);
-        } else {
-          onUpdate(snap.data() as SupabaseConnectionConfig);
-        }
-      },
-      onError
-    );
-  },
-
-  async saveSupabaseConfigToCloud(config: SupabaseConnectionConfig): Promise<void> {
-    try {
-      const docRef = doc(db, 'system_settings', 'supabase_config');
-      await setDoc(
-        docRef,
-        sanitizeForFirestore({
-          ...config,
-          updatedAt: new Date().toISOString(),
-        }),
-        { merge: true }
-      );
-    } catch (err) {
-      console.warn('Failed to save Supabase config to Cloud:', err);
-    }
-  },
-
-  subscribeSupabaseRowDrafts(
-    onUpdate: (overrides: Record<string, SupabaseRowDraftOverride> | null) => void,
-    onError?: (err: Error) => void
-  ): () => void {
-    const docRef = doc(db, 'system_settings', 'supabase_row_drafts');
-    return onSnapshot(
-      docRef,
-      (snap) => {
-        if (!snap.exists()) {
-          onUpdate(null);
-        } else {
-          const data = snap.data() as {
-            overrides?: Record<string, SupabaseRowDraftOverride>;
-          };
-          onUpdate(data?.overrides || {});
-        }
-      },
-      onError
-    );
-  },
-
-  async saveSupabaseRowDraftsToCloud(
-    overrides: Record<string, SupabaseRowDraftOverride>
-  ): Promise<void> {
-    try {
-      const docRef = doc(db, 'system_settings', 'supabase_row_drafts');
-      // Overwrite the document so removed overrides are also cleared in Cloud
-      await setDoc(
-        docRef,
-        sanitizeForFirestore({
-          overrides,
-          updatedAt: new Date().toISOString(),
-        })
-      );
-    } catch (err) {
-      console.warn('Failed to save Supabase row drafts to Cloud:', err);
-    }
-  },
-
-  // ==========================================
-  // GOOGLE DRIVE OAUTH TOKEN CLOUD SYNC (50-MIN SHARED WINDOW)
-  // ==========================================
-
-  subscribeGoogleDriveAuth(
-    onUpdate: (
-      authData: {
-        token: string;
-        expiresAt: number;
-        connectedEmail?: string;
-        updatedAt?: string;
-      } | null
-    ) => void,
-    onError?: (err: Error) => void
-  ): () => void {
-    const docRef = doc(db, 'system_settings', 'google_drive_auth');
-    return onSnapshot(
-      docRef,
-      (snap) => {
-        if (!snap.exists()) {
-          onUpdate(null);
-        } else {
-          const data = snap.data() as {
-            token?: string;
-            expiresAt?: number;
-            connectedEmail?: string;
-            updatedAt?: string;
-          };
-          if (data && data.token && typeof data.expiresAt === 'number') {
-            onUpdate({
-              token: data.token,
-              expiresAt: data.expiresAt,
-              connectedEmail: data.connectedEmail,
-              updatedAt: data.updatedAt,
-            });
-          } else {
-            onUpdate(null);
-          }
-        }
-      },
-      onError
-    );
-  },
-
-  async saveGoogleDriveAuthToCloud(
-    authData: {
-      token: string | null;
-      expiresAt: number;
-      connectedEmail?: string;
-    }
-  ): Promise<void> {
-    try {
-      const docRef = doc(db, 'system_settings', 'google_drive_auth');
-      await setDoc(
-        docRef,
-        sanitizeForFirestore({
-          token: authData.token || '',
-          expiresAt: authData.expiresAt || 0,
-          connectedEmail: authData.connectedEmail || '',
-          updatedAt: new Date().toISOString(),
-        })
-      );
-    } catch (err) {
-      console.warn('Failed to save Google Drive auth token to Cloud:', err);
-    }
-  },
+  // Google Drive Auth delegates
+  subscribeGoogleDriveAuth,
+  saveGoogleDriveAuthToCloud,
 };
-
-

@@ -30,6 +30,14 @@ export interface MasterVideoInfo {
 
 export type EpisodeProductionTarget = 'MAIN_CATEGORY_VARIETY' | 'SINGLE_SUBCATEGORY_SPECIAL';
 
+export interface EpisodeSupabaseSyncInfo {
+  recordId: string; // UUID ของคอนเทนต์บน Kontent OS (Supabase public.contents) หรือ MANUAL_STAMP
+  syncedAt: string; // ISO 8601 timestamp ที่ส่งสำเร็จล่าสุด
+  channelId?: string;
+  status?: string;
+  isManuallyMarked?: boolean;
+}
+
 export interface Episode {
   id: string; // e.g., EP-0001
   title: string; // e.g., "5 อันดับคนไทยเป็นคนตลก #12"
@@ -49,4 +57,5 @@ export interface Episode {
   rankings: EpisodeRankingSlot[]; // Ordered [Rank 5, Rank 4, Rank 3, Rank 2, Rank 1]
   masterVideoInfo: MasterVideoInfo;
   createdAt: string;
+  supabaseSyncInfo?: EpisodeSupabaseSyncInfo;
 }

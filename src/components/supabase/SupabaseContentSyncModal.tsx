@@ -1,35 +1,34 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   Database,
   RefreshCw,
   CheckCircle2,
   Settings,
   Cloud,
+  AlertCircle,
 } from 'lucide-react';
 import { BaseModal } from '../ui/BaseModal';
 import { useCMS } from '../../context/CMSContext';
+import { Episode } from '../../types/episode.types';
 import {
   SupabaseContentPayload,
   SupabaseSyncProgress,
   SupabaseSyncReport,
   SupabaseSyncRowState,
 } from '../../types/supabaseSync.types';
-import {
-  batchSyncToSupabase,
-  fetchExistingContentsForEpisodes,
-  loadSupabaseRowDrafts,
-} from '../../services/supabaseService';
-import {
-  extractEpRefFromRemark,
-  mapEpisodeToSupabasePayload,
-} from '../../utils/supabasePayloadMapper';
+import { batchSyncToSupabase } from '../../services/supabaseService';
+import { mapEpisodeToSupabasePayload } from '../../utils/supabasePayloadMapper';
 import { SupabaseSyncRowView } from './SupabaseSyncRowView';
 import { SupabasePayloadPreviewModal } from './SupabasePayloadPreviewModal';
+import { SupabaseRowEditModal } from './SupabaseRowEditModal';
 import { SupabaseSyncProgressView } from './SupabaseSyncProgressView';
 import { SupabaseSyncReportView } from './SupabaseSyncReportView';
 import { SupabasePaginationBar } from './SupabasePaginationBar';
 import { SupabaseSyncToolbar } from './SupabaseSyncToolbar';
+import { SupabaseStatusIndicator } from './SupabaseStatusIndicator';
 import { useSupabaseCloudSync } from './useSupabaseCloudSync';
+import { useSupabaseSyncRows } from './useSupabaseSyncRows';
+import { formatThaiSyncTimestamp } from './supabaseRowMatcher';
 
 interface SupabaseContentSyncModalProps {
   isOpen: boolean;
@@ -40,30 +39,92 @@ interface SupabaseContentSyncModalProps {
 export const SupabaseContentSyncModal: React.FC<
   SupabaseContentSyncModalProps
 > = ({ isOpen, onClose, onOpenConfig }) => {
-  const { episodes } = useCMS();
+  const {
+    episodes,
+    batchUpsertEpisodes,
+    tagMap,
+    computedFootageMap,
+    settings,
+    supabaseSyncPresetFilter,
+    clearSupabaseSyncPresetFilter,
+  } = useCMS();
 
-  // Real-time Cloud Sync of Supabase connection config & per-row draft overrides
+  // Real-time Cloud Sync of connection config (autoCheck toggle, timestamps) & per-row drafts
   const {
     config,
+    updateConfigAndSync,
     rowDrafts,
-    isCloudSynced,
+    isCloudDraftsCompacted,
     persistRowsToDrafts,
     handleResetAllRowDrafts,
   } = useSupabaseCloudSync(isOpen);
 
-  const [rows, setRows] = useState<SupabaseSyncRowState[]>([]);
-  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
-  const [dedupProgressLabel, setDedupProgressLabel] = useState(
-    'กำลังตรวจสอบความซ้ำกับฐานข้อมูล Supabase...'
-  );
-
-  // Filters & Search
-  const [activeTab, setActiveTab] = useState<'ALL' | 'NEW' | 'DUPLICATE'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Pagination for 10,000+ Enterprise Scale
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100);
+  // Incremental Smart Delta Dedup, SENT Stamping, Filtering & Safe Scoped Selection Hook
+  const {
+    rows,
+    filteredRows,
+    paginatedRows,
+    episodeMetaMap,
+    isLoadingExisting,
+    hasCheckedThisSession,
+    lastCheckSummary,
+    dedupProgressLabel,
+    runSmartDeltaCheck,
+    runFullVerifyCheck,
+    activeTab,
+    setActiveTab,
+    seriesFilter,
+    setSeriesFilter,
+    archiveCategoryFilter,
+    setArchiveCategoryFilter,
+    readinessFilter,
+    setReadinessFilter,
+    searchQuery,
+    setSearchQuery,
+    seriesFilterOptions,
+    archiveCategoryOptions,
+    readinessCounts,
+    hasActiveFilters,
+    resetAllFilters,
+    currentPage,
+    totalPages,
+    pageSize,
+    setCurrentPage,
+    setPageSize,
+    stats,
+    applyRowsUpdate,
+    handleSelectOnlyFiltered,
+    handleSelectAllFiltered,
+    handleClearSelectionsOutsideFilter,
+    handleSelectAllNew,
+    handleDeselectAll,
+    handleResetRowsToDefaults,
+    handleUpdateRow,
+    handleToggleSelectRow,
+    handleBatchSetStatus,
+    handleBatchSetChannel,
+    handleBatchTogglePlatform,
+    handleBatchToggleAssets,
+    handleBatchSetPillar,
+    handleBatchSetCategory,
+    handleMarkAsSent,
+    handleUnmarkSent,
+    handleBatchMarkAsSent,
+  } = useSupabaseSyncRows({
+    isOpen,
+    episodes,
+    tagMap,
+    computedFootageMap,
+    settings,
+    config,
+    rowDrafts,
+    presetFilter: supabaseSyncPresetFilter,
+    onConsumePresetFilter: clearSupabaseSyncPresetFilter,
+    persistRowsToDrafts,
+    handleResetAllRowDrafts,
+    onUpdateConfig: updateConfigAndSync,
+    onPersistEpisodeSyncUpdates: batchUpsertEpisodes,
+  });
 
   // Processing & Reports
   const [isProcessing, setIsProcessing] = useState(false);
@@ -71,421 +132,93 @@ export const SupabaseContentSyncModal: React.FC<
   const [report, setReport] = useState<SupabaseSyncReport | null>(null);
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
 
-  // Preview Modal
+  // Sub-modals (JSON Preview & Row Details Editor)
   const [previewPayload, setPreviewPayload] =
     useState<SupabaseContentPayload | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
+  const [editingRowState, setEditingRowState] = useState<{
+    row: SupabaseSyncRowState;
+    displayCategory: string | null;
+  } | null>(null);
 
   const isConfigured = Boolean(config.url && config.anonKey);
-
-  // Reset pagination to page 1 when filters or search query change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchQuery, pageSize]);
-
-  // Apply real-time rowDrafts from Cloud onto existing rows if another device edits a row while modal is open
-  useEffect(() => {
-    if (!isOpen || rows.length === 0 || isLoadingExisting || isProcessing) return;
-
-    setRows((prev) =>
-      prev.map((row) => {
-        const draft = rowDrafts[row.episode.id];
-        if (!draft) return row;
-
-        return {
-          ...row,
-          isSelected:
-            typeof draft.isSelected === 'boolean'
-              ? draft.isSelected
-              : row.isSelected,
-          channelId:
-            typeof draft.channelId === 'string'
-              ? draft.channelId
-              : row.channelId,
-          status: typeof draft.status === 'string' ? draft.status : row.status,
-          targetPlatforms:
-            Array.isArray(draft.targetPlatforms) &&
-            draft.targetPlatforms.length > 0
-              ? draft.targetPlatforms
-              : row.targetPlatforms,
-          includeAssets:
-            typeof draft.includeAssets === 'boolean'
-              ? draft.includeAssets
-              : row.includeAssets,
-          includePillar:
-            typeof draft.includePillar === 'boolean'
-              ? draft.includePillar
-              : row.includePillar,
-          includeCategory:
-            typeof draft.includeCategory === 'boolean'
-              ? draft.includeCategory
-              : row.includeCategory,
-          description:
-            typeof draft.description === 'string'
-              ? draft.description
-              : row.description,
-          upsertMode:
-            draft.upsertMode === 'UPDATE' || draft.upsertMode === 'SKIP'
-              ? draft.upsertMode
-              : row.upsertMode,
-        };
-      })
-    );
-  }, [rowDrafts, isOpen]);
-
-  // Load existing contents using Chunked Batch Deduplication on open or when config changes
-  useEffect(() => {
-    if (!isOpen) return;
-
-    setProgress(null);
-    setReport(null);
-    setSyncErrorMessage(null);
-    setIsProcessing(false);
-    setCurrentPage(1);
-
-    if (!config.url || !config.anonKey) {
-      setRows([]);
-      return;
-    }
-
-    const runDeduplicationCheck = async () => {
-      setIsLoadingExisting(true);
-      setDedupProgressLabel('กำลังตรวจสอบความซ้ำแบบ Batch กับฐานข้อมูล Supabase...');
-      try {
-        const existingRecords = await fetchExistingContentsForEpisodes(
-          config,
-          episodes,
-          config.targetChannelId,
-          (info) => {
-            setDedupProgressLabel(info.label);
-          }
-        );
-
-        // Build 3-layer O(1) lookup maps:
-        // 1. Immutable EP Reference ID ([EP_REF:<id>] in remark)
-        // 2. Normalized Title
-        // 3. Published Links (YouTube / Google Drive)
-        const epRefMap = new Map<string, any>();
-        const titleMap = new Map<string, any>();
-        const linkMap = new Map<string, any>();
-
-        existingRecords.forEach((rec) => {
-          const epRef = extractEpRefFromRemark(rec.remark);
-          if (epRef) {
-            epRefMap.set(epRef, rec);
-          }
-          if (rec.title) {
-            titleMap.set(rec.title.trim().toLowerCase(), rec);
-          }
-          if (rec.published_links) {
-            Object.values(rec.published_links).forEach((url) => {
-              if (typeof url === 'string' && url.trim()) {
-                linkMap.set(url.trim(), rec);
-              }
-            });
-          }
-          if (Array.isArray(rec.assets)) {
-            rec.assets.forEach((ast: any) => {
-              if (ast && typeof ast.url === 'string' && ast.url.trim()) {
-                linkMap.set(ast.url.trim(), rec);
-              }
-            });
-          }
-        });
-
-        const latestDrafts = loadSupabaseRowDrafts();
-
-        // Map local episodes into row states merged with Cloud/local per-row draft overrides
-        const initialRows: SupabaseSyncRowState[] = episodes.map((ep) => {
-          const cleanTitle = ep.title.trim().toLowerCase();
-          const cleanYoutubeUrl = ep.masterVideoInfo?.youtubeUrl?.trim();
-          const cleanTiktokUrl = ep.masterVideoInfo?.tiktokUrl?.trim();
-          const cleanFacebookUrl = ep.masterVideoInfo?.facebookUrl?.trim();
-          const cleanInstagramUrl = ep.masterVideoInfo?.instagramUrl?.trim();
-          const cleanDriveUrl = ep.masterVideoInfo?.masterDriveUrl?.trim();
-
-          const matched =
-            (ep.id ? epRefMap.get(ep.id.trim()) : null) ||
-            titleMap.get(cleanTitle) ||
-            (cleanDriveUrl ? linkMap.get(cleanDriveUrl) : null) ||
-            (cleanYoutubeUrl ? linkMap.get(cleanYoutubeUrl) : null) ||
-            (cleanTiktokUrl ? linkMap.get(cleanTiktokUrl) : null) ||
-            (cleanFacebookUrl ? linkMap.get(cleanFacebookUrl) : null) ||
-            (cleanInstagramUrl ? linkMap.get(cleanInstagramUrl) : null);
-
-          const isDuplicate = Boolean(matched);
-          const draft = latestDrafts[ep.id];
-
-          const defaultPlatforms =
-            config.defaultTargetPlatforms &&
-            config.defaultTargetPlatforms.length > 0
-              ? config.defaultTargetPlatforms
-              : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
-
-          return {
-            episode: ep,
-            isSelected:
-              typeof draft?.isSelected === 'boolean'
-                ? draft.isSelected
-                : !isDuplicate,
-            matchStatus: isDuplicate ? 'DUPLICATE' : 'NEW',
-            existingRecordId: matched?.id,
-            existingCreatedAt: matched?.created_at,
-            existingStatus: matched?.status,
-            channelId:
-              typeof draft?.channelId === 'string'
-                ? draft.channelId
-                : config.targetChannelId || '',
-            status:
-              typeof draft?.status === 'string'
-                ? draft.status
-                : config.defaultStatus || '01_IDEA/DRAFT_💡',
-            targetPlatforms:
-              Array.isArray(draft?.targetPlatforms) &&
-              draft.targetPlatforms.length > 0
-                ? draft.targetPlatforms
-                : defaultPlatforms,
-            includeAssets:
-              typeof draft?.includeAssets === 'boolean'
-                ? draft.includeAssets
-                : config.defaultIncludeAssets,
-            includePillar:
-              typeof draft?.includePillar === 'boolean'
-                ? draft.includePillar
-                : Boolean(config.defaultIncludePillar),
-            includeCategory:
-              typeof draft?.includeCategory === 'boolean'
-                ? draft.includeCategory
-                : Boolean(config.defaultIncludeCategory),
-            description:
-              typeof draft?.description === 'string' ? draft.description : '',
-            upsertMode:
-              draft?.upsertMode === 'UPDATE' || draft?.upsertMode === 'SKIP'
-                ? draft.upsertMode
-                : 'SKIP',
-          };
-        });
-
-        setRows(initialRows);
-      } catch (err) {
-        console.error('Failed to run deduplication check:', err);
-      } finally {
-        setIsLoadingExisting(false);
-      }
-    };
-
-    runDeduplicationCheck();
-  }, [isOpen, episodes, config.url, config.anonKey, config.targetChannelId]);
-
-  // Helper to update rows and persist draft overrides to Cloud
-  const applyRowsUpdate = (
-    updater: (prev: SupabaseSyncRowState[]) => SupabaseSyncRowState[]
-  ) => {
-    setRows((prev) => {
-      const next = updater(prev);
-      persistRowsToDrafts(next, config);
-      return next;
-    });
-  };
-
-  // Bulk Selection Handlers
-  const handleSelectAllNew = () => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => ({
-        ...r,
-        isSelected: r.matchStatus === 'NEW',
-      }))
-    );
-  };
-
-  const handleSelectAll = () => {
-    applyRowsUpdate((prev) => prev.map((r) => ({ ...r, isSelected: true })));
-  };
-
-  const handleDeselectAll = () => {
-    applyRowsUpdate((prev) => prev.map((r) => ({ ...r, isSelected: false })));
-  };
-
-  // Reset all row draft overrides to config defaults
-  const handleResetRowsToDefaults = () => {
-    handleResetAllRowDrafts();
-    const defaultPlatforms =
-      config.defaultTargetPlatforms && config.defaultTargetPlatforms.length > 0
-        ? config.defaultTargetPlatforms
-        : ['YOUTUBE', 'FACEBOOK', 'TIKTOK', 'INSTAGRAM'];
-
-    setRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        isSelected: r.matchStatus === 'NEW',
-        channelId: config.targetChannelId || '',
-        status: config.defaultStatus || '01_IDEA/DRAFT_💡',
-        targetPlatforms: defaultPlatforms,
-        includeAssets: config.defaultIncludeAssets,
-        includePillar: Boolean(config.defaultIncludePillar),
-        includeCategory: Boolean(config.defaultIncludeCategory),
-        description: '',
-        upsertMode: 'SKIP',
-      }))
-    );
-  };
-
-  // Row update handler
-  const handleUpdateRow = (
-    episodeId: string,
-    updates: Partial<SupabaseSyncRowState>
-  ) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => (r.episode.id === episodeId ? { ...r, ...updates } : r))
-    );
-  };
-
-  // Toggle single row selection
-  const handleToggleSelectRow = (episodeId: string) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) =>
-        r.episode.id === episodeId ? { ...r, isSelected: !r.isSelected } : r
-      )
-    );
-  };
-
-  // Batch property override for selected rows
-  const handleBatchSetStatus = (newStatus: string) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => (r.isSelected ? { ...r, status: newStatus } : r))
-    );
-  };
-
-  const handleBatchSetChannel = (newChannelId: string) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => (r.isSelected ? { ...r, channelId: newChannelId } : r))
-    );
-  };
-
-  const handleBatchToggleAssets = (include: boolean) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => (r.isSelected ? { ...r, includeAssets: include } : r))
-    );
-  };
-
-  const handleBatchSetPillar = (include: boolean) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => (r.isSelected ? { ...r, includePillar: include } : r))
-    );
-  };
-
-  const handleBatchSetCategory = (include: boolean) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => (r.isSelected ? { ...r, includeCategory: include } : r))
-    );
-  };
-
-  const handleBatchTogglePlatform = (platformId: string) => {
-    applyRowsUpdate((prev) =>
-      prev.map((r) => {
-        if (!r.isSelected) return r;
-        const currentList = r.targetPlatforms || [];
-        const isSelected = currentList.includes(platformId);
-        const updated = isSelected
-          ? currentList.filter((p) => p !== platformId)
-          : [...currentList, platformId];
-        return {
-          ...r,
-          targetPlatforms: updated.length > 0 ? updated : [platformId],
-        };
-      })
-    );
-  };
-
-  // Filtered rows across entire dataset
-  const filteredRows = useMemo(() => {
-    return rows.filter((r) => {
-      if (activeTab === 'NEW' && r.matchStatus !== 'NEW') return false;
-      if (activeTab === 'DUPLICATE' && r.matchStatus !== 'DUPLICATE')
-        return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const titleMatch = r.episode.title.toLowerCase().includes(q);
-        const catMatch = (r.episode.seriesTitle || r.episode.mainCategoryTagId)
-          ?.toLowerCase()
-          .includes(q);
-        const scriptMatch = r.episode.rankings?.some(
-          (slot) =>
-            slot.mascotScript?.toLowerCase().includes(q) ||
-            slot.snapshotNote?.toLowerCase().includes(q)
-        );
-        return Boolean(titleMatch || catMatch || scriptMatch);
-      }
-      return true;
-    });
-  }, [rows, activeTab, searchQuery]);
-
-  // Pagination slice for instant rendering at 10,000+ rows
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-
-  const paginatedRows = useMemo(() => {
-    const start = (safeCurrentPage - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, safeCurrentPage, pageSize]);
 
   const isAllCurrentPageSelected =
     paginatedRows.length > 0 && paginatedRows.every((r) => r.isSelected);
   const isAllFilteredSelected =
     filteredRows.length > 0 && filteredRows.every((r) => r.isSelected);
 
-  const handleSelectAllFiltered = () => {
-    const idsToSelect = new Set(filteredRows.map((fr) => fr.episode.id));
-    applyRowsUpdate((prev) =>
-      prev.map((r) =>
-        idsToSelect.has(r.episode.id) ? { ...r, isSelected: true } : r
-      )
-    );
+  // Toggle persistent Auto Check on Modal Open (stored in Firestore & localStorage)
+  const handleToggleAutoCheckOnOpen = () => {
+    const nextValue = !Boolean(config.autoCheckOnModalOpen);
+    updateConfigAndSync({ autoCheckOnModalOpen: nextValue });
+    if (nextValue && !hasCheckedThisSession && !isLoadingExisting && isConfigured) {
+      void runSmartDeltaCheck();
+    }
   };
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = rows.length;
-    const newCount = rows.filter((r) => r.matchStatus === 'NEW').length;
-    const duplicateCount = rows.filter(
-      (r) => r.matchStatus === 'DUPLICATE'
-    ).length;
-    const selectedRows = rows.filter((r) => r.isSelected);
-    const selectedCount = selectedRows.length;
-    const selectedNewCount = selectedRows.filter(
-      (r) => r.matchStatus === 'NEW'
-    ).length;
-    const selectedDupUpdateCount = selectedRows.filter(
-      (r) => r.matchStatus === 'DUPLICATE' && r.upsertMode === 'UPDATE'
-    ).length;
-
-    return {
-      total,
-      newCount,
-      duplicateCount,
-      selectedCount,
-      selectedNewCount,
-      selectedDupUpdateCount,
-    };
-  }, [rows]);
 
   // Preview payload handler
   const handlePreviewPayload = (row: SupabaseSyncRowState) => {
-    const payload = mapEpisodeToSupabasePayload(row, config);
+    const payload = mapEpisodeToSupabasePayload(row, config, {
+      tagMap,
+      computedFootageMap,
+    });
     setPreviewPayload(payload);
     setPreviewTitle(row.episode.title);
   };
 
-  // Execute Synchronization
+  // Execute Synchronization + Stamp Kontent OS record IDs onto Episodes + Save Last Export Time
   const handleExecuteSync = async () => {
     if (stats.selectedCount === 0) return;
     setIsProcessing(true);
     setSyncErrorMessage(null);
+    setReport(null);
     try {
-      const res = await batchSyncToSupabase(config, rows, (p) => {
-        setProgress(p);
+      const res = await batchSyncToSupabase(
+        config,
+        rows,
+        (p) => {
+          setProgress(p);
+        },
+        { tagMap, computedFootageMap }
+      );
+
+      const syncedAtIso = new Date().toISOString();
+      const episodeById = new Map<string, Episode>();
+      episodes.forEach((ep) => episodeById.set(ep.id, ep));
+
+      const stampedEpisodes: Episode[] = [];
+      res.items.forEach((item) => {
+        if (
+          (item.action === 'INSERTED' || item.action === 'UPDATED') &&
+          item.episodeId &&
+          item.id
+        ) {
+          const targetEp = episodeById.get(item.episodeId);
+          if (targetEp) {
+            stampedEpisodes.push({
+              ...targetEp,
+              supabaseSyncInfo: {
+                recordId: item.id,
+                syncedAt: syncedAtIso,
+                channelId: item.channelId || '',
+                status: item.status || '',
+              },
+            });
+          }
+        }
       });
+
+      if (stampedEpisodes.length > 0) {
+        await batchUpsertEpisodes(stampedEpisodes);
+      }
+
+      if (res.insertedCount + res.updatedCount > 0) {
+        updateConfigAndSync({
+          lastExportSyncedAt: syncedAtIso,
+        });
+      }
+
       setReport(res);
     } catch (err: any) {
       setSyncErrorMessage(
@@ -501,74 +234,130 @@ export const SupabaseContentSyncModal: React.FC<
     'ช่องเริ่มต้น';
 
   const savedDraftOverridesCount = Object.keys(rowDrafts).length;
+  const skippedSelectedCount = Math.max(
+    0,
+    stats.selectedCount - stats.selectedNewCount - stats.selectedDupUpdateCount
+  );
 
   return (
     <>
       <BaseModal
         isOpen={isOpen}
         onClose={onClose}
-        maxWidthClass="max-w-[96vw] xl:max-w-[1580px]"
+        closeOnEsc={!previewPayload && !editingRowState}
+        maxWidthClass="max-w-[96vw] xl:max-w-[1520px]"
         heightClass="h-[94dvh] sm:h-[92vh]"
-        icon={<Database className="w-5 h-5 text-[#2E7D32]" />}
-        title="ส่งออกคอนเทนต์สู่ระบบ Supabase กลาง (ตาราง public.contents)"
-        badge={
-          <div className="inline-flex items-center gap-1.5">
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] font-bold">
-              Batch Sync · Enterprise
-            </span>
-            {isCloudSynced && (
-              <span
-                className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200 font-bold"
-                title="การตั้งค่าเชื่อมต่อและค่าที่ปรับแต่งรายแถวถูกซิงก์ผ่าน Cloud (Firestore) ให้ทุกเครื่องเห็นตรงกันอัตโนมัติ"
-              >
-                <Cloud className="w-3 h-3 text-sky-600" />
-                <span>Cloud Synced</span>
-              </span>
-            )}
-          </div>
-        }
+        icon={<Database className="w-5 h-5 text-[#3B6845]" />}
+        title="ส่งออกคลิปหลักสู่ Kontent OS"
         subtitle={
-          isConfigured
-            ? `ตรวจสอบความซ้ำด้วย Batch Title + รหัส EP และซิงก์การตั้งค่ารายแถวผ่าน Cloud ทุกเครื่อง (ช่องปัจจุบัน: ${currentChannelName})`
-            : undefined
+          isConfigured ? (
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
+              <span>ช่องหลัก: {currentChannelName}</span>
+              <span className="text-[#C5B49E]" aria-hidden="true">
+                ·
+              </span>
+              <span>
+                เช็คซ้ำล่าสุด: {formatThaiSyncTimestamp(config.lastDedupCheckedAt)}
+              </span>
+              <span className="text-[#C5B49E]" aria-hidden="true">
+                ·
+              </span>
+              <span>
+                ส่งออกล่าสุด: {formatThaiSyncTimestamp(config.lastExportSyncedAt)}
+              </span>
+            </span>
+          ) : undefined
         }
         headerRight={
           <div className="flex items-center gap-2">
+            <SupabaseStatusIndicator variant="modal" />
             <button
               type="button"
               onClick={onOpenConfig}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#FAF7F2] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] transition-colors cursor-pointer whitespace-nowrap"
             >
               <Settings className="w-3.5 h-3.5 text-[#3B6845]" />
-              <span>ตั้งค่า Supabase</span>
+              <span>ตั้งค่าเชื่อมต่อ</span>
             </button>
           </div>
         }
         footer={
           !isProcessing && !report && isConfigured ? (
             <div className="flex flex-wrap items-center justify-between gap-3 w-full">
-              <div className="text-xs text-[#6E5F52]">
-                เลือกที่จะซิงค์:{' '}
-                <strong className="font-mono tabular-nums text-[#1C4824]">
-                  {stats.selectedCount.toLocaleString()}
-                </strong>
-                /
-                <span className="font-mono tabular-nums">
-                  {stats.total.toLocaleString()}
-                </span>{' '}
-                คลิป{' '}
-                <span className="text-slate-400">
-                  (ใหม่{' '}
-                  <span className="font-mono tabular-nums">
-                    {stats.selectedNewCount.toLocaleString()}
-                  </span>{' '}
-                  รายการ
-                  {stats.selectedDupUpdateCount > 0 &&
-                    ` · อัปเดตทับ ${stats.selectedDupUpdateCount.toLocaleString()} รายการ`}
-                  )
-                </span>
+              {/* Plain-Language Summary */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#6E5F52]">
+                {stats.selectedCount > 0 ? (
+                  <span>
+                    พร้อมส่งเข้า Kontent OS:{' '}
+                    {stats.selectedNewCount > 0 && (
+                      <strong className="text-[#1C4824]">
+                        คลิปใหม่{' '}
+                        <span className="font-mono tabular-nums">
+                          {stats.selectedNewCount.toLocaleString()}
+                        </span>{' '}
+                        เรื่อง
+                      </strong>
+                    )}
+                    {stats.selectedNewCount > 0 &&
+                      stats.selectedDupUpdateCount > 0 && <span> · </span>}
+                    {stats.selectedDupUpdateCount > 0 && (
+                      <strong className="text-[#9A3412]">
+                        อัปเดตทับ{' '}
+                        <span className="font-mono tabular-nums">
+                          {stats.selectedDupUpdateCount.toLocaleString()}
+                        </span>{' '}
+                        เรื่อง
+                      </strong>
+                    )}
+                    {skippedSelectedCount > 0 && (
+                      <span className="text-[#7D6E61]">
+                        {stats.selectedNewCount > 0 ||
+                        stats.selectedDupUpdateCount > 0
+                          ? ' · '
+                          : ''}
+                        ข้ามซ้ำ{' '}
+                        <span className="font-mono tabular-nums">
+                          {skippedSelectedCount.toLocaleString()}
+                        </span>{' '}
+                        เรื่อง
+                      </span>
+                    )}{' '}
+                    <span className="text-[#8E8174]">
+                      (ช่อง {currentChannelName})
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-[#7D6E61]">
+                    ยังไม่ได้เลือกคลิปสำหรับส่งออก (ทั้งหมด{' '}
+                    <span className="font-mono tabular-nums">
+                      {stats.total.toLocaleString()}
+                    </span>{' '}
+                    เรื่อง)
+                  </span>
+                )}
+
+                {hasActiveFilters && stats.selectedOutsideFilterCount > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-800">
+                    <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                    <span>
+                      มีอีก{' '}
+                      <strong className="font-mono tabular-nums">
+                        {stats.selectedOutsideFilterCount.toLocaleString()}
+                      </strong>{' '}
+                      เรื่องนอกตัวกรองที่ถูกเลือกค้างไว้
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearSelectionsOutsideFilter}
+                      className="underline font-bold text-amber-900 hover:text-rose-700 cursor-pointer"
+                    >
+                      ตัดรายการนอกตัวกรองออก
+                    </button>
+                  </span>
+                )}
               </div>
 
+              {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -590,8 +379,8 @@ export const SupabaseContentSyncModal: React.FC<
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
                     {stats.selectedCount > 0
-                      ? `ยืนยัน Batch Sync ลง Supabase (${stats.selectedCount.toLocaleString()} รายการ) ➔`
-                      : 'กรุณาติ๊กเลือกคลิปที่ต้องการซิงค์'}
+                      ? `ส่งเข้า Kontent OS (${stats.selectedCount.toLocaleString()} เรื่อง) ➔`
+                      : 'กรุณาเลือกคลิปที่จะส่ง'}
                   </span>
                 </button>
               </div>
@@ -600,20 +389,20 @@ export const SupabaseContentSyncModal: React.FC<
         }
         bodyClassName="p-0 bg-[#FAF8F5] flex flex-col overflow-hidden"
       >
-        {/* If Supabase is not configured yet */}
+        {/* If connection is not configured yet */}
         {!isConfigured ? (
           <div className="flex-1 flex items-center justify-center p-8 text-center">
             <div className="max-w-md space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#EEF5EE] border border-[#BAD8BF] flex items-center justify-center mx-auto text-[#2E7D32]">
+              <div className="w-14 h-14 rounded-2xl bg-[#EEF5EE] border border-[#BAD8BF] flex items-center justify-center mx-auto text-[#3B6845]">
                 <Database className="w-7 h-7" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-[#2D241E]">
-                  ยังไม่ได้ตั้งค่าเชื่อมต่อฐานข้อมูล Supabase
+                  ยังไม่ได้ตั้งค่าเชื่อมต่อ Kontent OS
                 </h3>
                 <p className="text-xs text-[#6E5F52] leading-relaxed">
-                  กรุณากรอก Supabase Project URL และ API Key เพียงครั้งเดียว
-                  ระบบจะซิงก์การตั้งค่าขึ้น Cloud ให้ทุกเครื่องพร้อมใช้งานทันที
+                  กรุณากรอก URL และ API Key เพียงครั้งเดียว
+                  ระบบจะบันทึกและพร้อมใช้งานร่วมกันทุกเครื่องอัตโนมัติ
                 </p>
               </div>
               <button
@@ -621,7 +410,7 @@ export const SupabaseContentSyncModal: React.FC<
                 onClick={onOpenConfig}
                 className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#3B6845] hover:bg-[#2D5236] text-white shadow-xs transition-colors cursor-pointer"
               >
-                เปิดหน้าต่างตั้งค่า Supabase
+                เปิดหน้าต่างตั้งค่าเชื่อมต่อ
               </button>
             </div>
           </div>
@@ -655,17 +444,43 @@ export const SupabaseContentSyncModal: React.FC<
               </div>
             )}
 
-            {/* Top Toolbar: Tabs, Quick Selectors, Bulk Field Overrides */}
+            {/* Cloud 1 MB Protection Notice */}
+            {isCloudDraftsCompacted && (
+              <div className="px-4 py-1.5 bg-sky-50 border-b border-sky-200 text-[11px] text-sky-800 flex items-center gap-2">
+                <Cloud className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>
+                  รายการปรับแต่งมีจำนวนมาก ระบบบันทึกทั้งหมดไว้บนเครื่องนี้แล้ว และคัดเฉพาะการแก้ไขสำคัญขึ้น Cloud
+                </span>
+              </div>
+            )}
+
+            {/* 2-Row Clean Toolbar */}
             <SupabaseSyncToolbar
               activeTab={activeTab}
               onTabChange={setActiveTab}
+              seriesFilter={seriesFilter}
+              onSeriesFilterChange={setSeriesFilter}
+              archiveCategoryFilter={archiveCategoryFilter}
+              onArchiveCategoryFilterChange={setArchiveCategoryFilter}
+              readinessFilter={readinessFilter}
+              onReadinessFilterChange={setReadinessFilter}
+              seriesFilterOptions={seriesFilterOptions}
+              archiveCategoryOptions={archiveCategoryOptions}
+              readinessCounts={readinessCounts}
+              hasActiveFilters={hasActiveFilters}
+              onResetFilters={resetAllFilters}
+              autoCheckOnModalOpen={Boolean(config.autoCheckOnModalOpen)}
+              onToggleAutoCheckOnOpen={handleToggleAutoCheckOnOpen}
+              onRunSmartDeltaCheck={() => void runSmartDeltaCheck()}
+              onRunFullVerifyCheck={() => void runFullVerifyCheck()}
+              isLoadingExisting={isLoadingExisting}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               stats={stats}
               config={config}
               savedDraftOverridesCount={savedDraftOverridesCount}
+              onSelectOnlyFiltered={handleSelectOnlyFiltered}
               onSelectAllNew={handleSelectAllNew}
-              onSelectAll={handleSelectAll}
               onDeselectAll={handleDeselectAll}
               onResetAllRowDrafts={handleResetRowsToDefaults}
               onBatchSetStatus={handleBatchSetStatus}
@@ -674,29 +489,46 @@ export const SupabaseContentSyncModal: React.FC<
               onBatchToggleAssets={handleBatchToggleAssets}
               onBatchSetPillar={handleBatchSetPillar}
               onBatchSetCategory={handleBatchSetCategory}
+              onBatchMarkAsSent={handleBatchMarkAsSent}
             />
 
+            {/* Subtle status strip in Manual mode before checking or after completing check */}
+            {!isLoadingExisting && lastCheckSummary && (
+              <div className="px-4 sm:px-5 py-1.5 bg-[#EEF5EE]/70 border-b border-[#D8E8D9] text-[11px] text-[#1C4824] flex items-center justify-between gap-2">
+                <span>{lastCheckSummary}</span>
+              </div>
+            )}
+
             {/* Table Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+            <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">
               {isLoadingExisting ? (
                 <div className="p-12 text-center space-y-3">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#2E7D32]" />
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#3B6845]" />
                   <div className="text-xs font-bold text-[#3D332A]">
                     {dedupProgressLabel}
                   </div>
                   <div className="text-[11px] text-[#8E8174]">
-                    รองรับการตรวจสอบข้อมูลสะสมระดับหมื่นรายการด้วย Chunked IN Query
+                    ข้ามคลิปที่มีรหัสส่งแล้วและตรวจเฉพาะคลิปใหม่ + ความเปลี่ยนแปลงล่าสุด (Delta)
                   </div>
                 </div>
               ) : filteredRows.length === 0 ? (
-                <div className="p-12 text-center text-xs text-[#8E8174]">
-                  ไม่พบรายการคลิปที่ตรงกับเงื่อนไขการค้นหา
+                <div className="p-12 text-center space-y-2.5 text-xs text-[#8E8174]">
+                  <div>ไม่พบรายการคลิปที่ตรงกับเงื่อนไขการค้นหาและตัวกรอง</div>
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={resetAllFilters}
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#EEF5EE] text-[#1C4824] border border-[#BAD8BF] hover:bg-[#E2EFE2] cursor-pointer"
+                    >
+                      ล้างตัวกรองทั้งหมด
+                    </button>
+                  )}
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[720px] text-left border-collapse">
                   <thead className="bg-[#FAF7F2] text-[11px] font-bold text-[#6E5F52] border-b border-[#E8DFD3] sticky top-0 z-10 select-none">
                     <tr>
-                      <th className="p-3 text-center w-10">
+                      <th className="px-3 py-2.5 text-center w-10">
                         <input
                           type="checkbox"
                           checked={isAllCurrentPageSelected}
@@ -713,39 +545,76 @@ export const SupabaseContentSyncModal: React.FC<
                               );
                             });
                           }}
-                          title="เลือก/ยกเลิกการเลือกเฉพาะหน้าปัจจุบัน"
-                          className="w-4 h-4 rounded text-[#3B6845] focus:ring-[#8FA892] border-slate-300 cursor-pointer"
+                          title="เลือกหรือยกเลิกทั้งหมดเฉพาะหน้านี้"
+                          className="w-4 h-4 rounded text-[#3B6845] focus:ring-[#8FA892] border-[#C5B49E] cursor-pointer"
                         />
                       </th>
-                      <th className="p-3 w-36">สถานะในระบบ</th>
-                      <th className="p-3">ชื่อคลิปหลัก (EP) & หมวดหมู่</th>
-                      <th className="p-3 w-40">ช่อง (channel_id)</th>
-                      <th className="p-3 w-32">สถานะ (status)</th>
-                      <th className="p-3 w-44">แพลตฟอร์ม (target_platform)</th>
-                      <th className="p-3 w-28 text-center">assets (ฟุตเทจ)</th>
-                      <th className="p-3 w-28 text-right">คำบรรยาย / JSON</th>
+                      <th className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>คลิปหลัก (EP) &amp; สถานะในระบบ</span>
+                          {stats.selectedCount === 0 && (
+                            <div className="inline-flex items-center gap-1.5 font-normal">
+                              {stats.newCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={handleSelectAllNew}
+                                  className="px-2 py-0.5 rounded-lg bg-[#EEF5EE] hover:bg-[#E1EFE2] text-[#1C4824] font-semibold border border-[#BAD8BF] transition-colors cursor-pointer"
+                                >
+                                  + เลือกคลิปใหม่ ({stats.newCount.toLocaleString()})
+                                </button>
+                              )}
+                              {hasActiveFilters && stats.filteredCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={handleSelectOnlyFiltered}
+                                  className="px-2 py-0.5 rounded-lg bg-white hover:bg-[#FAF7F2] text-[#3D332A] font-semibold border border-[#E2D5C4] transition-colors cursor-pointer"
+                                >
+                                  + เลือกเฉพาะที่กรอง ({stats.filteredCount.toLocaleString()})
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-3 py-2.5 text-right">
+                        ค่าที่จะส่งออก (คลิกแถวเพื่อกางแก้ไข)
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedRows.map((row) => (
-                      <SupabaseSyncRowView
-                        key={row.episode.id}
-                        row={row}
-                        config={config}
-                        onToggleSelect={handleToggleSelectRow}
-                        onUpdateRow={handleUpdateRow}
-                        onPreviewPayload={handlePreviewPayload}
-                      />
-                    ))}
+                    {paginatedRows.map((row) => {
+                      const meta = episodeMetaMap.get(row.episode.id);
+                      return (
+                        <SupabaseSyncRowView
+                          key={row.episode.id}
+                          row={row}
+                          config={config}
+                          tagMap={tagMap}
+                          seriesName={meta?.seriesName}
+                          completeness={meta?.completeness}
+                          onToggleSelect={handleToggleSelectRow}
+                          onUpdateRow={handleUpdateRow}
+                          onOpenRowEdit={(targetRow, displayCategory) =>
+                            setEditingRowState({
+                              row: targetRow,
+                              displayCategory,
+                            })
+                          }
+                          onPreviewPayload={handlePreviewPayload}
+                          onMarkAsSent={handleMarkAsSent}
+                          onUnmarkSent={handleUnmarkSent}
+                        />
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </div>
 
-            {/* Enterprise Pagination Bar */}
+            {/* Pagination Bar */}
             {!isLoadingExisting && filteredRows.length > 0 && (
               <SupabasePaginationBar
-                currentPage={safeCurrentPage}
+                currentPage={currentPage}
                 totalPages={totalPages}
                 pageSize={pageSize}
                 totalFilteredCount={filteredRows.length}
@@ -760,6 +629,14 @@ export const SupabaseContentSyncModal: React.FC<
           </div>
         )}
       </BaseModal>
+
+      {/* Per-Row Description & Pillar/Category Modal */}
+      <SupabaseRowEditModal
+        row={editingRowState?.row || null}
+        displayCategory={editingRowState?.displayCategory || null}
+        onClose={() => setEditingRowState(null)}
+        onSave={handleUpdateRow}
+      />
 
       {/* JSON Payload Preview Modal */}
       <SupabasePayloadPreviewModal

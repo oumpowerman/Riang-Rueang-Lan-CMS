@@ -4,7 +4,6 @@ import {
   Archive,
   ChevronRight,
   Cloud,
-  Database,
   Film,
   FolderTree,
   LayoutDashboard,
@@ -44,7 +43,6 @@ export const Sidebar: React.FC = () => {
     setIsThreeTierManagerOpen,
     setIsStatusRuleModalOpen,
     setIsClearClipsModalOpen,
-    setIsSupabaseSyncModalOpen,
     isCloudConnected,
     isSeedingToCloud,
     seedToCloud,
@@ -380,53 +378,7 @@ export const Sidebar: React.FC = () => {
           </AnimatePresence>
         </button>
 
-        {/* 5. Supabase Central Contents Sync */}
-        <button
-          type="button"
-          onClick={() => setIsSupabaseSyncModalOpen(true)}
-          title="ส่งออกคอนเทนต์สู่ระบบ Supabase กลาง (ตาราง public.contents)"
-          className={`h-9 flex items-center text-xs font-medium text-emerald-800 hover:bg-emerald-50 rounded-xl transition-all overflow-hidden cursor-pointer ${
-            isHovered
-              ? 'w-full justify-between gap-2 px-3'
-              : 'w-10 justify-center px-0'
-          }`}
-        >
-          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
-            <span className="w-6 flex items-center justify-center shrink-0">
-              <Database className="w-4 h-4 text-emerald-600 shrink-0" />
-            </span>
-            <AnimatePresence initial={false}>
-              {isHovered && (
-                <motion.span
-                  key="label-supabase"
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.18, ease: TEXT_EASE }}
-                  className="truncate font-semibold text-emerald-900"
-                >
-                  ซิงก์สู่ Supabase กลาง
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </span>
-          <AnimatePresence initial={false}>
-            {isHovered && (
-              <motion.span
-                key="badge-supabase"
-                initial={{ opacity: 0, x: 4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 4 }}
-                transition={{ duration: 0.18, ease: TEXT_EASE }}
-                className="font-mono text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100/80 text-emerald-800 font-bold shrink-0"
-              >
-                contents
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* 6. Clear All Clips */}
+        {/* 5. Clear All Clips */}
         <button
           type="button"
           onClick={() => setIsClearClipsModalOpen(true)}

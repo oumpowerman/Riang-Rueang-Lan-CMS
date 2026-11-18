@@ -108,7 +108,8 @@
         "rankings": { "type": "array", "description": "5 ranked slots from 1 to 5" },
         "creatorId": { "type": "string" },
         "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "updatedAt": { "type": "string" },
+        "supabaseSyncInfo": { "type": "object", "description": "Kontent OS export receipt (recordId, syncedAt, channelId, status)" }
       },
       "required": ["id", "title", "productionTarget", "rankings", "status"]
     },
