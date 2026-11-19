@@ -1,6 +1,6 @@
 {
-  "summary": "แผนการปรับปรุงสถาปัตยกรรม Smart Cache-First Sync & Delta Loading เพื่อแก้ปัญหาโควตา Firebase Firestore 50,000 อ่าน/วัน เต็มเร็วอย่างถาวร ลดการใช้โควตาจาก 1,700 อ่าน เหลือเพียง 1 อ่านต่อการเปิดหน้าเว็บ (ประหยัดขึ้น 1,700 เท่า)",
-  "updatedAt": "2026-11-18T05:10:24.743516400Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "แผนการเพิ่ม Animation แบบนุ่มนวลและ Staggered Cascade ให้การกาง/พับหมวดย่อยในแต่ละ Tier พร้อมเพิ่มปุ่มขยายความกว้างคอลัมน์ Tier ในส่วน \"เลือกหมวดและแท็ก 3 ชั้น\" ของหน้าจัดคลิป 5 อันดับ รวมถึงการแยก Sub-component ให้เป็นระเบียบตามหลัก Enterprise Modularization",
+  "updatedAt":  "2026-11-18T17:10:53.201705858Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

@@ -120,6 +120,12 @@ export interface BuilderPreselectRequest {
   timestamp: number;
 }
 
+export interface BatchDeleteFootageResult {
+  deletedCount: number;
+  cloudSynced: boolean;
+  cloudError?: string;
+}
+
 export interface CMSContextType {
   // Navigation & Global Modal States
   activeTab: ActiveNavTab;
@@ -366,7 +372,7 @@ export interface CMSContextType {
   batchDeleteFootage: (
     footageIds: string[],
     onChunkProgress?: (progress: BatchChunkProgress) => void
-  ) => Promise<void>;
+  ) => Promise<BatchDeleteFootageResult>;
   mergeDuplicateFootages: (
     plans: DuplicateMergePlan[],
     onChunkProgress?: (progress: BatchChunkProgress) => void

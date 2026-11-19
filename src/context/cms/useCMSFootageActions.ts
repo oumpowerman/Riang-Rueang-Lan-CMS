@@ -10,7 +10,11 @@ import {
   generateNextId,
   generateStandardFileName,
 } from '../../utils/fileNameGenerator';
-import { QuickSortUndoRecord, SplitClipDraft } from './cms.types';
+import {
+  BatchDeleteFootageResult,
+  QuickSortUndoRecord,
+  SplitClipDraft,
+} from './cms.types';
 
 interface UseCMSFootageActionsParams {
   footage: Footage[];
@@ -385,8 +389,10 @@ export function useCMSFootageActions({
   const batchDeleteFootage = async (
     footageIds: string[],
     onChunkProgress?: (progress: BatchChunkProgress) => void
-  ): Promise<void> => {
-    if (!footageIds.length) return;
+  ): Promise<BatchDeleteFootageResult> => {
+    if (!footageIds.length) {
+      return { deletedCount: 0, cloudSynced: true };
+    }
     const targetSet = new Set(footageIds);
     const nextFootageList = footageRef.current.filter((ft) => !targetSet.has(ft.id));
     footageRef.current = nextFootageList;
@@ -414,8 +420,26 @@ export function useCMSFootageActions({
           await firestoreService.batchSaveSources(modifiedSources);
         }
       });
+      return {
+        deletedCount: footageIds.length,
+        cloudSynced: true,
+      };
     } catch (err) {
       console.warn('Firestore batch delete error:', err);
+      const rawMessage = err instanceof Error ? err.message : String(err || '');
+      const isQuotaError =
+        rawMessage.toLowerCase().includes('resource-exhausted') ||
+        rawMessage.toLowerCase().includes('quota');
+      const friendlyError = isQuotaError
+        ? 'โควตาการใช้งาน Firestore รายวันเต็มชั่วคราว ระบบจึงลบออกจากเครื่องนี้แล้ว แต่ยังไม่สามารถอัปเดตลบขึ้น Cloud ได้ในขณะนี้'
+        : rawMessage
+        ? `ไม่สามารถส่งคำสั่งลบบน Cloud ได้ (${rawMessage})`
+        : 'ไม่สามารถเชื่อมต่อ Cloud เพื่อยืนยันการลบได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง';
+      return {
+        deletedCount: footageIds.length,
+        cloudSynced: false,
+        cloudError: friendlyError,
+      };
     }
   };
 

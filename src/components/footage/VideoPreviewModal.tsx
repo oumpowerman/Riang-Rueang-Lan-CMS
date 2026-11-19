@@ -118,8 +118,14 @@ export const VideoPreviewModal: React.FC = () => {
           )}
         </div>
 
-        {/* 16:9 Video Player Container in Light Pastel Earth Tone */}
-        <div className="w-full aspect-video rounded-2xl overflow-hidden border border-[#e2d8cb] bg-[#f4eee4] shadow-xs relative">
+        {/* Responsive Video Player Container (Taller on mobile so Google Drive / Social controls never clip) */}
+        <div
+          className={`w-full rounded-2xl overflow-hidden border border-[#e2d8cb] bg-[#0f0e0d] shadow-xs relative ${
+            preview.provider === 'TIKTOK' || preview.provider === 'INSTAGRAM'
+              ? 'aspect-[9/13] max-h-[62vh] min-h-[340px]'
+              : 'aspect-[4/3] min-h-[280px] sm:aspect-video sm:min-h-[360px]'
+          }`}
+        >
           {preview.embedUrl ? (
             <iframe
               key={preview.embedUrl}
@@ -127,7 +133,7 @@ export const VideoPreviewModal: React.FC = () => {
               title={previewTarget.title}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               allowFullScreen
-              className="w-full h-full border-0"
+              className="absolute inset-0 w-full h-full border-0"
             />
           ) : preview.thumbnailUrl ? (
             <div className="w-full h-full relative flex flex-col items-center justify-center bg-[#f4eee4]">

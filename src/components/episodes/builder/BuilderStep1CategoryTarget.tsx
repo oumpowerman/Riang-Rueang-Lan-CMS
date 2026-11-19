@@ -2,11 +2,8 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
-  Check,
   CheckCircle2,
   ChevronDown,
-  ChevronsDownUp,
-  ChevronsUpDown,
   Filter,
   Layers,
   Plus,
@@ -21,13 +18,8 @@ import {
   X,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
-import {
-  CategoryTag,
-  CategoryTier,
-  DEFAULT_UNCLASSIFIED_SUBCATEGORY,
-} from '../../../types/tag.types';
+import { CategoryTag, CategoryTier } from '../../../types/tag.types';
 import { TIER_THEME_CONFIGS } from '../../tags/three-tier/IndependentTierColumn';
-import { getEntityIcon } from '../../ui/TagPill';
 import {
   BuilderScopeMatchMode,
   BuilderTagClickActionMode,
@@ -35,6 +27,7 @@ import {
   TagLiveStockSummary,
   TierSubCategoryGroup,
 } from './builder.types';
+import { BuilderTierColumn } from './BuilderTierColumn';
 
 interface BuilderStep1CategoryTargetProps {
   isOpen: boolean;
@@ -95,6 +88,9 @@ export const BuilderStep1CategoryTarget: React.FC<
   const [expandedSubKeys, setExpandedSubKeys] = useState<
     Record<string, boolean>
   >({});
+  const [cascadeTier, setCascadeTier] = useState<CategoryTier | null>(null);
+  const [expandedTierColumn, setExpandedTierColumn] =
+    useState<CategoryTier | null>(null);
   const [isAdvancedModeOpen, setIsAdvancedModeOpen] = useState(false);
 
   const handleToggleTierSubs = (
@@ -105,6 +101,9 @@ export const BuilderStep1CategoryTarget: React.FC<
     const allExpandedInTier =
       tierKeys.length > 0 && tierKeys.every((k) => Boolean(expandedSubKeys[k]));
 
+    // Trigger sequential cascade animation only when expanding all sub-categories in this Tier
+    setCascadeTier(!allExpandedInTier ? tier : null);
+
     setExpandedSubKeys((prev) => {
       const next = { ...prev };
       tierKeys.forEach((k) => {
@@ -112,6 +111,30 @@ export const BuilderStep1CategoryTarget: React.FC<
       });
       return next;
     });
+  };
+
+  const handleToggleSubCategory = (subKey: string) => {
+    setCascadeTier(null);
+    setExpandedSubKeys((prev) => ({
+      ...prev,
+      [subKey]: !prev[subKey],
+    }));
+  };
+
+  const handleToggleExpandColumn = (tier: CategoryTier) => {
+    setExpandedTierColumn((prev) => (prev === tier ? null : tier));
+  };
+
+  const handleExpandAndOpenSubCategory = (
+    tier: CategoryTier,
+    subKey: string
+  ) => {
+    setCascadeTier(null);
+    setExpandedTierColumn(tier);
+    setExpandedSubKeys((prev) => ({
+      ...prev,
+      [subKey]: true,
+    }));
   };
 
   const primaryTag = tagMap[mainCategoryTagId] || activeCategoryStat?.tag || null;
@@ -123,6 +146,8 @@ export const BuilderStep1CategoryTarget: React.FC<
     liveCategoryStock.totalNew + liveCategoryStock.totalFresh;
   const producibleScopeEpisodes = Math.floor(totalScopeUsable / 5);
 
+  const isSearching = step1SearchQuery.trim().length > 0;
+
   const handleTagClick = (tagId: string) => {
     if (tagClickMode === 'TOGGLE_FACET') {
       if (tagId === mainCategoryTagId) return;
@@ -132,285 +157,6 @@ export const BuilderStep1CategoryTarget: React.FC<
     }
   };
 
-  const renderTierColumn = (
-    tier: CategoryTier,
-    groups: TierSubCategoryGroup[]
-  ) => {
-    const theme = TIER_THEME_CONFIGS[tier];
-    const totalInTier = groups.reduce((acc, g) => acc + g.tags.length, 0);
-    const tierKeys = groups.map((g) => `${tier}__${g.subCategory}`);
-    const isTierAllExpanded =
-      tierKeys.length > 0 && tierKeys.every((k) => Boolean(expandedSubKeys[k]));
-
-    return (
-      <div
-        key={`builder-step1-tier-${tier}`}
-        className="flex flex-col rounded-2xl border border-[#E5DED4] bg-white overflow-hidden shadow-2xs"
-      >
-        {/* Tier Column Header */}
-        <div
-          className={`px-3 sm:px-3.5 py-2 sm:py-2.5 border-b ${theme.headerBorder} ${theme.headerBg} flex items-center justify-between gap-1.5 sm:gap-2`}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold whitespace-nowrap shrink-0 ${theme.badgeBg} ${theme.badgeTextCls}`}
-              >
-                <span className="md:hidden">T{tier}</span>
-                <span className="hidden md:inline">{theme.badgeText}</span>
-              </span>
-              <span
-                className={`text-xs font-extrabold ${theme.accentText} truncate min-w-0`}
-              >
-                {theme.title}
-              </span>
-            </div>
-            <p className="hidden md:block text-[10px] text-[#5C5042] truncate mt-0.5">
-              {theme.subtitle}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {groups.length > 0 && (
-              <button
-                type="button"
-                onClick={() => handleToggleTierSubs(tier, groups)}
-                className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/90 hover:bg-white text-[#4A3F31] border border-black/10 transition-colors cursor-pointer inline-flex items-center gap-1 shrink-0"
-                title={
-                  isTierAllExpanded
-                    ? `พับหมวดย่อยทั้งหมดใน ${theme.badgeText}`
-                    : `กางหมวดย่อยทั้งหมดใน ${theme.badgeText}`
-                }
-              >
-                {isTierAllExpanded ? (
-                  <>
-                    <ChevronsDownUp className="w-3 h-3 shrink-0" />
-                    <span className="hidden md:inline">พับ</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronsUpDown className="w-3 h-3 shrink-0" />
-                    <span className="hidden md:inline">กาง</span>
-                  </>
-                )}
-              </button>
-            )}
-            <span className="text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/90 text-[#524538] border border-black/5 tabular-nums shrink-0">
-              {totalInTier}
-            </span>
-          </div>
-        </div>
-
-        {/* Collapsible Sub-Category Frames (All Collapsed by Default) */}
-        <div className="p-2.5 space-y-2 max-h-80 overflow-y-auto scrollbar-thin bg-[#FAF8F5]">
-          {groups.length === 0 ? (
-            <div className="py-6 text-center text-xs text-[#8C7B6C]">
-              ไม่พบแท็กในชั้นนี้ตามคำค้นหา
-            </div>
-          ) : (
-            groups.map(({ subCategory, tags: subTags }) => {
-              const subKey = `${tier}__${subCategory}`;
-              const isSearching = step1SearchQuery.trim().length > 0;
-              const isCollapsed =
-                !isSearching && !Boolean(expandedSubKeys[subKey]);
-              const isUnclassified =
-                subCategory === DEFAULT_UNCLASSIFIED_SUBCATEGORY;
-
-              const hasPrimaryInSub = subTags.some(
-                (t) => t.id === mainCategoryTagId
-              );
-              const facetCountInSub = subTags.filter((t) =>
-                selectedFacetTagIds.includes(t.id)
-              ).length;
-
-              return (
-                <div
-                  key={subKey}
-                  className={`rounded-xl border overflow-hidden ${
-                    isUnclassified
-                      ? 'bg-[#FFFDF8] border-[#E8D2AE]'
-                      : 'bg-white border-[#E5DED4]'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedSubKeys((prev) => ({
-                        ...prev,
-                        [subKey]: !prev[subKey],
-                      }))
-                    }
-                    className={`w-full px-2.5 py-1.5 border-b flex items-center justify-between gap-1.5 text-left cursor-pointer transition-colors ${
-                      isCollapsed ? 'border-b-transparent' : ''
-                    } ${
-                      isUnclassified
-                        ? 'bg-[#FEF6E6] border-[#E8D2AE] hover:bg-[#FCEFD6]'
-                        : `${theme.subHeaderBg} ${theme.subHeaderBorder} hover:brightness-98`
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <ChevronDown
-                        className={`w-3.5 h-3.5 text-[#524538] transition-transform shrink-0 ${
-                          isCollapsed ? '-rotate-90' : ''
-                        }`}
-                      />
-                      <span className="text-[11px] font-extrabold text-[#3D332A] truncate">
-                        {subCategory}
-                      </span>
-
-                      {/* Active selection indicators when sub-category is collapsed */}
-                      {hasPrimaryInSub && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-[#3B6845] text-white text-[9px] font-extrabold shrink-0">
-                          <Star className="w-2.5 h-2.5 fill-current" />
-                          <span>แกนหลัก</span>
-                        </span>
-                      )}
-                      {facetCountInSub > 0 && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-[#8A5A22] text-white text-[9px] font-extrabold shrink-0">
-                          <Check className="w-2.5 h-2.5" />
-                          <span>ผสม {facetCountInSub}</span>
-                        </span>
-                      )}
-                    </div>
-
-                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-white text-[#6E5F52] border border-black/10 tabular-nums shrink-0">
-                      {subTags.length}
-                    </span>
-                  </button>
-
-                  {!isCollapsed && (
-                    <div className="p-2">
-                      {subTags.length === 0 ? (
-                        <p className="text-[11px] text-[#8C7B6C] italic text-center py-1.5">
-                          ยังไม่มีแท็กในหมวดย่อยนี้
-                        </p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {subTags.map((tag) => {
-                            const isPrimary = tag.id === mainCategoryTagId;
-                            const isFacet = selectedFacetTagIds.includes(tag.id);
-                            const stock = tagStockMap[tag.id] || {
-                              total: 0,
-                              usable: 0,
-                              newCount: 0,
-                              freshCount: 0,
-                              producibleEpisodes: 0,
-                            };
-
-                            return (
-                              <div
-                                key={tag.id}
-                                className={`group inline-flex items-stretch rounded-xl border transition-all overflow-hidden ${
-                                  isPrimary
-                                    ? 'bg-[#EDF4ED] border-[#3B6845] ring-2 ring-[#A4C5A1]/60 shadow-2xs'
-                                    : isFacet
-                                    ? 'bg-[#FDF5E8] border-[#C99749] ring-1 ring-[#E8CFA6] shadow-2xs'
-                                    : 'bg-[#FAF8F5] border-[#DFD7CA] hover:bg-white hover:border-[#BAD8B9]'
-                                }`}
-                              >
-                                {/* Main Tag Click Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleTagClick(tag.id)}
-                                  className="px-2.5 py-1.5 text-left flex items-center gap-1.5 cursor-pointer min-w-0"
-                                  title={`#${tag.name} — ใหม่ ${stock.newCount} | พร้อมใช้ ${stock.usable}/${stock.total} ฟุต (${stock.producibleEpisodes} EP)`}
-                                >
-                                  {isPrimary ? (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#3B6845] text-white text-[9px] font-extrabold shrink-0">
-                                      <Star className="w-2.5 h-2.5 fill-current" />
-                                      <span>หลัก</span>
-                                    </span>
-                                  ) : isFacet ? (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#8A5A22] text-white text-[9px] font-extrabold shrink-0">
-                                      <Check className="w-2.5 h-2.5" />
-                                      <span>ผสม</span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs shrink-0">
-                                      {getEntityIcon(tag)}
-                                    </span>
-                                  )}
-
-                                  <span
-                                    className={`text-xs truncate max-w-[130px] ${
-                                      isPrimary
-                                        ? 'font-extrabold text-[#1E4628]'
-                                        : isFacet
-                                        ? 'font-extrabold text-[#6B4415]'
-                                        : 'font-semibold text-[#3D332A]'
-                                    }`}
-                                  >
-                                    #{tag.name}
-                                  </span>
-
-                                  <span
-                                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded tabular-nums shrink-0 ${
-                                      isPrimary
-                                        ? 'bg-[#3B6845]/15 text-[#1E4628] font-bold'
-                                        : isFacet
-                                        ? 'bg-[#8A5A22]/15 text-[#6B4415] font-bold'
-                                        : stock.usable >= 5
-                                        ? 'bg-[#EAF5ED] text-[#245233] font-bold'
-                                        : 'bg-[#EFECE6] text-[#786B5C]'
-                                    }`}
-                                  >
-                                    {stock.usable > 0
-                                      ? `${stock.usable}`
-                                      : `${stock.total}`}
-                                  </span>
-                                </button>
-
-                                {/* Quick Secondary Action Button (+Facet or ★Primary) */}
-                                {!isPrimary && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (tagClickMode === 'SET_PRIMARY') {
-                                        onToggleFacetTag(tag.id);
-                                      } else {
-                                        onSelectCategory(tag.id, false);
-                                      }
-                                    }}
-                                    className={`px-1.5 border-l flex items-center justify-center transition-colors cursor-pointer ${
-                                      isFacet
-                                        ? 'border-[#E2C699] bg-[#F8E9CE] text-[#6B4415] hover:bg-[#F2DCB3]'
-                                        : 'border-[#EAE2D6] bg-[#F4F0E8] text-[#6E5F52] hover:bg-[#E5EFE6] hover:text-[#244B2F]'
-                                    }`}
-                                    title={
-                                      tagClickMode === 'SET_PRIMARY'
-                                        ? isFacet
-                                          ? 'เอาออกจากป้ายที่ผสม'
-                                          : 'กด + เพื่อผสมแท็กนี้เพิ่ม (Cross-Tier Filter)'
-                                        : 'ตั้งป้ายนี้เป็นแกนหลักของตอน (Primary Series)'
-                                    }
-                                  >
-                                    {tagClickMode === 'SET_PRIMARY' ? (
-                                      isFacet ? (
-                                        <X className="w-3 h-3" />
-                                      ) : (
-                                        <Plus className="w-3 h-3" />
-                                      )
-                                    ) : (
-                                      <Star className="w-3 h-3" />
-                                    )}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <motion.section
@@ -749,14 +495,20 @@ export const BuilderStep1CategoryTarget: React.FC<
                     <input
                       type="text"
                       value={step1SearchQuery}
-                      onChange={(e) => onChangeStep1SearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        setCascadeTier(null);
+                        onChangeStep1SearchQuery(e.target.value);
+                      }}
                       placeholder="ค้นหาแท็ก (เช่น พูดผิด, พี่แจ๊ส)..."
                       className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#ded3c5] text-xs text-[#3d332a] placeholder:text-[#a39485] focus:outline-none focus:border-[#3b6845]"
                     />
                     {step1SearchQuery && (
                       <button
                         type="button"
-                        onClick={() => onChangeStep1SearchQuery('')}
+                        onClick={() => {
+                          setCascadeTier(null);
+                          onChangeStep1SearchQuery('');
+                        }}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8c7b6c] hover:text-[#3d332a] cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -767,10 +519,38 @@ export const BuilderStep1CategoryTarget: React.FC<
               </div>
 
               {/* 3 Independent Tier Columns (Tier 1 | Tier 2 | Tier 3) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                {renderTierColumn(1, tier1Groups)}
-                {renderTierColumn(2, tier2Groups)}
-                {renderTierColumn(3, tier3Groups)}
+              <div className="flex flex-col lg:flex-row gap-3 items-stretch">
+                {(
+                  [
+                    { tier: 1 as CategoryTier, groups: tier1Groups },
+                    { tier: 2 as CategoryTier, groups: tier2Groups },
+                    { tier: 3 as CategoryTier, groups: tier3Groups },
+                  ] as const
+                ).map(({ tier, groups }) => (
+                  <BuilderTierColumn
+                    key={`builder-step1-tier-${tier}`}
+                    tier={tier}
+                    groups={groups}
+                    expandedSubKeys={expandedSubKeys}
+                    isCascadeActive={cascadeTier === tier && !isSearching}
+                    isSearching={isSearching}
+                    isExpandedColumn={expandedTierColumn === tier}
+                    isCompactRail={
+                      expandedTierColumn !== null && expandedTierColumn !== tier
+                    }
+                    mainCategoryTagId={mainCategoryTagId}
+                    selectedFacetTagIds={selectedFacetTagIds}
+                    tagStockMap={tagStockMap}
+                    tagClickMode={tagClickMode}
+                    onToggleTierSubs={handleToggleTierSubs}
+                    onToggleSubCategory={handleToggleSubCategory}
+                    onExpandAndOpenSubCategory={handleExpandAndOpenSubCategory}
+                    onToggleExpandColumn={handleToggleExpandColumn}
+                    onTagClick={handleTagClick}
+                    onToggleFacetTag={onToggleFacetTag}
+                    onSelectCategory={onSelectCategory}
+                  />
+                ))}
               </div>
 
               {/* Step 1 Action Footer */}
