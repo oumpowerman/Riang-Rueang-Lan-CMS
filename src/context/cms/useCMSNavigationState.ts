@@ -28,6 +28,7 @@ export function useCMSNavigationState() {
   };
 
   const [isClearClipsModalOpen, setIsClearClipsModalOpen] = useState(false);
+  const [isSyncCenterModalOpen, setIsSyncCenterModalOpen] = useState(false);
   const [isDirectFootageModalOpen, setIsDirectFootageModalOpen] = useState(false);
   const [isGoogleDriveBatchModalOpen, setIsGoogleDriveBatchModalOpen] = useState(false);
   const [isBatchAssignCategoryModalOpen, setIsBatchAssignCategoryModalOpen] = useState(false);
@@ -114,6 +115,8 @@ export function useCMSNavigationState() {
     setIsStatusRuleModalOpen,
     isClearClipsModalOpen,
     setIsClearClipsModalOpen,
+    isSyncCenterModalOpen,
+    setIsSyncCenterModalOpen,
     isDirectFootageModalOpen,
     setIsDirectFootageModalOpen,
     isGoogleDriveBatchModalOpen,

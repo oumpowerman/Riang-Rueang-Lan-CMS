@@ -3,9 +3,30 @@ import { Footage } from '../types/footage.types';
 import { RawSource } from '../types/source.types';
 
 const DB_NAME = 'rrl_cms_idb_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-export type IDBStoreName = 'episodes' | 'footage' | 'sources' | 'meta';
+export type IDBStoreName = 'episodes' | 'footage' | 'sources' | 'meta' | 'sync_outbox';
+
+export type OutboxCollectionKey =
+  | 'footages'
+  | 'episodes'
+  | 'sources'
+  | 'categories'
+  | 'category_groups'
+  | 'settings';
+
+export interface SyncOutboxRecord {
+  /** Coalescing key, e.g. "footages::FT-0177" or "settings::global_rules" */
+  opKey: string;
+  collection: OutboxCollectionKey;
+  action: 'upsert' | 'delete';
+  entityId: string;
+  payload?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  retryCount: number;
+  lastError?: string;
+}
 
 const LEGACY_BULKY_LOCAL_KEYS = [
   'rrl_cms_episodes_v2_e2e',
@@ -75,6 +96,9 @@ function openDatabase(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'key' });
         }
+        if (!db.objectStoreNames.contains('sync_outbox')) {
+          db.createObjectStore('sync_outbox', { keyPath: 'opKey' });
+        }
       };
 
       request.onsuccess = () => {
@@ -107,7 +131,9 @@ function openDatabase(): Promise<IDBDatabase | null> {
   return dbPromise;
 }
 
-async function getAllFromStore<T>(storeName: Exclude<IDBStoreName, 'meta'>): Promise<T[]> {
+type DataStoreName = 'episodes' | 'footage' | 'sources';
+
+async function getAllFromStore<T>(storeName: DataStoreName): Promise<T[]> {
   const db = await openDatabase();
   if (!db) return [];
 
@@ -132,7 +158,7 @@ async function getAllFromStore<T>(storeName: Exclude<IDBStoreName, 'meta'>): Pro
 }
 
 async function saveAllToStore<T extends { id: string }>(
-  storeName: Exclude<IDBStoreName, 'meta'>,
+  storeName: DataStoreName,
   items: T[]
 ): Promise<void> {
   const db = await openDatabase();
@@ -169,7 +195,7 @@ async function saveAllToStore<T extends { id: string }>(
 }
 
 async function upsertBatchToStore<T extends { id: string }>(
-  storeName: Exclude<IDBStoreName, 'meta'>,
+  storeName: DataStoreName,
   items: T[]
 ): Promise<void> {
   if (items.length === 0) return;
@@ -254,10 +280,10 @@ async function clearClipsStores(): Promise<void> {
 }
 
 // Debounced background save timers per store so rapid state updates don't block main thread
-const pendingSaveTimers: Partial<Record<Exclude<IDBStoreName, 'meta'>, number>> = {};
+const pendingSaveTimers: Partial<Record<DataStoreName, number>> = {};
 
 function scheduleSaveAllToStore<T extends { id: string }>(
-  storeName: Exclude<IDBStoreName, 'meta'>,
+  storeName: DataStoreName,
   items: T[],
   delayMs = 250
 ): void {
@@ -273,11 +299,92 @@ function scheduleSaveAllToStore<T extends { id: string }>(
 }
 
 /**
+ * Persistent Offline Outbox CRUD helpers
+ */
+async function getAllOutboxRecords(): Promise<SyncOutboxRecord[]> {
+  const db = await openDatabase();
+  if (!db || !db.objectStoreNames.contains('sync_outbox')) return [];
+
+  return new Promise<SyncOutboxRecord[]>((resolve) => {
+    try {
+      const tx = db.transaction('sync_outbox', 'readonly');
+      const req = tx.objectStore('sync_outbox').getAll();
+      req.onsuccess = () => {
+        const list = (req.result as SyncOutboxRecord[]) || [];
+        list.sort((a, b) => (a.createdAt > b.createdAt ? 1 : a.createdAt < b.createdAt ? -1 : 0));
+        resolve(list);
+      };
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+async function upsertOutboxRecords(records: SyncOutboxRecord[]): Promise<void> {
+  if (records.length === 0) return;
+  const db = await openDatabase();
+  if (!db || !db.objectStoreNames.contains('sync_outbox')) return;
+
+  return new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction('sync_outbox', 'readwrite');
+      const store = tx.objectStore('sync_outbox');
+      for (let i = 0; i < records.length; i++) {
+        store.put(records[i]);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function deleteOutboxRecords(opKeys: string[]): Promise<void> {
+  if (opKeys.length === 0) return;
+  const db = await openDatabase();
+  if (!db || !db.objectStoreNames.contains('sync_outbox')) return;
+
+  return new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction('sync_outbox', 'readwrite');
+      const store = tx.objectStore('sync_outbox');
+      for (let i = 0; i < opKeys.length; i++) {
+        store.delete(opKeys[i]);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function clearOutboxStore(): Promise<void> {
+  const db = await openDatabase();
+  if (!db || !db.objectStoreNames.contains('sync_outbox')) return;
+
+  return new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction('sync_outbox', 'readwrite');
+      tx.objectStore('sync_outbox').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
  * Hydrates a collection from IndexedDB, or automatically migrates from legacy localStorage
  * on first launch and reclaims the 5MB localStorage space.
  */
 async function loadOrMigrateStore<T extends { id: string }>(
-  storeName: Exclude<IDBStoreName, 'meta'>,
+  storeName: DataStoreName,
   legacyLocalStorageKey: string
 ): Promise<T[]> {
   const idbItems = await getAllFromStore<T>(storeName);
@@ -315,6 +422,10 @@ export const idbStorageService = {
   getMeta,
   setMeta,
   clearClipsStores,
+  getAllOutboxRecords,
+  upsertOutboxRecords,
+  deleteOutboxRecords,
+  clearOutboxStore,
 
   loadEpisodes(): Promise<Episode[]> {
     return loadOrMigrateStore<Episode>('episodes', 'rrl_cms_episodes_v2_e2e');

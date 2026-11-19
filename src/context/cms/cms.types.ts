@@ -2,6 +2,7 @@ import React from 'react';
 import {
   ArchiveSummaryStats,
   BatchChunkProgress,
+  OutboxFlushResult,
   ServerCollectionCounts,
 } from '../../firebase/firestoreService';
 import {
@@ -25,6 +26,7 @@ import { MixRecipeId } from '../../utils/collisionDetector';
 import { DuplicateMergePlan } from '../../utils/duplicateClusterScanner';
 import { MergeDuplicateFootagesResult } from './useCMSDuplicateMerge';
 import { SupabaseSyncFilterPreset } from '../../types/supabaseSync.types';
+import { ManualSyncReport, SyncHealthState } from './useCMSSyncHealth';
 
 export type ActiveNavTab =
   | 'DASHBOARD'
@@ -143,6 +145,8 @@ export interface CMSContextType {
   setIsStatusRuleModalOpen: (open: boolean) => void;
   isClearClipsModalOpen: boolean;
   setIsClearClipsModalOpen: (open: boolean) => void;
+  isSyncCenterModalOpen: boolean;
+  setIsSyncCenterModalOpen: (open: boolean) => void;
   isDirectFootageModalOpen: boolean;
   setIsDirectFootageModalOpen: (open: boolean) => void;
   isGoogleDriveBatchModalOpen: boolean;
@@ -402,11 +406,16 @@ export interface CMSContextType {
   clearAllClips: () => Promise<void>;
   isClearingClips: boolean;
 
-  // Cloud Database Sync & High-Scale Summary Stats
+  // Cloud Database Sync, Drift Detection & Offline Outbox Queue
   isCloudConnected: boolean;
   isCloudSynced: boolean;
   isSeedingToCloud: boolean;
   seedToCloud: () => Promise<void>;
   serverCounts: ServerCollectionCounts | null;
   archiveSummaryStats: ArchiveSummaryStats | null;
+  syncHealth: SyncHealthState;
+  manualDeltaRefresh: () => Promise<ManualSyncReport>;
+  manualFullPullFromCloud: () => Promise<ManualSyncReport>;
+  flushOutboxNow: () => Promise<OutboxFlushResult>;
+  clearOutboxNow: () => Promise<void>;
 }

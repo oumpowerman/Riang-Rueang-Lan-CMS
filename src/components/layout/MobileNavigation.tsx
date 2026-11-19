@@ -2,12 +2,10 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Archive,
-  Cloud,
   Film,
   LayoutDashboard,
   ListOrdered,
   Palette,
-  RefreshCw,
   Scissors,
   Settings2,
   ShieldCheck,
@@ -44,9 +42,6 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
     setIsThreeTierManagerOpen,
     setIsStatusRuleModalOpen,
     setIsClearClipsModalOpen,
-    isCloudConnected,
-    isSeedingToCloud,
-    seedToCloud,
   } = useCMS();
 
   const { role, setIsAuthModalOpen } = useAuth();
@@ -332,42 +327,15 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                     </span>
                   </button>
 
-                  {/* Cloud Sync & User Role Row */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        seedToCloud();
-                      }}
-                      disabled={isSeedingToCloud}
-                      className={`min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
-                        isSeedingToCloud
-                          ? 'bg-amber-50 text-amber-900 border-amber-300'
-                          : isCloudConnected
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {isSeedingToCloud ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-700 shrink-0" />
-                          <span className="truncate">กำลังซิงก์...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Cloud className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                          <span className="truncate">ซิงก์ข้อมูล</span>
-                        </>
-                      )}
-                    </button>
-
+                  {/* User Role Switcher Row */}
+                  <div className="pt-1">
                     <button
                       type="button"
                       onClick={() => {
                         onClose();
                         setIsAuthModalOpen(true);
                       }}
-                      className={`min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                      className={`w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
                         role === 'ADMIN'
                           ? 'bg-amber-50 text-amber-950 border-amber-200 hover:bg-amber-100'
                           : 'bg-sky-50 text-sky-950 border-sky-200 hover:bg-sky-100'
@@ -375,7 +343,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                     >
                       <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">
-                        สิทธิ์: {role === 'ADMIN' ? 'Admin' : 'Editor'}
+                        สิทธิ์ผู้ใช้งาน: {role === 'ADMIN' ? 'Admin' : 'Editor'}
                       </span>
                     </button>
                   </div>

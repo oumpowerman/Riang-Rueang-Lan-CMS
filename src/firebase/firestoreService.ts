@@ -2,14 +2,11 @@ import {
   collection,
   doc,
   setDoc,
-  deleteDoc,
   getDocs,
   getCountFromServer,
   query,
-  limit,
   where,
   onSnapshot,
-  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './config';
 import { Footage } from '../types/footage.types';
@@ -69,6 +66,51 @@ import {
   restoreCategoriesToCloud,
 } from './firestoreAdminOps';
 
+import {
+  CLIENT_INSTANCE_ID,
+  CLOCK_SKEW_BUFFER_MS,
+  type DeletedTombstoneRecord,
+  type SyncCollectionKey,
+  type SyncPulseMetadata,
+  emitSyncPulse,
+  extractDeletedIdsSince,
+  fetchArchiveSummaryStatsOnce,
+  registerOnPulseEmitted,
+  subtractClockSkewBuffer,
+  updateCachedSyncPulse,
+} from './firestoreSyncPulse';
+
+import {
+  type OutboxFlushResult,
+  type OutboxQueueSnapshot,
+  clearOutboxQueue,
+  flushOutboxQueue,
+  initOutboxAutoRetry,
+  reloadOutboxFromStorage,
+  subscribeOutboxState,
+} from './firestoreOutboxQueue';
+
+import {
+  fetchSettingsOnce,
+  saveCategoryGroup,
+  deleteCategoryGroup,
+  saveCategory,
+  batchSaveCategories,
+  deleteCategory,
+  batchDeleteCategories,
+  saveSource,
+  batchSaveSources,
+  deleteSource,
+  saveFootage,
+  batchSaveFootages,
+  deleteFootage,
+  batchDeleteFootages,
+  saveEpisode,
+  batchSaveEpisodes,
+  deleteEpisode,
+  saveSettings,
+} from './firestoreCrudOps';
+
 // Re-export modular types and utilities
 export {
   MAX_BATCH_OPERATIONS,
@@ -101,6 +143,24 @@ export {
   clearAllClipsFromCloud,
   clearAllCategoriesFromCloud,
   restoreCategoriesToCloud,
+  CLIENT_INSTANCE_ID,
+  CLOCK_SKEW_BUFFER_MS,
+  type DeletedTombstoneRecord,
+  type SyncCollectionKey,
+  type SyncPulseMetadata,
+  emitSyncPulse,
+  extractDeletedIdsSince,
+  fetchArchiveSummaryStatsOnce,
+  registerOnPulseEmitted,
+  subtractClockSkewBuffer,
+  updateCachedSyncPulse,
+  type OutboxFlushResult,
+  type OutboxQueueSnapshot,
+  clearOutboxQueue,
+  flushOutboxQueue,
+  initOutboxAutoRetry,
+  reloadOutboxFromStorage,
+  subscribeOutboxState,
 };
 
 export interface ServerCollectionCounts {
@@ -110,7 +170,7 @@ export interface ServerCollectionCounts {
   fetchedAt: string;
 }
 
-export interface ArchiveSummaryStats {
+export interface ArchiveSummaryStats extends SyncPulseMetadata {
   totalEpisodes: number;
   completeEpisodesCount: number;
   incompleteEpisodesCount: number;
@@ -453,201 +513,28 @@ export const firestoreService = {
   },
 
   // ==========================================
-  // CRUD OPERATIONS
+  // CRUD OPERATIONS (WITH OFFLINE OUTBOX QUEUE)
   // ==========================================
-
-  async saveCategoryGroup(group: CategoryGroup) {
-    const docRef = doc(db, 'category_groups', group.id);
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({ ...group, updatedAt: new Date().toISOString() }),
-      { merge: true }
-    );
-  },
-
-  async deleteCategoryGroup(groupId: string) {
-    const docRef = doc(db, 'category_groups', groupId);
-    await deleteDoc(docRef);
-  },
-
-  async saveCategory(category: CategoryTag) {
-    const docRef = doc(db, 'categories', category.id);
-    const normalized = normalizeCategoryTag(category);
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({ ...normalized, updatedAt: new Date().toISOString() }),
-      { merge: true }
-    );
-  },
-
-  async batchSaveCategories(
-    categories: CategoryTag[],
-    onProgress?: (progress: BatchChunkProgress) => void
-  ) {
-    if (!categories.length) return;
-    const now = new Date().toISOString();
-    const ops: BatchWriteOp[] = categories.map((cat) => {
-      const normalized = normalizeCategoryTag(cat);
-      return {
-        type: 'set',
-        ref: doc(db, 'categories', cat.id),
-        data: sanitizeForFirestore({
-          ...normalized,
-          updatedAt: now,
-        }) as unknown as Record<string, unknown>,
-      };
-    });
-    await commitOperationsInChunks(ops, onProgress);
-  },
-
-  async deleteCategory(categoryId: string) {
-    const docRef = doc(db, 'categories', categoryId);
-    await deleteDoc(docRef);
-  },
-
-  async batchDeleteCategories(
-    categoryIds: string[],
-    onProgress?: (progress: BatchChunkProgress) => void
-  ) {
-    if (!categoryIds.length) return;
-    const ops: BatchWriteOp[] = categoryIds.map((id) => ({
-      type: 'delete',
-      ref: doc(db, 'categories', id),
-    }));
-    await commitOperationsInChunks(ops, onProgress);
-  },
-
-  async saveSource(source: RawSource) {
-    const docRef = doc(db, 'sources', source.id);
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({
-        ...source,
-        updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
-      }),
-      { merge: true }
-    );
-  },
-
-  async batchSaveSources(
-    sources: RawSource[],
-    onProgress?: (progress: BatchChunkProgress) => void
-  ) {
-    if (!sources.length) return;
-    const now = new Date().toISOString();
-    const ops: BatchWriteOp[] = sources.map((src) => ({
-      type: 'set',
-      ref: doc(db, 'sources', src.id),
-      data: sanitizeForFirestore({
-        ...src,
-        updatedAt: now,
-        serverUpdatedAt: serverTimestamp(),
-      }) as unknown as Record<string, unknown>,
-    }));
-    await commitOperationsInChunks(ops, onProgress);
-  },
-
-  async deleteSource(sourceId: string) {
-    const docRef = doc(db, 'sources', sourceId);
-    await deleteDoc(docRef);
-  },
-
-  async saveFootage(footage: Footage) {
-    const docRef = doc(db, 'footages', footage.id);
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({
-        ...footage,
-        updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
-      }),
-      { merge: true }
-    );
-  },
-
-  async batchSaveFootages(
-    footages: Footage[],
-    onProgress?: (progress: BatchChunkProgress) => void
-  ) {
-    if (!footages.length) return;
-    const now = new Date().toISOString();
-    const ops: BatchWriteOp[] = footages.map((ft) => ({
-      type: 'set',
-      ref: doc(db, 'footages', ft.id),
-      data: sanitizeForFirestore({
-        ...ft,
-        updatedAt: now,
-        serverUpdatedAt: serverTimestamp(),
-      }) as unknown as Record<string, unknown>,
-    }));
-    await commitOperationsInChunks(ops, onProgress);
-  },
-
-  async deleteFootage(footageId: string) {
-    const docRef = doc(db, 'footages', footageId);
-    await deleteDoc(docRef);
-  },
-
-  async batchDeleteFootages(
-    footageIds: string[],
-    onProgress?: (progress: BatchChunkProgress) => void
-  ) {
-    if (!footageIds.length) return;
-    const ops: BatchWriteOp[] = footageIds.map((id) => ({
-      type: 'delete',
-      ref: doc(db, 'footages', id),
-    }));
-    await commitOperationsInChunks(ops, onProgress);
-  },
-
-  async saveEpisode(episode: Episode) {
-    const docRef = doc(db, 'episodes', episode.id);
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({
-        ...episode,
-        updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
-      }),
-      { merge: true }
-    );
-  },
-
-  async batchSaveEpisodes(
-    episodes: Episode[],
-    onProgress?: (progress: BatchChunkProgress) => void
-  ) {
-    if (!episodes.length) return;
-    const now = new Date().toISOString();
-    const ops: BatchWriteOp[] = episodes.map((ep) => ({
-      type: 'set',
-      ref: doc(db, 'episodes', ep.id),
-      data: sanitizeForFirestore({
-        ...ep,
-        updatedAt: now,
-        serverUpdatedAt: serverTimestamp(),
-      }) as unknown as Record<string, unknown>,
-    }));
-    await commitOperationsInChunks(ops, onProgress);
-  },
-
-  async deleteEpisode(episodeId: string) {
-    const docRef = doc(db, 'episodes', episodeId);
-    await deleteDoc(docRef);
-  },
-
-  async saveSettings(settings: SystemSettings) {
-    const docRef = doc(db, 'system_settings', 'global_rules');
-    await setDoc(
-      docRef,
-      sanitizeForFirestore({
-        ...settings,
-        updatedAt: new Date().toISOString(),
-      }),
-      { merge: true }
-    );
-  },
+  fetchArchiveSummaryStatsOnce: () =>
+    fetchArchiveSummaryStatsOnce<ArchiveSummaryStats>(),
+  fetchSettingsOnce,
+  saveCategoryGroup,
+  deleteCategoryGroup,
+  saveCategory,
+  batchSaveCategories,
+  deleteCategory,
+  batchDeleteCategories,
+  saveSource,
+  batchSaveSources,
+  deleteSource,
+  saveFootage,
+  batchSaveFootages,
+  deleteFootage,
+  batchDeleteFootages,
+  saveEpisode,
+  batchSaveEpisodes,
+  deleteEpisode,
+  saveSettings,
 
   // Admin & Seed delegates
   seedInitialDatabase,

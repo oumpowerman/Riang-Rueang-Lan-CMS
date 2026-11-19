@@ -11,6 +11,7 @@ import {
   normalizeCategoryTag,
   sanitizeForFirestore,
 } from './firestoreBatchUtils';
+import { emitSyncPulse } from './firestoreSyncPulse';
 
 export async function seedInitialDatabase(
   categories: CategoryTag[],
@@ -95,6 +96,16 @@ export async function seedInitialDatabase(
   }
 
   await commitOperationsInChunks(ops);
+  emitSyncPulse({
+    upsertedCollections: [
+      'footages',
+      'episodes',
+      'sources',
+      'categories',
+      'category_groups',
+    ],
+    mutationType: 'admin:seed',
+  });
 }
 
 export async function clearAllClipsFromCloud(): Promise<void> {
@@ -131,6 +142,10 @@ export async function clearAllClipsFromCloud(): Promise<void> {
     });
 
     await commitOperationsInChunks(ops);
+    emitSyncPulse({
+      clipsWiped: true,
+      mutationType: 'admin:clear_clips',
+    });
   } catch (err) {
     console.warn('clearAllClipsFromCloud error:', err);
   }
@@ -156,6 +171,10 @@ export async function clearAllCategoriesFromCloud(): Promise<void> {
     });
 
     await commitOperationsInChunks(ops);
+    emitSyncPulse({
+      categoriesWiped: true,
+      mutationType: 'admin:clear_categories',
+    });
   } catch (err) {
     console.warn('clearAllCategoriesFromCloud error:', err);
   }
@@ -192,4 +211,8 @@ export async function restoreCategoriesToCloud(
   }
 
   await commitOperationsInChunks(ops);
+  emitSyncPulse({
+    upsertedCollections: ['categories', 'category_groups'],
+    mutationType: 'admin:restore_categories',
+  });
 }

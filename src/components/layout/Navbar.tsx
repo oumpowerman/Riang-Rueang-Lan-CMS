@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { ActiveNavTab, useCMS } from '../../context/CMSContext';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
+import { NavbarSyncButton } from './NavbarSyncButton';
+import { SyncCenterModal } from '../settings/SyncCenterModal';
 
 const TAB_LABELS: Record<ActiveNavTab, { icon: LucideIcon; title: string; subtitle: string }> = {
   DASHBOARD: { icon: LayoutDashboard, title: 'ภาพรวมระบบ', subtitle: 'สถิติภาพรวม & KPIs ช่อง' },
@@ -89,6 +91,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <NavbarSyncButton compact />
+
           <button
             type="button"
             onClick={() => setIsStatusRuleModalOpen(true)}
@@ -131,8 +135,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
         </div>
       </div>
 
-      {/* Right Zone: Ready Counter + PWA Install + Primary Import CTA */}
+      {/* Right Zone: Compact Sync Button + Ready Counter + PWA Install + Primary Import CTA */}
       <div className="hidden md:flex items-center gap-2.5 shrink-0">
+        {/* Compact Cloud Sync & Drift Status Trigger */}
+        <NavbarSyncButton />
+
         {/* Neutral Ready Footage Counter */}
         <button
           type="button"
@@ -244,6 +251,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Sync Center Modal (Portal rendered via BaseModal) */}
+      <SyncCenterModal />
     </header>
   );
 };

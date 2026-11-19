@@ -3,14 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Archive,
   ChevronRight,
-  Cloud,
   Film,
   FolderTree,
   LayoutDashboard,
   ListOrdered,
   Lock,
   Palette,
-  RefreshCw,
   Scissors,
   Settings2,
   ShieldCheck,
@@ -43,9 +41,6 @@ export const Sidebar: React.FC = () => {
     setIsThreeTierManagerOpen,
     setIsStatusRuleModalOpen,
     setIsClearClipsModalOpen,
-    isCloudConnected,
-    isSeedingToCloud,
-    seedToCloud,
   } = useCMS();
 
   const { role, setIsAuthModalOpen } = useAuth();
@@ -322,63 +317,7 @@ export const Sidebar: React.FC = () => {
           </AnimatePresence>
         </button>
 
-        {/* 4. Cloud / Firestore Sync */}
-        <button
-          type="button"
-          onClick={seedToCloud}
-          disabled={isSeedingToCloud}
-          title="ซิงก์ข้อมูลกับ Firestore Cloud"
-          className={`h-9 flex items-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-all overflow-hidden cursor-pointer disabled:opacity-60 ${
-            isHovered
-              ? 'w-full justify-between gap-2 px-3'
-              : 'w-10 justify-center px-0'
-          }`}
-        >
-          <span className={`inline-flex items-center whitespace-nowrap min-w-0 ${isHovered ? 'gap-3' : 'justify-center'}`}>
-            <span className="w-6 flex items-center justify-center shrink-0">
-              {isSeedingToCloud ? (
-                <RefreshCw className="w-4 h-4 text-slate-500 animate-spin shrink-0" />
-              ) : (
-                <Cloud className="w-4 h-4 text-slate-500 shrink-0" />
-              )}
-            </span>
-            <AnimatePresence initial={false}>
-              {isHovered && (
-                <motion.span
-                  key="label-cloud"
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.18, ease: TEXT_EASE }}
-                  className="truncate font-semibold"
-                >
-                  {isSeedingToCloud ? 'กำลังซิงก์ข้อมูล...' : 'ซิงก์ข้อมูล Cloud'}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </span>
-          <AnimatePresence initial={false}>
-            {isHovered && (
-              <motion.span
-                key="badge-cloud"
-                initial={{ opacity: 0, x: 4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 4 }}
-                transition={{ duration: 0.18, ease: TEXT_EASE }}
-                className="inline-flex items-center gap-1 font-mono text-[10px] text-slate-500 shrink-0"
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    isCloudConnected ? 'bg-emerald-500' : 'bg-slate-300'
-                  }`}
-                />
-                {isCloudConnected ? 'Online' : 'Local'}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-
-        {/* 5. Clear All Clips */}
+        {/* 4. Clear All Clips */}
         <button
           type="button"
           onClick={() => setIsClearClipsModalOpen(true)}

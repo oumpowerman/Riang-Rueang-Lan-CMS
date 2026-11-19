@@ -56,6 +56,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setArchiveSummaryStats,
     hasFullCloudEpisodesRef,
     hasFullCloudFootageRef,
+    localMutationVersion,
     isCloudConnected,
     isCloudSynced,
     isSeedingToCloud,
@@ -63,6 +64,11 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     resetDemoData,
     clearAllClips,
     isClearingClips,
+    syncHealth,
+    manualDeltaRefresh,
+    manualFullPullFromCloud,
+    flushOutboxNow,
+    clearOutboxNow,
   } = useCMSCloudAndStorageSync(navigationState.setSelectedTagFilter);
 
   // 3. Computed Analytics, Maps & 2-Tier Category Matrix
@@ -76,9 +82,19 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   // 3.5 Background Central Summary Document Sync (system_settings/archive_summary_stats)
+  // Publish KPI totals ONLY after THIS device performs an actual Cloud mutation (localMutationVersion > 0)
+  // so a passive or stale device opening the app can NEVER overwrite authoritative Cloud totals or mask Drift Detection.
   const lastSyncedSummarySigRef = useRef<string>('');
   useEffect(() => {
-    if (!hasFullCloudEpisodesRef.current || !hasFullCloudFootageRef.current) {
+    if (
+      localMutationVersion === 0 ||
+      !hasFullCloudEpisodesRef.current ||
+      !hasFullCloudFootageRef.current ||
+      !syncHealth.isOnline ||
+      syncHealth.isQuotaExhausted ||
+      syncHealth.outbox.count > 0 ||
+      syncHealth.drift.hasDrift
+    ) {
       return;
     }
 
@@ -145,8 +161,13 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (sig === lastSyncedSummarySigRef.current) return;
       lastSyncedSummarySigRef.current = sig;
 
-      setArchiveSummaryStats(nextStats);
-      cmsRepository.setLastCloudSyncTimestamp(nextStats.updatedAt);
+      setArchiveSummaryStats((prev) => ({
+        ...(prev || {}),
+        ...nextStats,
+      }));
+      if (!cmsRepository.getLastCloudSyncTimestamp()) {
+        cmsRepository.setLastCloudSyncTimestamp(nextStats.updatedAt);
+      }
       void idbStorageService.setMeta('archive_summary_stats', nextStats);
       void firestoreService.saveArchiveSummaryStats(nextStats);
     }, 800);
@@ -161,7 +182,12 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sources.length,
     hasFullCloudEpisodesRef,
     hasFullCloudFootageRef,
+    localMutationVersion,
     setArchiveSummaryStats,
+    syncHealth.isOnline,
+    syncHealth.isQuotaExhausted,
+    syncHealth.outbox.count,
+    syncHealth.drift.hasDrift,
   ]);
 
   // 4. Actions: Tier 0 Category Groups, Tier 1/2 Tags & System Settings
@@ -231,6 +257,11 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         seedToCloud,
         serverCounts,
         archiveSummaryStats,
+        syncHealth,
+        manualDeltaRefresh,
+        manualFullPullFromCloud,
+        flushOutboxNow,
+        clearOutboxNow,
       }}
     >
       {children}
