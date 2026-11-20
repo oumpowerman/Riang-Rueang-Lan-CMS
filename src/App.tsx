@@ -32,6 +32,7 @@ import { AuthModal } from './components/auth/AuthModal';
 import { SupabaseContentSyncModal } from './components/supabase/SupabaseContentSyncModal';
 import { SupabaseConfigModal } from './components/supabase/SupabaseConfigModal';
 import { OfflineIndicator } from './components/pwa/OfflineIndicator';
+import { PWAUpdateBanner } from './components/pwa/PWAUpdateBanner';
 import { parseSharedInput } from './utils/platformDetector';
 import { CMSProvider, useCMS } from './context/CMSContext';
 import { AuthProvider } from './context/AuthContext';
@@ -87,6 +88,9 @@ const MainWorkspace: React.FC = () => {
 
       {/* Main Viewport Container */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Automatic New Version Update Banner */}
+        <PWAUpdateBanner />
+
         {/* Offline Mode Banner */}
         <OfflineIndicator />
 
