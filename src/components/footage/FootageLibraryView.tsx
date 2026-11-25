@@ -110,6 +110,9 @@ export const FootageLibraryView: React.FC = () => {
         onFlowFilterChange={vault.setFlowFilter}
         actionFilter={vault.actionFilter}
         onActionFilterChange={vault.setActionFilter}
+        punchlineFilter={vault.punchlineFilter}
+        onPunchlineFilterChange={vault.setPunchlineFilter}
+        punchlineCounts={vault.punchlineCounts}
         sortBy={vault.sortBy}
         onSortByChange={vault.setSortBy}
         tags={vault.tags}
@@ -157,6 +160,9 @@ export const FootageLibraryView: React.FC = () => {
         onClearBatchSelection={vault.handleClearBatchSelection}
         viewMode={vault.viewMode}
         onViewModeChange={vault.setViewMode}
+        punchlineFilter={vault.punchlineFilter}
+        punchlineCounts={vault.punchlineCounts}
+        onPunchlineFilterChange={vault.setPunchlineFilter}
       />
 
       {/* 5. Staggered Spring Footage Results (Grid / Table / Empty State / Pagination) */}

@@ -1,7 +1,19 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check, ChevronDown, ChevronUp, CheckCircle2, Folder, Video, Mic, Plus, Sparkles } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  Folder,
+  Video,
+  Mic,
+  Plus,
+  RotateCcw,
+} from 'lucide-react';
 import { PublishSlot } from '../../../types/episode.types';
+import { BuilderSeriesCatalogItem, BuilderSeriesMode } from './builder.types';
+import { BuilderSeriesSelectorBar } from './BuilderSeriesSelectorBar';
 
 interface BuilderStep4MetadataFormProps {
   isOpen: boolean;
@@ -11,13 +23,26 @@ interface BuilderStep4MetadataFormProps {
   previewMasterFileName: string;
   title: string;
   onChangeTitle: (val: string) => void;
-  categoryName?: string;
-  subcategoryName?: string;
-  categoryEpisodeNo?: number;
-  existingCategoryEpisodesCount?: number;
-  categoryEpisodeScope?: 'MAIN_CATEGORY' | 'SUBCATEGORY';
-  onToggleEpisodeScope?: (scope: 'MAIN_CATEGORY' | 'SUBCATEGORY') => void;
-  productionTarget?: 'MAIN_CATEGORY_VARIETY' | 'SINGLE_SUBCATEGORY_SPECIAL';
+  isTitleManuallyEdited?: boolean;
+  standardizedTitlePreview?: string;
+  onResetTitleToStandard?: () => void;
+  seriesCatalog: BuilderSeriesCatalogItem[];
+  seriesMode: BuilderSeriesMode;
+  activeExistingSeries: BuilderSeriesCatalogItem | null;
+  customSeriesName: string;
+  effectiveSeriesName: string;
+  autoEpisodeNo: number;
+  effectiveEpisodeNo: number;
+  isManualEpisodeNo: boolean;
+  isDuplicateEpisodeNo: boolean;
+  existingSeriesEpisodesCount: number;
+  latestSeriesEpisodeNo: number;
+  matchingExistingSeriesForNewName: BuilderSeriesCatalogItem | null;
+  onSelectExistingSeries: (seriesKey: string) => void;
+  onSwitchToNewSeries: (initialName?: string) => void;
+  onChangeCustomSeriesName: (val: string) => void;
+  onChangeEpisodeNo: (epNo: number) => void;
+  onResetAutoEpisodeNo: () => void;
   publishDate: string;
   onChangePublishDate: (val: string) => void;
   publishSlot: PublishSlot;
@@ -53,13 +78,26 @@ export const BuilderStep4MetadataForm: React.FC<
   previewMasterFileName,
   title,
   onChangeTitle,
-  categoryName,
-  subcategoryName,
-  categoryEpisodeNo = 1,
-  existingCategoryEpisodesCount = 0,
-  categoryEpisodeScope = 'MAIN_CATEGORY',
-  onToggleEpisodeScope,
-  productionTarget = 'MAIN_CATEGORY_VARIETY',
+  isTitleManuallyEdited = false,
+  standardizedTitlePreview = '',
+  onResetTitleToStandard,
+  seriesCatalog,
+  seriesMode,
+  activeExistingSeries,
+  customSeriesName,
+  effectiveSeriesName,
+  autoEpisodeNo,
+  effectiveEpisodeNo,
+  isManualEpisodeNo,
+  isDuplicateEpisodeNo,
+  existingSeriesEpisodesCount,
+  latestSeriesEpisodeNo,
+  matchingExistingSeriesForNewName,
+  onSelectExistingSeries,
+  onSwitchToNewSeries,
+  onChangeCustomSeriesName,
+  onChangeEpisodeNo,
+  onResetAutoEpisodeNo,
   publishDate,
   onChangePublishDate,
   publishSlot,
@@ -206,76 +244,57 @@ export const BuilderStep4MetadataForm: React.FC<
               transition={{ duration: 0.24, ease: 'easeOut' }}
               className="pt-4 space-y-4"
             >
-              {/* Series Category Episode Summary Banner */}
-              {categoryName && (
-                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#edf4ed] border border-[#cfdece] rounded-xl text-xs text-[#244b2f]">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-0.5 font-bold rounded-lg bg-white text-[#2b5435] border border-[#bad8b9] flex items-center gap-1 shadow-2xs">
-                      <Sparkles className="w-3 h-3 text-[#3b6845]" />
-                      <span>
-                        ซีรีส์:{' '}
-                        {categoryEpisodeScope === 'SUBCATEGORY' && subcategoryName
-                          ? subcategoryName
-                          : categoryName}
-                      </span>
-                    </span>
-                    <span className="text-[#554d44]">
-                      ตอนที่{' '}
-                      <strong className="text-[#244b2f] font-bold">
-                        EP.{categoryEpisodeNo}
-                      </strong>{' '}
-                      <span className="hidden sm:inline">
-                        (มีแล้ว {existingCategoryEpisodesCount} ตอน)
-                      </span>
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {productionTarget === 'SINGLE_SUBCATEGORY_SPECIAL' && subcategoryName && onToggleEpisodeScope && (
-                      <div className="inline-flex items-center gap-1 p-0.5 bg-white border border-[#cfdece] rounded-lg text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => onToggleEpisodeScope('MAIN_CATEGORY')}
-                          className={`px-2.5 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
-                            categoryEpisodeScope === 'MAIN_CATEGORY'
-                              ? 'bg-[#3b6845] text-white shadow-xs'
-                              : 'text-[#6b645b] hover:text-[#2d2926]'
-                          }`}
-                        >
-                          หมวดหลัก
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onToggleEpisodeScope('SUBCATEGORY')}
-                          className={`px-2.5 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
-                            categoryEpisodeScope === 'SUBCATEGORY'
-                              ? 'bg-[#3b6845] text-white shadow-xs'
-                              : 'text-[#6b645b] hover:text-[#2d2926]'
-                          }`}
-                        >
-                          หมวดย่อย
-                        </button>
-                      </div>
-                    )}
-                    <span className="text-[11px] font-mono text-[#2b5435] bg-white border border-[#bad8b9] px-2 py-0.5 rounded-md">
-                      {nextEpisodeId}
-                    </span>
-                  </div>
-                </div>
-              )}
+              {/* Interactive Series Selector & Editable EP Number Panel */}
+              <BuilderSeriesSelectorBar
+                variant="step3"
+                seriesCatalog={seriesCatalog}
+                seriesMode={seriesMode}
+                activeExistingSeries={activeExistingSeries}
+                customSeriesName={customSeriesName}
+                effectiveSeriesName={effectiveSeriesName}
+                autoEpisodeNo={autoEpisodeNo}
+                effectiveEpisodeNo={effectiveEpisodeNo}
+                isManualEpisodeNo={isManualEpisodeNo}
+                isDuplicateEpisodeNo={isDuplicateEpisodeNo}
+                existingSeriesEpisodesCount={existingSeriesEpisodesCount}
+                latestSeriesEpisodeNo={latestSeriesEpisodeNo}
+                matchingExistingSeriesForNewName={matchingExistingSeriesForNewName}
+                nextEpisodeId={nextEpisodeId}
+                onSelectExistingSeries={onSelectExistingSeries}
+                onSwitchToNewSeries={onSwitchToNewSeries}
+                onChangeCustomSeriesName={onChangeCustomSeriesName}
+                onChangeEpisodeNo={onChangeEpisodeNo}
+                onResetAutoEpisodeNo={onResetAutoEpisodeNo}
+              />
 
               {/* Core Required Episode Fields */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-[#fdfbf7] border border-[#e8dfd3] rounded-xl p-4">
                 <div className="md:col-span-7">
-                  <label className="block text-xs font-bold text-[#38332d] mb-1">
-                    ชื่อคลิป 5 อันดับ *
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <label className="block text-xs font-bold text-[#38332d]">
+                      ชื่อคลิป 5 อันดับ *
+                    </label>
+                    {isTitleManuallyEdited &&
+                      standardizedTitlePreview &&
+                      title.trim() !== standardizedTitlePreview.trim() &&
+                      onResetTitleToStandard && (
+                        <button
+                          type="button"
+                          onClick={onResetTitleToStandard}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#3b6845] hover:underline cursor-pointer"
+                          title={standardizedTitlePreview}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>ใช้ชื่อมาตรฐาน ({effectiveSeriesName} · EP.{effectiveEpisodeNo})</span>
+                        </button>
+                      )}
+                  </div>
                   <input
                     type="text"
                     required
                     value={title}
                     onChange={(e) => onChangeTitle(e.target.value)}
-                    placeholder="เช่น 5 อันดับคนไทยเป็นคนตลก #12..."
+                    placeholder="เช่น 5 อันดับ คนไทยเป็นคนตลก EP.12"
                     className="w-full px-3 py-2 text-xs sm:text-sm font-semibold bg-[#faf7f2] border border-[#e8dfd3] rounded-xl focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
                   />
                 </div>

@@ -248,6 +248,13 @@ async function flushPendingSyncPulse(): Promise<void> {
 
   if (clipsWiped) {
     basePatch.clipsWipedAt = nowIso;
+    basePatch.totalEpisodes = 0;
+    basePatch.totalFootage = 0;
+    basePatch.totalSources = 0;
+    basePatch.usedFootageCount = 0;
+    basePatch.readyFootageCount = 0;
+    basePatch.newFootageCount = 0;
+    basePatch.coolingFootageCount = 0;
   }
   if (categoriesWiped) {
     basePatch.categoriesWipedAt = nowIso;

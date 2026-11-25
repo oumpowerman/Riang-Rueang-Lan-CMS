@@ -22,11 +22,14 @@ import { CategoryTag, CategoryTier } from '../../../types/tag.types';
 import { TIER_THEME_CONFIGS } from '../../tags/three-tier/IndependentTierColumn';
 import {
   BuilderScopeMatchMode,
+  BuilderSeriesCatalogItem,
+  BuilderSeriesMode,
   BuilderTagClickActionMode,
   LiveCategoryStock,
   TagLiveStockSummary,
   TierSubCategoryGroup,
 } from './builder.types';
+import { BuilderSeriesSelectorBar } from './BuilderSeriesSelectorBar';
 import { BuilderTierColumn } from './BuilderTierColumn';
 
 interface BuilderStep1CategoryTargetProps {
@@ -49,10 +52,31 @@ interface BuilderStep1CategoryTargetProps {
   onChangeStep1SearchQuery: (q: string) => void;
   tagClickMode: BuilderTagClickActionMode;
   onChangeTagClickMode: (mode: BuilderTagClickActionMode) => void;
-  onSelectCategory: (tagId: string, autoFillWithRecipe?: boolean) => void;
+  onSelectCategory: (
+    tagId: string,
+    autoFillWithRecipe?: boolean,
+    options?: { preserveFacets?: boolean }
+  ) => void;
   onToggleFacetTag: (tagId: string) => void;
   onClearFacetTags: () => void;
   onOpenThreeTierManager: () => void;
+  // Series Target & Auto-EP Props
+  seriesCatalog: BuilderSeriesCatalogItem[];
+  seriesMode: BuilderSeriesMode;
+  activeExistingSeries: BuilderSeriesCatalogItem | null;
+  customSeriesName: string;
+  effectiveSeriesName: string;
+  autoEpisodeNo: number;
+  effectiveEpisodeNo: number;
+  isManualEpisodeNo: boolean;
+  isDuplicateEpisodeNo: boolean;
+  existingSeriesEpisodesCount: number;
+  latestSeriesEpisodeNo: number;
+  matchingExistingSeriesForNewName: BuilderSeriesCatalogItem | null;
+  suggestedSeriesForActiveTag: BuilderSeriesCatalogItem[];
+  onSelectExistingSeries: (seriesKey: string) => void;
+  onSwitchToNewSeries: (initialName?: string) => void;
+  onChangeCustomSeriesName: (val: string) => void;
 }
 
 const SLIDE_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -83,6 +107,22 @@ export const BuilderStep1CategoryTarget: React.FC<
   onToggleFacetTag,
   onClearFacetTags,
   onOpenThreeTierManager,
+  seriesCatalog,
+  seriesMode,
+  activeExistingSeries,
+  customSeriesName,
+  effectiveSeriesName,
+  autoEpisodeNo,
+  effectiveEpisodeNo,
+  isManualEpisodeNo,
+  isDuplicateEpisodeNo,
+  existingSeriesEpisodesCount,
+  latestSeriesEpisodeNo,
+  matchingExistingSeriesForNewName,
+  suggestedSeriesForActiveTag,
+  onSelectExistingSeries,
+  onSwitchToNewSeries,
+  onChangeCustomSeriesName,
 }) => {
   // Default: ALL sub-category frames across Tier 1, Tier 2, Tier 3 start collapsed ({})
   const [expandedSubKeys, setExpandedSubKeys] = useState<
@@ -202,6 +242,19 @@ export const BuilderStep1CategoryTarget: React.FC<
               transition={{ duration: 0.2 }}
               className="flex flex-wrap items-center gap-1.5"
             >
+              {seriesMode === 'EXISTING' && activeExistingSeries && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1e4628] mr-1">
+                  <span className="truncate max-w-[200px]">
+                    {activeExistingSeries.fullSeriesTitle}
+                  </span>
+                  <span className="font-mono tabular-nums text-[#3b6845]">
+                    EP.{effectiveEpisodeNo}
+                  </span>
+                  <span className="text-[#c7bdb2]" aria-hidden="true">
+                    ·
+                  </span>
+                </span>
+              )}
               {primaryTag && (
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold ${primaryTierTheme.badgeBg} ${primaryTierTheme.badgeTextCls}`}
@@ -318,6 +371,27 @@ export const BuilderStep1CategoryTarget: React.FC<
               transition={{ duration: 0.24, ease: 'easeOut' }}
               className="pt-3.5 space-y-3"
             >
+              {/* Step 1 Series Quick-Selector Strip */}
+              <BuilderSeriesSelectorBar
+                variant="step1"
+                seriesCatalog={seriesCatalog}
+                seriesMode={seriesMode}
+                activeExistingSeries={activeExistingSeries}
+                customSeriesName={customSeriesName}
+                effectiveSeriesName={effectiveSeriesName}
+                autoEpisodeNo={autoEpisodeNo}
+                effectiveEpisodeNo={effectiveEpisodeNo}
+                isManualEpisodeNo={isManualEpisodeNo}
+                isDuplicateEpisodeNo={isDuplicateEpisodeNo}
+                existingSeriesEpisodesCount={existingSeriesEpisodesCount}
+                latestSeriesEpisodeNo={latestSeriesEpisodeNo}
+                matchingExistingSeriesForNewName={matchingExistingSeriesForNewName}
+                suggestedSeriesForActiveTag={suggestedSeriesForActiveTag}
+                onSelectExistingSeries={onSelectExistingSeries}
+                onSwitchToNewSeries={onSwitchToNewSeries}
+                onChangeCustomSeriesName={onChangeCustomSeriesName}
+              />
+
               {/* Active Scope Summary & Interactive Mode Controls Bar */}
               <div className="bg-[#fdfbf7] border border-[#e5ded4] rounded-2xl p-3 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -360,9 +434,13 @@ export const BuilderStep1CategoryTarget: React.FC<
                             <span>#{fTag.name}</span>
                             <button
                               type="button"
-                              onClick={() => onSelectCategory(fid, false)}
+                              onClick={() =>
+                                onSelectCategory(fid, false, {
+                                  preserveFacets: true,
+                                })
+                              }
                               className="ml-0.5 p-0.5 rounded hover:bg-[#e8d4b4] text-[#7c531d] cursor-pointer"
-                              title="สลับป้ายนี้ขึ้นเป็นแกนหลักของตอน (Primary Series)"
+                              title="สลับป้ายนี้ขึ้นเป็นแกนหลักของตอน (คงป้ายผสมเดิมไว้)"
                             >
                               <Star className="w-3 h-3" />
                             </button>
@@ -383,7 +461,7 @@ export const BuilderStep1CategoryTarget: React.FC<
                       <button
                         type="button"
                         onClick={onClearFacetTags}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-[#8e4537] bg-[#fdf3ec] hover:bg-[#f9e3d4] border border-[#f5d7cf] cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-[#8e4537] bg-[#fdf3ec] hover:bg-[#f9e3d4] border border-[#f5d7cf] cursor-pointer transition-colors whitespace-nowrap shrink-0"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>ล้าง ({selectedFacetTagIds.length})</span>
@@ -391,29 +469,62 @@ export const BuilderStep1CategoryTarget: React.FC<
                     )}
                   </div>
 
-                  {/* Right: Collapsible Advanced Mixing Mode Button */}
-                  <button
-                    type="button"
-                    onClick={() => setIsAdvancedModeOpen((prev) => !prev)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer shrink-0 ${
-                      isAdvancedModeOpen ||
-                      tagClickMode !== 'SET_PRIMARY' ||
-                      scopeMatchMode !== 'AND'
-                        ? 'bg-[#edf4ed] text-[#244b2f] border-[#bad8b9]'
-                        : 'bg-white text-[#524538] border-[#ded3c5] hover:bg-[#faf7f2]'
-                    }`}
-                  >
-                    <SlidersHorizontal className="w-3 h-3 text-[#3b6845]" />
-                    <span>ตั้งค่าการผสม</span>
-                    <ChevronDown
-                      className={`w-3 h-3 transition-transform ${
-                        isAdvancedModeOpen ? 'rotate-180' : ''
+                  {/* Right: Auto-revealed Inline OR/AND Switcher (when >=1 facet) + Collapsible Click Mode */}
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    {selectedFacetTagIds.length > 0 && (
+                      <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-white border border-[#ded3c5]">
+                        <button
+                          type="button"
+                          onClick={() => onChangeScopeMatchMode('OR')}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0 ${
+                            scopeMatchMode === 'OR'
+                              ? 'bg-[#8a5a22] text-white shadow-2xs'
+                              : 'text-[#524538] hover:bg-[#faf7f2]'
+                          }`}
+                          title="คัดฟุตเทจที่มีอย่างน้อย 1 แท็กที่เลือก (ค่าเริ่มต้น)"
+                        >
+                          <Layers className="w-3 h-3" />
+                          <span>บางแท็ก (OR)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onChangeScopeMatchMode('AND')}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0 ${
+                            scopeMatchMode === 'AND'
+                              ? 'bg-[#3b6845] text-white shadow-2xs'
+                              : 'text-[#524538] hover:bg-[#faf7f2]'
+                          }`}
+                          title="คัดเฉพาะฟุตเทจที่มีครบทุกแท็กที่เลือก"
+                        >
+                          <Filter className="w-3 h-3" />
+                          <span>ครบทุกแท็ก (AND)</span>
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsAdvancedModeOpen((prev) => !prev)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer shrink-0 whitespace-nowrap ${
+                        isAdvancedModeOpen ||
+                        tagClickMode !== 'SET_PRIMARY' ||
+                        scopeMatchMode !== 'OR'
+                          ? 'bg-[#edf4ed] text-[#244b2f] border-[#bad8b9]'
+                          : 'bg-white text-[#524538] border-[#ded3c5] hover:bg-[#faf7f2]'
                       }`}
-                    />
-                  </button>
+                    >
+                      <SlidersHorizontal className="w-3 h-3 text-[#3b6845]" />
+                      <span>ตั้งค่าการผสม</span>
+                      <ChevronDown
+                        className={`w-3 h-3 transition-transform ${
+                          isAdvancedModeOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Collapsible Click Behavior Mode + AND/OR Match Mode */}
+                {/* Collapsible Click Behavior Mode + OR/AND Match Mode */}
                 <AnimatePresence initial={false}>
                   {isAdvancedModeOpen && (
                     <motion.div
@@ -434,7 +545,7 @@ export const BuilderStep1CategoryTarget: React.FC<
                                 ? 'bg-white text-[#244b2f] shadow-2xs'
                                 : 'text-[#6b645b] hover:text-[#2d2926]'
                             }`}
-                            title="คลิกที่ป้ายแท็กเพื่อเปลี่ยนเป็นแกนหลักของตอน"
+                            title="คลิกที่ป้ายแท็กเพื่อเปลี่ยนเป็นแกนหลักของตอน (ล้างแท็กผสมเก่า)"
                           >
                             <Star className="w-3 h-3 text-[#3b6845]" />
                             <span>คลิก = เลือกแกนหลัก</span>
@@ -454,8 +565,21 @@ export const BuilderStep1CategoryTarget: React.FC<
                           </button>
                         </div>
 
-                        {/* AND / OR Toggle when combining tags */}
+                        {/* OR / AND Toggle when combining tags */}
                         <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-white border border-[#ded3c5]">
+                          <button
+                            type="button"
+                            onClick={() => onChangeScopeMatchMode('OR')}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                              scopeMatchMode === 'OR'
+                                ? 'bg-[#8a5a22] text-white shadow-2xs'
+                                : 'text-[#524538] hover:bg-[#faf7f2]'
+                            }`}
+                            title="คัดฟุตเทจที่มีอย่างน้อย 1 แท็กที่เลือก (ค่าเริ่มต้น)"
+                          >
+                            <Layers className="w-3 h-3" />
+                            <span>บางแท็ก (OR)</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => onChangeScopeMatchMode('AND')}
@@ -468,19 +592,6 @@ export const BuilderStep1CategoryTarget: React.FC<
                           >
                             <Filter className="w-3 h-3" />
                             <span>ครบทุกแท็ก (AND)</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onChangeScopeMatchMode('OR')}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
-                              scopeMatchMode === 'OR'
-                                ? 'bg-[#8a5a22] text-white shadow-2xs'
-                                : 'text-[#524538] hover:bg-[#faf7f2]'
-                            }`}
-                            title="คัดฟุตเทจที่มีอย่างน้อย 1 แท็กที่เลือก"
-                          >
-                            <Layers className="w-3 h-3" />
-                            <span>บางแท็ก (OR)</span>
                           </button>
                         </div>
                       </div>

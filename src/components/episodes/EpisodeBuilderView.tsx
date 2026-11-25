@@ -33,12 +33,17 @@ export const EpisodeBuilderView: React.FC = () => {
     selectedFacetTagIds,
     scopeMatchMode,
     setScopeMatchMode,
+    scopeSummaryLabel,
     step1SearchQuery,
     setStep1SearchQuery,
     tagClickMode,
     setTagClickMode,
     handleToggleFacetTag,
     handleClearFacetTags,
+    recipeShortfallNotice,
+    setRecipeShortfallNotice,
+    handleSwitchToOrAndRefill,
+    handleEnableCrossCategoryAndRefill,
 
     activeGroup,
     mainCategoryTagId,
@@ -74,8 +79,11 @@ export const EpisodeBuilderView: React.FC = () => {
     setAllowCrossCategory,
     poolFilterGroupId,
     setPoolFilterGroupId,
-    poolSubcategoryFilterId,
-    setPoolSubcategoryFilterId,
+    poolCoTagFilterIds,
+    poolCoTagMatchMode,
+    setPoolCoTagMatchMode,
+    handleTogglePoolCoTag,
+    handleClearPoolCoTags,
     poolQuickFilter,
     setPoolQuickFilter,
     pickerSearch,
@@ -87,7 +95,33 @@ export const EpisodeBuilderView: React.FC = () => {
     pickerPageSize,
     setPickerPageSize,
     pickerCandidates,
+    poolTabCounts,
+    poolCoTagChips,
+    coTagAllCount,
     paginatedPickerCandidates,
+
+    seriesCatalog,
+    seriesMode,
+    activeExistingSeries,
+    customSeriesName,
+    effectiveSeriesName,
+    autoEpisodeNo,
+    effectiveEpisodeNo,
+    isManualEpisodeNo,
+    isDuplicateEpisodeNo,
+    existingSeriesEpisodesCount,
+    latestSeriesEpisodeNo,
+    isTitleManuallyEdited,
+    standardizedTitlePreview,
+    matchingExistingSeriesForNewName,
+    suggestedSeriesForActiveTag,
+    handleSelectExistingSeriesInStep1,
+    handleSelectExistingSeriesInStep3,
+    switchToNewSeries,
+    updateCustomSeriesName,
+    setEpisodeNo,
+    resetAutoEpisodeNo,
+    resetTitleToStandard,
 
     title,
     setTitle,
@@ -114,10 +148,6 @@ export const EpisodeBuilderView: React.FC = () => {
     previewMasterFileName,
     handleSaveEpisode,
     performActualSave,
-    categoryEpisodeNo,
-    existingCategoryEpisodesCount,
-    categoryEpisodeScope,
-    handleToggleEpisodeScope,
     newlyCreatedEpisode,
     setNewlyCreatedEpisode,
     handleContinueNextEpisodeInCategory,
@@ -130,6 +160,14 @@ export const EpisodeBuilderView: React.FC = () => {
         nextEpisodeId={nextEpisodeId}
         selectedCount={selectedFootageIds.length}
         activeCategoryStat={activeCategoryStat}
+        selectedFacetCount={selectedFacetTagIds.length}
+        scopeMatchMode={scopeMatchMode}
+        activeSeriesLabel={
+          seriesMode === 'EXISTING' && activeExistingSeries
+            ? activeExistingSeries.seriesName
+            : undefined
+        }
+        effectiveEpisodeNo={effectiveEpisodeNo}
         activeBuilderStep={activeBuilderStep}
         onSelectStep={setActiveBuilderStep}
         preselectNotice={preselectNotice}
@@ -166,6 +204,22 @@ export const EpisodeBuilderView: React.FC = () => {
         onToggleFacetTag={handleToggleFacetTag}
         onClearFacetTags={handleClearFacetTags}
         onOpenThreeTierManager={() => setIsThreeTierManagerOpen(true)}
+        seriesCatalog={seriesCatalog}
+        seriesMode={seriesMode}
+        activeExistingSeries={activeExistingSeries}
+        customSeriesName={customSeriesName}
+        effectiveSeriesName={effectiveSeriesName}
+        autoEpisodeNo={autoEpisodeNo}
+        effectiveEpisodeNo={effectiveEpisodeNo}
+        isManualEpisodeNo={isManualEpisodeNo}
+        isDuplicateEpisodeNo={isDuplicateEpisodeNo}
+        existingSeriesEpisodesCount={existingSeriesEpisodesCount}
+        latestSeriesEpisodeNo={latestSeriesEpisodeNo}
+        matchingExistingSeriesForNewName={matchingExistingSeriesForNewName}
+        suggestedSeriesForActiveTag={suggestedSeriesForActiveTag}
+        onSelectExistingSeries={handleSelectExistingSeriesInStep1}
+        onSwitchToNewSeries={switchToNewSeries}
+        onChangeCustomSeriesName={updateCustomSeriesName}
       />
 
       {/* Diversity & Collision Guard Banners */}
@@ -198,16 +252,33 @@ export const EpisodeBuilderView: React.FC = () => {
         categoryGroups={categoryGroups}
         activeGroup={activeGroup}
         activeCategoryStat={activeCategoryStat}
+        scopeSummaryLabel={scopeSummaryLabel}
         productionTarget={productionTarget}
         activeSubcategory={activeSubcategory}
         currentSubcategories={currentSubcategories}
-        poolSubcategoryFilterId={poolSubcategoryFilterId}
-        onChangePoolSubcategoryFilterId={setPoolSubcategoryFilterId}
+        poolCoTagChips={poolCoTagChips}
+        coTagAllCount={coTagAllCount}
+        poolCoTagFilterIds={poolCoTagFilterIds}
+        poolCoTagMatchMode={poolCoTagMatchMode}
+        onChangePoolCoTagMatchMode={setPoolCoTagMatchMode}
+        onTogglePoolCoTag={handleTogglePoolCoTag}
+        onClearPoolCoTags={handleClearPoolCoTags}
         computedFootage={computedFootage}
         liveCategoryStock={liveCategoryStock}
+        poolTabCounts={poolTabCounts}
         allowCrossCategory={allowCrossCategory}
-        onToggleCrossCategory={() => setAllowCrossCategory((prev) => !prev)}
-        onEnableCrossCategory={() => setAllowCrossCategory(true)}
+        onToggleCrossCategory={() => {
+          setAllowCrossCategory((prev) => !prev);
+          setRecipeShortfallNotice(null);
+        }}
+        onEnableCrossCategory={() => {
+          setAllowCrossCategory(true);
+          setRecipeShortfallNotice(null);
+        }}
+        onDisableCrossCategory={() => {
+          setAllowCrossCategory(false);
+          setRecipeShortfallNotice(null);
+        }}
         poolFilterGroupId={poolFilterGroupId}
         onChangePoolFilterGroupId={setPoolFilterGroupId}
         poolQuickFilter={poolQuickFilter}
@@ -226,6 +297,10 @@ export const EpisodeBuilderView: React.FC = () => {
         settings={settings}
         activeRecipe={activeRecipe}
         onApplyRecipe={(recipe) => applyRecipeForCategory(mainCategoryTagId, recipe)}
+        recipeShortfallNotice={recipeShortfallNotice}
+        onDismissRecipeShortfall={() => setRecipeShortfallNotice(null)}
+        onSwitchToOrAndRefill={handleSwitchToOrAndRefill}
+        onEnableCrossCategoryAndRefill={handleEnableCrossCategoryAndRefill}
       />
 
       {/* Step 3: Metadata Form & Save Episode */}
@@ -237,13 +312,26 @@ export const EpisodeBuilderView: React.FC = () => {
         previewMasterFileName={previewMasterFileName}
         title={title}
         onChangeTitle={setTitle}
-        categoryName={tagMap[mainCategoryTagId]?.name}
-        subcategoryName={targetSubcategoryId ? tagMap[targetSubcategoryId]?.name : undefined}
-        categoryEpisodeNo={categoryEpisodeNo}
-        existingCategoryEpisodesCount={existingCategoryEpisodesCount}
-        categoryEpisodeScope={categoryEpisodeScope}
-        onToggleEpisodeScope={handleToggleEpisodeScope}
-        productionTarget={productionTarget}
+        isTitleManuallyEdited={isTitleManuallyEdited}
+        standardizedTitlePreview={standardizedTitlePreview}
+        onResetTitleToStandard={resetTitleToStandard}
+        seriesCatalog={seriesCatalog}
+        seriesMode={seriesMode}
+        activeExistingSeries={activeExistingSeries}
+        customSeriesName={customSeriesName}
+        effectiveSeriesName={effectiveSeriesName}
+        autoEpisodeNo={autoEpisodeNo}
+        effectiveEpisodeNo={effectiveEpisodeNo}
+        isManualEpisodeNo={isManualEpisodeNo}
+        isDuplicateEpisodeNo={isDuplicateEpisodeNo}
+        existingSeriesEpisodesCount={existingSeriesEpisodesCount}
+        latestSeriesEpisodeNo={latestSeriesEpisodeNo}
+        matchingExistingSeriesForNewName={matchingExistingSeriesForNewName}
+        onSelectExistingSeries={handleSelectExistingSeriesInStep3}
+        onSwitchToNewSeries={switchToNewSeries}
+        onChangeCustomSeriesName={updateCustomSeriesName}
+        onChangeEpisodeNo={setEpisodeNo}
+        onResetAutoEpisodeNo={resetAutoEpisodeNo}
         publishDate={publishDate}
         onChangePublishDate={setPublishDate}
         publishSlot={publishSlot}

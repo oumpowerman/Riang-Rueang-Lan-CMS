@@ -31,7 +31,11 @@ interface BuilderTierSubCategoryAccordionProps {
   onToggleSubCategory: (subKey: string) => void;
   onTagClick: (tagId: string) => void;
   onToggleFacetTag: (tagId: string) => void;
-  onSelectCategory: (tagId: string, autoFillWithRecipe?: boolean) => void;
+  onSelectCategory: (
+    tagId: string,
+    autoFillWithRecipe?: boolean,
+    options?: { preserveFacets?: boolean }
+  ) => void;
 }
 
 export const BuilderTierSubCategoryAccordion: React.FC<
@@ -227,7 +231,7 @@ export const BuilderTierSubCategoryAccordion: React.FC<
                           type="button"
                           onClick={() => onTagClick(tag.id)}
                           className="px-2.5 py-1.5 text-left flex items-center gap-1.5 cursor-pointer min-w-0"
-                          title={`#${tag.name} — ใหม่ ${stock.newCount} | พร้อมใช้ ${stock.usable}/${stock.total} ฟุต (${stock.producibleEpisodes} EP)`}
+                          title={`#${tag.name} — พร้อมใช้ ${stock.usable} (ใหม่ ${stock.newCount} · สด ${stock.freshCount}) / ทั้งหมด ${stock.total} ฟุต (${stock.producibleEpisodes} EP)`}
                         >
                           {isPrimary ? (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#3B6845] text-white text-[9px] font-extrabold shrink-0">
@@ -269,12 +273,12 @@ export const BuilderTierSubCategoryAccordion: React.FC<
                                 ? 'bg-[#8A5A22]/15 text-[#6B4415] font-bold'
                                 : stock.usable >= 5
                                 ? 'bg-[#EAF5ED] text-[#245233] font-bold'
-                                : 'bg-[#EFECE6] text-[#786B5C]'
+                                : stock.usable > 0
+                                ? 'bg-[#EFECE6] text-[#5C5145] font-semibold'
+                                : 'bg-[#F3EFE9] text-[#A29587]'
                             }`}
                           >
-                            {stock.usable > 0
-                              ? `${stock.usable}`
-                              : `${stock.total}`}
+                            {stock.usable}
                           </span>
                         </button>
 
@@ -287,7 +291,9 @@ export const BuilderTierSubCategoryAccordion: React.FC<
                               if (tagClickMode === 'SET_PRIMARY') {
                                 onToggleFacetTag(tag.id);
                               } else {
-                                onSelectCategory(tag.id, false);
+                                onSelectCategory(tag.id, false, {
+                                  preserveFacets: true,
+                                });
                               }
                             }}
                             className={`px-1.5 border-l flex items-center justify-center transition-colors cursor-pointer ${

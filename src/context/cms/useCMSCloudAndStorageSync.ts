@@ -643,6 +643,7 @@ export function useCMSCloudAndStorageSync(
     localEpisodesCount: episodes.length,
     localSourcesCount: sources.length,
     archiveSummaryStats,
+    serverCounts,
     isIdbHydrated,
     isManualSyncing,
     isSeedingToCloud,
@@ -750,6 +751,12 @@ export function useCMSCloudAndStorageSync(
       setFootage([]);
       setEpisodes([]);
       setSelectedTagFilter([]);
+      setServerCounts({
+        totalEpisodes: 0,
+        totalFootage: 0,
+        totalSources: 0,
+        fetchedAt: new Date().toISOString(),
+      });
 
       // Also reset sync timestamps on savedDriveFolders while keeping folder URLs & names intact
       setSettings((prev) => {

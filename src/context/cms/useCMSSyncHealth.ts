@@ -8,6 +8,7 @@ import {
   isBatchWriteInProgress,
   OutboxFlushResult,
   OutboxQueueSnapshot,
+  ServerCollectionCounts,
   subscribeFirestoreQuotaChange,
   subscribeOutboxState,
 } from '../../firebase/firestoreService';
@@ -60,6 +61,7 @@ interface UseCMSSyncHealthParams {
   localEpisodesCount: number;
   localSourcesCount: number;
   archiveSummaryStats: ArchiveSummaryStats | null;
+  serverCounts?: ServerCollectionCounts | null;
   isIdbHydrated: boolean;
   isManualSyncing: boolean;
   isSeedingToCloud: boolean;
@@ -75,6 +77,7 @@ export function useCMSSyncHealth({
   localEpisodesCount,
   localSourcesCount,
   archiveSummaryStats,
+  serverCounts,
   isIdbHydrated,
   isManualSyncing,
   isSeedingToCloud,
@@ -124,18 +127,26 @@ export function useCMSSyncHealth({
     };
   }, []);
 
-  // 2. Compute raw count comparison against central signal doc (0 extra Firestore reads!)
+  // 2. Compute raw count comparison against central server count or signal doc
   const rawDrift = useMemo(() => {
+    // Prefer authoritative real collection counts from getCountFromServer (serverCounts)
+    // over potentially stale archiveSummaryStats counters
     const cloudFootage =
-      typeof archiveSummaryStats?.totalFootage === 'number'
+      typeof serverCounts?.totalFootage === 'number'
+        ? serverCounts.totalFootage
+        : typeof archiveSummaryStats?.totalFootage === 'number'
         ? archiveSummaryStats.totalFootage
         : null;
     const cloudEpisodes =
-      typeof archiveSummaryStats?.totalEpisodes === 'number'
+      typeof serverCounts?.totalEpisodes === 'number'
+        ? serverCounts.totalEpisodes
+        : typeof archiveSummaryStats?.totalEpisodes === 'number'
         ? archiveSummaryStats.totalEpisodes
         : null;
     const cloudSources =
-      typeof archiveSummaryStats?.totalSources === 'number'
+      typeof serverCounts?.totalSources === 'number'
+        ? serverCounts.totalSources
+        : typeof archiveSummaryStats?.totalSources === 'number'
         ? archiveSummaryStats.totalSources
         : null;
 
@@ -156,6 +167,9 @@ export function useCMSSyncHealth({
       hasRawMismatch: totalAbsDiff > 0,
     };
   }, [
+    serverCounts?.totalFootage,
+    serverCounts?.totalEpisodes,
+    serverCounts?.totalSources,
     archiveSummaryStats?.totalFootage,
     archiveSummaryStats?.totalEpisodes,
     archiveSummaryStats?.totalSources,

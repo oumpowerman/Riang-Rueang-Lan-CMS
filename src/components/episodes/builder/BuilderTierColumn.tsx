@@ -35,7 +35,11 @@ interface BuilderTierColumnProps {
   onToggleExpandColumn: (tier: CategoryTier) => void;
   onTagClick: (tagId: string) => void;
   onToggleFacetTag: (tagId: string) => void;
-  onSelectCategory: (tagId: string, autoFillWithRecipe?: boolean) => void;
+  onSelectCategory: (
+    tagId: string,
+    autoFillWithRecipe?: boolean,
+    options?: { preserveFacets?: boolean }
+  ) => void;
 }
 
 export const BuilderTierColumn: React.FC<BuilderTierColumnProps> = ({

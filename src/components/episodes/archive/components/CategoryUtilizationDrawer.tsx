@@ -2,7 +2,9 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, ChevronUp, RotateCcw, Tag } from 'lucide-react';
 import type { MixRecipeId } from '../../../../utils/collisionDetector';
+import type { EpisodeProductionTarget } from '../../../../types/episode.types';
 import type { ArchiveSeriesCategory } from '../../../../types/tag.types';
+import type { BuilderSeriesLaunchOptions } from '../../../../context/cms/cms.types';
 import type { CategoryRankingItem } from '../hooks/useMasterArchiveMetrics';
 
 interface CategoryUtilizationDrawerProps {
@@ -12,7 +14,13 @@ interface CategoryUtilizationDrawerProps {
   maxEpisodesInAnyCategory: number;
   categoryFilter: string;
   onCategoryFilterChange: (catId: string) => void;
-  launchEpisodeBuilderForCategory: (catId: string, recipeId?: MixRecipeId) => void;
+  launchEpisodeBuilderForCategory: (
+    catId: string,
+    recipeId?: MixRecipeId,
+    productionTarget?: EpisodeProductionTarget,
+    targetSubcategoryId?: string | null,
+    seriesOptions?: BuilderSeriesLaunchOptions
+  ) => void;
   archiveCategoryMap: Record<string, ArchiveSeriesCategory>;
   onOpenTagBinding?: (row: CategoryRankingItem) => void;
 }
@@ -255,7 +263,14 @@ export const CategoryUtilizationDrawer: React.FC<CategoryUtilizationDrawerProps>
                               row.builderTargetTagId,
                               row.untouchedFootageInCat >= 5
                                 ? 'FORMULA_ALL_NEW'
-                                : 'FORMULA_2_NEW_3_FRESH'
+                                : 'FORMULA_2_NEW_3_FRESH',
+                              undefined,
+                              null,
+                              {
+                                seriesKey: row.episodeCount > 0 ? row.seriesKey : undefined,
+                                seriesName: row.seriesName,
+                                matchedTagIds: row.matchedTagIds,
+                              }
                             );
                           }}
                           className="px-2.5 py-1 text-[11px] font-bold text-[#244B2F] bg-[#EBF3EB] hover:bg-[#DCECDC] border border-[#B5D1B3] rounded-lg transition-colors shrink-0 cursor-pointer"

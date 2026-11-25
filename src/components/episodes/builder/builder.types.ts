@@ -65,3 +65,42 @@ export interface TierSubCategoryGroup {
   tags: CategoryTag[];
 }
 
+export interface PoolTabCounts {
+  usable: number;
+  onlyNew: number;
+  onlyFresh: number;
+  all: number;
+}
+
+export interface PoolCoTagChip {
+  tag: CategoryTag;
+  count: number;
+  usableInPool: number;
+  totalInPool: number;
+}
+
+export interface RecipeShortfallNotice {
+  matchedCount: number;
+  missingCount: number;
+  scopeMatchMode: BuilderScopeMatchMode;
+  wasCrossCategory: boolean;
+  scopeSummaryLabel: string;
+  hasFacetTags: boolean;
+}
+
+export type BuilderSeriesMode = 'EXISTING' | 'NEW';
+
+export interface BuilderSeriesCatalogItem {
+  seriesKey: string;
+  seriesName: string;
+  fullSeriesTitle: string;
+  episodeCount: number;
+  maxEpisodeNo: number;
+  nextEpisodeNo: number;
+  existingEpisodeNos: Set<number>;
+  matchedTagIds: string[];
+  matchedTagNames: string[];
+  isCustomTagBound: boolean;
+  latestPublishDate: string;
+  latestEpisodeId: string;
+}

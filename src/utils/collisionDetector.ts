@@ -378,21 +378,7 @@ export function generateSmartMixByRecipe(
   );
   const allFresh = allFootage.filter((ft) => ft.cooldownStatus === 'READY_FRESH');
 
-  const primaryTagId = cleanTagIds[0];
-  const primaryMatchedUsable = primaryTagId
-    ? allFootage.filter(
-        (ft) =>
-          (ft.cooldownStatus === 'NEW_UNTOUCHED' ||
-            ft.cooldownStatus === 'READY_FRESH') &&
-          ft.tags.includes(primaryTagId)
-      )
-    : [];
-
-  const tagMatchedUsable = [
-    ...tagMatchedNew,
-    ...tagMatchedFresh,
-    ...(tagMatchMode === 'AND' && cleanTagIds.length > 1 ? primaryMatchedUsable : []),
-  ];
+  const tagMatchedUsable = [...tagMatchedNew, ...tagMatchedFresh];
 
   const tagMatchedRetro60 = allFootage.filter(
     (ft) =>

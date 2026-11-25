@@ -92,8 +92,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       !hasFullCloudFootageRef.current ||
       !syncHealth.isOnline ||
       syncHealth.isQuotaExhausted ||
-      syncHealth.outbox.count > 0 ||
-      syncHealth.drift.hasDrift
+      syncHealth.outbox.count > 0
     ) {
       return;
     }

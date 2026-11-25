@@ -3,7 +3,11 @@ import { EpisodeProductionTarget } from '../../types/episode.types';
 import { RawSource } from '../../types/source.types';
 import { MixRecipeId } from '../../utils/collisionDetector';
 import { SupabaseSyncFilterPreset } from '../../types/supabaseSync.types';
-import { ActiveNavTab, BuilderPreselectRequest } from './cms.types';
+import {
+  ActiveNavTab,
+  BuilderPreselectRequest,
+  BuilderSeriesLaunchOptions,
+} from './cms.types';
 
 export function useCMSNavigationState() {
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('DASHBOARD');
@@ -58,13 +62,17 @@ export function useCMSNavigationState() {
     tagId: string,
     recipeId: MixRecipeId = 'FORMULA_2_NEW_3_FRESH',
     productionTarget?: EpisodeProductionTarget,
-    targetSubcategoryId?: string | null
+    targetSubcategoryId?: string | null,
+    seriesOptions?: BuilderSeriesLaunchOptions
   ) => {
     setBuilderPreselectRequest({
       tagId,
       recipeId,
       productionTarget,
       targetSubcategoryId,
+      seriesKey: seriesOptions?.seriesKey,
+      seriesName: seriesOptions?.seriesName,
+      matchedTagIds: seriesOptions?.matchedTagIds,
       timestamp: Date.now(),
     });
     setActiveTab('EPISODE_BUILDER');

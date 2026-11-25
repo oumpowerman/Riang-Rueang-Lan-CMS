@@ -112,6 +112,12 @@ export type BatchTagMoveDestination =
       entityType?: EntitySubtype;
     };
 
+export interface BuilderSeriesLaunchOptions {
+  seriesKey?: string;
+  seriesName?: string;
+  matchedTagIds?: string[];
+}
+
 export interface BuilderPreselectRequest {
   tagId: string;
   recipeId: MixRecipeId;
@@ -119,6 +125,9 @@ export interface BuilderPreselectRequest {
   targetSubcategoryId?: string | null;
   customFootageIds?: string[];
   customEpisodeTitle?: string;
+  seriesKey?: string;
+  seriesName?: string;
+  matchedTagIds?: string[];
   timestamp: number;
 }
 
@@ -188,7 +197,8 @@ export interface CMSContextType {
     tagId: string,
     recipeId?: MixRecipeId,
     productionTarget?: EpisodeProductionTarget,
-    targetSubcategoryId?: string | null
+    targetSubcategoryId?: string | null,
+    seriesOptions?: BuilderSeriesLaunchOptions
   ) => void;
   launchEpisodeBuilderWithCustomClips: (
     footageIds: string[],

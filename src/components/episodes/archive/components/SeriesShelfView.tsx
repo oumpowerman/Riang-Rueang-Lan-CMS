@@ -11,9 +11,12 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
+import { extractEpisodeSeriesInfo } from '../../../../utils/seriesExtractor';
 import type { MixRecipeId } from '../../../../utils/collisionDetector';
+import type { EpisodeProductionTarget } from '../../../../types/episode.types';
 import type { ArchiveSeriesCategory } from '../../../../types/tag.types';
 import type { Episode } from '../../../../types/episode.types';
+import type { BuilderSeriesLaunchOptions } from '../../../../context/cms/cms.types';
 import type { CategoryRankingItem } from '../hooks/useMasterArchiveMetrics';
 
 interface SeriesShelfViewProps {
@@ -28,7 +31,13 @@ interface SeriesShelfViewProps {
   onAssignSeriesToCategory: (seriesKey: string, categoryId: string) => void;
   latestEpisodeByCategoryMap: Record<string, Episode>;
   onViewCategoryEpisodes: (seriesKey: string) => void;
-  launchEpisodeBuilderForCategory: (catId: string, recipeId?: MixRecipeId) => void;
+  launchEpisodeBuilderForCategory: (
+    catId: string,
+    recipeId?: MixRecipeId,
+    productionTarget?: EpisodeProductionTarget,
+    targetSubcategoryId?: string | null,
+    seriesOptions?: BuilderSeriesLaunchOptions
+  ) => void;
   onOpenManageCategories: () => void;
   isRankingSummaryOpen?: boolean;
   onToggleRankingSummary?: () => void;
@@ -145,7 +154,11 @@ export const SeriesShelfView: React.FC<SeriesShelfViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {shelfSeriesItems.map((item) => {
           const latestEp = latestEpisodeByCategoryMap[item.seriesKey] || null;
-          const nextEpNumber = item.episodeCount + 1;
+          const latestParsedEpNo = latestEp
+            ? extractEpisodeSeriesInfo(latestEp).parsedEpisodeNo
+            : 0;
+          const nextEpNumber =
+            latestParsedEpNo > 0 ? latestParsedEpNo + 1 : item.episodeCount + 1;
           const estProducible = Math.floor(item.usableFootageInCat / 5);
           const isUnproduced = item.episodeCount === 0;
 
@@ -236,7 +249,7 @@ export const SeriesShelfView: React.FC<SeriesShelfViewProps> = ({
                     <span className="truncate">
                       ตอนล่าสุด:{' '}
                       <strong className="text-[#2D2926]">
-                        EP.{latestEp.categoryEpisodeNo || item.episodeCount}
+                        EP.{latestParsedEpNo || latestEp.categoryEpisodeNo || item.episodeCount}
                       </strong>{' '}
                       ({formatThaiDate(latestEp.publishDate)})
                     </span>
@@ -275,7 +288,14 @@ export const SeriesShelfView: React.FC<SeriesShelfViewProps> = ({
                       item.builderTargetTagId,
                       item.untouchedFootageInCat >= 5
                         ? 'FORMULA_ALL_NEW'
-                        : 'FORMULA_2_NEW_3_FRESH'
+                        : 'FORMULA_2_NEW_3_FRESH',
+                      undefined,
+                      null,
+                      {
+                        seriesKey: item.episodeCount > 0 ? item.seriesKey : undefined,
+                        seriesName: item.seriesName,
+                        matchedTagIds: item.matchedTagIds,
+                      }
                     );
                   }}
                   className="py-1.5 px-3 text-xs font-bold text-[#224A2D] bg-[#E6F2E6] hover:bg-[#D5E8D5] border border-[#A5C9A3] rounded-xl transition-colors shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"

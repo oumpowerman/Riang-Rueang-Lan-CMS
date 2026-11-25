@@ -18,6 +18,7 @@ import {
   ArrowUp,
   ArrowDown,
   PanelRightOpen,
+  Globe,
 } from 'lucide-react';
 import { CategoryMatrixStat, useCMS } from '../../../context/CMSContext';
 import {
@@ -35,11 +36,16 @@ import { VideoThumbnailPreview } from '../../footage/VideoThumbnailPreview';
 import { StatusBadge } from '../../ui/StatusBadge';
 import { RankSlotCard } from '../RankSlotCard';
 import { CandidateFootagePool } from './CandidateFootagePool';
+import { RecipeShortfallNoticeBanner } from './RecipeShortfallNoticeBanner';
 import {
+  BuilderScopeMatchMode,
   LiveCategoryStock,
   PickerSortBy,
+  PoolCoTagChip,
   PoolQuickFilter,
+  PoolTabCounts,
   RankNumber,
+  RecipeShortfallNotice,
   SlotDropPayload,
 } from './builder.types';
 
@@ -69,16 +75,24 @@ interface BuilderStep2RankingWorkspaceProps {
   categoryGroups: CategoryGroup[];
   activeGroup: CategoryGroup | null;
   activeCategoryStat: CategoryMatrixStat | null;
+  scopeSummaryLabel?: string;
   productionTarget: EpisodeProductionTarget;
   activeSubcategory: CategoryTag | null;
   currentSubcategories?: CategoryTag[];
-  poolSubcategoryFilterId?: string | null;
-  onChangePoolSubcategoryFilterId?: (subId: string | null) => void;
+  poolCoTagChips?: PoolCoTagChip[];
+  coTagAllCount?: number;
+  poolCoTagFilterIds?: string[];
+  poolCoTagMatchMode?: BuilderScopeMatchMode;
+  onChangePoolCoTagMatchMode?: (mode: BuilderScopeMatchMode) => void;
+  onTogglePoolCoTag?: (tagId: string) => void;
+  onClearPoolCoTags?: () => void;
   computedFootage?: ComputedFootage[];
   liveCategoryStock: LiveCategoryStock;
+  poolTabCounts?: PoolTabCounts;
   allowCrossCategory: boolean;
   onToggleCrossCategory: () => void;
   onEnableCrossCategory: () => void;
+  onDisableCrossCategory?: () => void;
   poolFilterGroupId: string;
   onChangePoolFilterGroupId: (groupId: string) => void;
   poolQuickFilter: PoolQuickFilter;
@@ -95,9 +109,13 @@ interface BuilderStep2RankingWorkspaceProps {
   onPageSizeChange: (size: number) => void;
   tagMap: Record<string, CategoryTag>;
   settings: SystemSettings;
-  // SmartMix recipe integration
+  // SmartMix recipe integration & shortfall recovery
   activeRecipe?: MixRecipeId;
   onApplyRecipe?: (recipe: MixRecipeId) => void;
+  recipeShortfallNotice?: RecipeShortfallNotice | null;
+  onDismissRecipeShortfall?: () => void;
+  onSwitchToOrAndRefill?: () => void;
+  onEnableCrossCategoryAndRefill?: () => void;
 }
 
 const SLIDE_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -168,16 +186,24 @@ export const BuilderStep2RankingWorkspace: React.FC<
   categoryGroups,
   activeGroup,
   activeCategoryStat,
+  scopeSummaryLabel,
   productionTarget,
   activeSubcategory,
   currentSubcategories = [],
-  poolSubcategoryFilterId,
-  onChangePoolSubcategoryFilterId,
+  poolCoTagChips,
+  coTagAllCount,
+  poolCoTagFilterIds = [],
+  poolCoTagMatchMode = 'AND',
+  onChangePoolCoTagMatchMode,
+  onTogglePoolCoTag,
+  onClearPoolCoTags,
   computedFootage = [],
   liveCategoryStock,
+  poolTabCounts,
   allowCrossCategory,
   onToggleCrossCategory,
   onEnableCrossCategory,
+  onDisableCrossCategory,
   poolFilterGroupId,
   onChangePoolFilterGroupId,
   poolQuickFilter,
@@ -196,6 +222,10 @@ export const BuilderStep2RankingWorkspace: React.FC<
   settings,
   activeRecipe = 'FORMULA_2_NEW_3_FRESH',
   onApplyRecipe,
+  recipeShortfallNotice = null,
+  onDismissRecipeShortfall,
+  onSwitchToOrAndRefill,
+  onEnableCrossCategoryAndRefill,
 }) => {
   const { setPreviewFootageId } = useCMS();
 
@@ -432,6 +462,40 @@ export const BuilderStep2RankingWorkspace: React.FC<
                             );
                           })}
                         </div>
+
+                        {allowCrossCategory && (
+                          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-[#edf4ed] border border-[#bad8b9] text-[11px] font-bold text-[#244b2f]">
+                            <span className="inline-flex items-center gap-1 truncate">
+                              <Globe className="w-3 h-3 text-[#3b6845] shrink-0" />
+                              <span className="truncate">
+                                โหมดสุ่มข้ามหมวด (ไม่จำกัดแท็กขั้นที่ 1)
+                              </span>
+                            </span>
+                            {onDisableCrossCategory && (
+                              <button
+                                type="button"
+                                onClick={onDisableCrossCategory}
+                                className="px-2 py-0.5 rounded-lg bg-white hover:bg-[#faf7f2] text-[#244b2f] border border-[#bad8b9] cursor-pointer whitespace-nowrap shrink-0"
+                              >
+                                กลับกรอบขั้นที่ 1
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        <RecipeShortfallNoticeBanner
+                          notice={recipeShortfallNotice}
+                          onDismiss={() => onDismissRecipeShortfall?.()}
+                          onOpenManualPool={() =>
+                            setWorkspaceMode('MANUAL_BROWSE')
+                          }
+                          onSwitchToOrAndRefill={() =>
+                            onSwitchToOrAndRefill?.()
+                          }
+                          onEnableCrossCategoryAndRefill={() =>
+                            onEnableCrossCategoryAndRefill?.()
+                          }
+                        />
                       </div>
 
                       {/* Mobile Full 5 Rank Slot Cards */}
@@ -509,15 +573,20 @@ export const BuilderStep2RankingWorkspace: React.FC<
                         categoryGroups={categoryGroups}
                         activeGroup={activeGroup}
                         activeCategoryStat={activeCategoryStat}
+                        scopeSummaryLabel={scopeSummaryLabel}
                         productionTarget={productionTarget}
                         activeSubcategory={activeSubcategory}
                         currentSubcategories={currentSubcategories}
-                        poolSubcategoryFilterId={poolSubcategoryFilterId}
-                        onChangePoolSubcategoryFilterId={
-                          onChangePoolSubcategoryFilterId
-                        }
+                        poolCoTagChips={poolCoTagChips}
+                        coTagAllCount={coTagAllCount}
+                        poolCoTagFilterIds={poolCoTagFilterIds}
+                        poolCoTagMatchMode={poolCoTagMatchMode}
+                        onChangePoolCoTagMatchMode={onChangePoolCoTagMatchMode}
+                        onTogglePoolCoTag={onTogglePoolCoTag}
+                        onClearPoolCoTags={onClearPoolCoTags}
                         computedFootage={computedFootage}
                         liveCategoryStock={liveCategoryStock}
+                        poolTabCounts={poolTabCounts}
                         allowCrossCategory={allowCrossCategory}
                         onToggleCrossCategory={onToggleCrossCategory}
                         onEnableCrossCategory={onEnableCrossCategory}
@@ -646,6 +715,40 @@ export const BuilderStep2RankingWorkspace: React.FC<
                                 );
                               })}
                             </div>
+
+                            {allowCrossCategory && (
+                              <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-[#edf4ed] border border-[#bad8b9] text-xs font-bold text-[#244b2f]">
+                                <span className="inline-flex items-center gap-1.5 min-w-0">
+                                  <Globe className="w-3.5 h-3.5 text-[#3b6845] shrink-0" />
+                                  <span className="truncate">
+                                    กำลังสุ่มข้ามหมวด (ระบบดึงจากคลังทั้งหมดโดยไม่จำกัดแท็กขั้นที่ 1)
+                                  </span>
+                                </span>
+                                {onDisableCrossCategory && (
+                                  <button
+                                    type="button"
+                                    onClick={onDisableCrossCategory}
+                                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#faf7f2] text-[#244b2f] border border-[#bad8b9] text-[11px] font-bold cursor-pointer whitespace-nowrap shrink-0"
+                                  >
+                                    กลับกรอบขั้นที่ 1
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <RecipeShortfallNoticeBanner
+                              notice={recipeShortfallNotice}
+                              onDismiss={() => onDismissRecipeShortfall?.()}
+                              onOpenManualPool={() =>
+                                setWorkspaceMode('MANUAL_BROWSE')
+                              }
+                              onSwitchToOrAndRefill={() =>
+                                onSwitchToOrAndRefill?.()
+                              }
+                              onEnableCrossCategoryAndRefill={() =>
+                                onEnableCrossCategoryAndRefill?.()
+                              }
+                            />
                           </div>
 
                           {/* Full 5 Rank Slot Cards */}
@@ -765,6 +868,20 @@ export const BuilderStep2RankingWorkspace: React.FC<
                               })}
                             </div>
                           </div>
+
+                          <RecipeShortfallNoticeBanner
+                            notice={recipeShortfallNotice}
+                            onDismiss={() => onDismissRecipeShortfall?.()}
+                            onOpenManualPool={() =>
+                              setWorkspaceMode('MANUAL_BROWSE')
+                            }
+                            onSwitchToOrAndRefill={() =>
+                              onSwitchToOrAndRefill?.()
+                            }
+                            onEnableCrossCategoryAndRefill={() =>
+                              onEnableCrossCategoryAndRefill?.()
+                            }
+                          />
 
                           {/* Compact 5-Rank Summary Board */}
                           <div className="bg-[#fdfbf7] border border-[#e8dfd3] rounded-2xl p-3.5 space-y-2.5 shadow-xs">
@@ -1020,15 +1137,22 @@ export const BuilderStep2RankingWorkspace: React.FC<
                             categoryGroups={categoryGroups}
                             activeGroup={activeGroup}
                             activeCategoryStat={activeCategoryStat}
+                            scopeSummaryLabel={scopeSummaryLabel}
                             productionTarget={productionTarget}
                             activeSubcategory={activeSubcategory}
                             currentSubcategories={currentSubcategories}
-                            poolSubcategoryFilterId={poolSubcategoryFilterId}
-                            onChangePoolSubcategoryFilterId={
-                              onChangePoolSubcategoryFilterId
+                            poolCoTagChips={poolCoTagChips}
+                            coTagAllCount={coTagAllCount}
+                            poolCoTagFilterIds={poolCoTagFilterIds}
+                            poolCoTagMatchMode={poolCoTagMatchMode}
+                            onChangePoolCoTagMatchMode={
+                              onChangePoolCoTagMatchMode
                             }
+                            onTogglePoolCoTag={onTogglePoolCoTag}
+                            onClearPoolCoTags={onClearPoolCoTags}
                             computedFootage={computedFootage}
                             liveCategoryStock={liveCategoryStock}
+                            poolTabCounts={poolTabCounts}
                             allowCrossCategory={allowCrossCategory}
                             onToggleCrossCategory={onToggleCrossCategory}
                             onEnableCrossCategory={onEnableCrossCategory}

@@ -7,6 +7,10 @@ import {
 } from 'lucide-react';
 import { AnimatedMetricNumber } from './AnimatedMetricNumber';
 import { ActiveScopeDescription, VaultViewMode } from './vault.types';
+import type {
+  FootagePunchlineFilter,
+  VaultPunchlineCounts,
+} from './vaultPunchlineFilter';
 
 export interface VaultResultsHeaderBarProps {
   activeScopeDescription: ActiveScopeDescription;
@@ -23,6 +27,9 @@ export interface VaultResultsHeaderBarProps {
   onClearBatchSelection: () => void;
   viewMode: VaultViewMode;
   onViewModeChange: (mode: VaultViewMode) => void;
+  punchlineFilter?: FootagePunchlineFilter;
+  punchlineCounts?: VaultPunchlineCounts;
+  onPunchlineFilterChange?: (filter: FootagePunchlineFilter) => void;
 }
 
 export const VaultResultsHeaderBar: React.FC<VaultResultsHeaderBarProps> = ({
@@ -33,24 +40,65 @@ export const VaultResultsHeaderBar: React.FC<VaultResultsHeaderBarProps> = ({
   onToggleSelectAllInPage,
   viewMode,
   onViewModeChange,
+  punchlineFilter = 'ALL',
+  punchlineCounts,
+  onPunchlineFilterChange,
 }) => {
   const isCustomScope = activeScopeDescription.key !== 'ALL_VAULT';
+  const missingPunchlineCount = punchlineCounts?.missing ?? 0;
 
   return (
-    <div className="bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2 flex items-center justify-between gap-2 shadow-2xs">
-      {/* Left: Concise Scope & Count */}
-      <div className="flex items-center gap-2 text-xs text-slate-600 min-w-0">
+    <div className="bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+      {/* Left: Concise Scope, Total Count & Live Missing-Punchline Readout */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 min-w-0">
         {isCustomScope && (
           <>
             <span className="font-bold text-indigo-800 truncate max-w-[160px] sm:max-w-[280px]">
               {activeScopeDescription.label}
             </span>
-            <span className="text-slate-300 shrink-0">·</span>
+            <span className="text-slate-300 shrink-0" aria-hidden="true">
+              ·
+            </span>
           </>
         )}
-        <span className="font-extrabold text-xs sm:text-sm text-slate-900 tabular-nums whitespace-nowrap">
+        <span className="font-extrabold text-xs sm:text-sm text-slate-900 font-mono tabular-nums whitespace-nowrap">
           <AnimatedMetricNumber value={filteredCount} suffix=" คลิป" />
         </span>
+
+        {punchlineCounts && onPunchlineFilterChange && (
+          <>
+            <span className="text-slate-300 shrink-0" aria-hidden="true">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                onPunchlineFilterChange(
+                  punchlineFilter === 'MISSING' ? 'ALL' : 'MISSING'
+                )
+              }
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer whitespace-nowrap font-mono tabular-nums border ${
+                punchlineFilter === 'MISSING'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : missingPunchlineCount > 0
+                    ? 'bg-amber-50/80 hover:bg-amber-100/80 text-amber-800 border-amber-200/90'
+                    : 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200/80'
+              }`}
+              title={
+                punchlineFilter === 'MISSING'
+                  ? 'คลิกเพื่อกลับไปดูทั้งหมด'
+                  : 'คลิกเพื่อกรองเฉพาะฟุตที่ยังไม่มีคำสร้อย (รวมข้อความพักรอจัดหมวดหมู่/นำเข้าอัตโนมัติ)'
+              }
+            >
+              <span className="font-sans">
+                {missingPunchlineCount > 0 ? 'ยังไม่มีคำสร้อย' : 'ครบคำสร้อยแล้ว'}
+              </span>
+              {missingPunchlineCount > 0 && (
+                <span>{missingPunchlineCount.toLocaleString()}</span>
+              )}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Right: Select Current Page + View Mode Switcher */}

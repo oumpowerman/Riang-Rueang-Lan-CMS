@@ -79,7 +79,10 @@ export function useCMSManualSyncActions({
     const startedIso = new Date().toISOString();
 
     try {
-      const cloudSummary = await firestoreService.fetchArchiveSummaryStatsOnce();
+      const [cloudSummary, freshServerCounts] = await Promise.all([
+        firestoreService.fetchArchiveSummaryStatsOnce(),
+        firestoreService.fetchServerCollectionCounts().catch(() => null),
+      ]);
       const localSyncTs = cmsRepository.getLastCloudSyncTimestamp();
       const twentyFourHoursAgoIso = new Date(
         Date.now() - MANUAL_DELTA_MIN_LOOKBACK_MS
@@ -93,15 +96,34 @@ export function useCMSManualSyncActions({
           ? bufferedLocalIso
           : twentyFourHoursAgoIso;
 
+      if (freshServerCounts) {
+        setServerCounts(freshServerCounts);
+      }
+
       if (cloudSummary) {
+        // If the summary doc had drifted from the real server collection count, auto-reconcile it!
+        if (
+          freshServerCounts &&
+          (cloudSummary.totalFootage !== freshServerCounts.totalFootage ||
+            cloudSummary.totalEpisodes !== freshServerCounts.totalEpisodes ||
+            cloudSummary.totalSources !== freshServerCounts.totalSources)
+        ) {
+          cloudSummary.totalFootage = freshServerCounts.totalFootage;
+          cloudSummary.totalEpisodes = freshServerCounts.totalEpisodes;
+          cloudSummary.totalSources = freshServerCounts.totalSources;
+          void firestoreService.saveArchiveSummaryStats(cloudSummary);
+        }
+
         setArchiveSummaryStats(cloudSummary);
         void idbStorageService.setMeta('archive_summary_stats', cloudSummary);
-        setServerCounts({
-          totalEpisodes: cloudSummary.totalEpisodes,
-          totalFootage: cloudSummary.totalFootage,
-          totalSources: cloudSummary.totalSources,
-          fetchedAt: cloudSummary.updatedAt || startedIso,
-        });
+        if (!freshServerCounts) {
+          setServerCounts({
+            totalEpisodes: cloudSummary.totalEpisodes,
+            totalFootage: cloudSummary.totalFootage,
+            totalSources: cloudSummary.totalSources,
+            fetchedAt: cloudSummary.updatedAt || startedIso,
+          });
+        }
       }
 
       // Handle remote wipe markers if present
@@ -391,10 +413,28 @@ export function useCMSManualSyncActions({
         cloudSummary?.updatedAt ||
         new Date().toISOString();
 
-      if (cloudSummary) {
-        setArchiveSummaryStats(cloudSummary);
-        void idbStorageService.setMeta('archive_summary_stats', cloudSummary);
-      }
+      const reconciledSummary: ArchiveSummaryStats = {
+        completeEpisodesCount: cloudSummary?.completeEpisodesCount ?? 0,
+        incompleteEpisodesCount: cloudSummary?.incompleteEpisodesCount ?? 0,
+        incompleteFootageEpisodesCount: cloudSummary?.incompleteFootageEpisodesCount ?? 0,
+        distinctSeriesCount: cloudSummary?.distinctSeriesCount ?? 0,
+        usedFootageCount: cloudSummary?.usedFootageCount ?? 0,
+        readyFootageCount: cloudSummary?.readyFootageCount ?? 0,
+        newFootageCount: cloudSummary?.newFootageCount ?? 0,
+        coolingFootageCount: cloudSummary?.coolingFootageCount ?? 0,
+        untaggedFootageCount: cloudSummary?.untaggedFootageCount ?? 0,
+        missingDriveCount: cloudSummary?.missingDriveCount ?? 0,
+        ...(cloudSummary || {}),
+        totalEpisodes: allEpisodes.length,
+        totalFootage: allFootages.length,
+        totalSources: allSources.length,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setArchiveSummaryStats(reconciledSummary);
+      void idbStorageService.setMeta('archive_summary_stats', reconciledSummary);
+      void firestoreService.saveArchiveSummaryStats(reconciledSummary);
+
       setServerCounts({
         totalEpisodes: allEpisodes.length,
         totalFootage: allFootages.length,

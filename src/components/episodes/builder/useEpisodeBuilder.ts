@@ -29,8 +29,14 @@ import {
   PoolQuickFilter,
   RANK_ORDER_1_TO_5,
   RankNumber,
+  RecipeShortfallNotice,
   SlotDropPayload,
 } from './builder.types';
+import {
+  buildScopeSummaryLabel,
+  computeBuilderPoolPipeline,
+} from './builderPoolFilter';
+import { useBuilderSeriesTarget } from './useBuilderSeriesTarget';
 import { useBuilderThreeTierScope } from './useBuilderThreeTierScope';
 
 export function useEpisodeBuilder() {
@@ -148,9 +154,10 @@ export function useEpisodeBuilder() {
   // Right Pool Filter & Pagination State
   const [allowCrossCategory, setAllowCrossCategory] = useState(false);
   const [poolFilterGroupId, setPoolFilterGroupId] = useState<string>('ALL');
-  const [poolSubcategoryFilterId, setPoolSubcategoryFilterId] = useState<
-    string | null
-  >(null);
+  const [poolCoTagFilterIds, setPoolCoTagFilterIds] = useState<string[]>([]);
+  const [poolCoTagMatchMode, setPoolCoTagMatchMode] = useState<'AND' | 'OR'>(
+    'AND'
+  );
   const [poolQuickFilter, setPoolQuickFilter] =
     useState<PoolQuickFilter>('AVAILABLE_USABLE');
   const [pickerSearch, setPickerSearch] = useState('');
@@ -159,44 +166,51 @@ export function useEpisodeBuilder() {
   const [pickerPage, setPickerPage] = useState(1);
   const [pickerPageSize, setPickerPageSize] = useState(6);
 
-  // Flexible Episode Scope: 'MAIN_CATEGORY' or 'SUBCATEGORY'
+  // Flexible Episode Scope (legacy compatibility for subcategory saves)
   const [categoryEpisodeScope, setCategoryEpisodeScope] = useState<
     'MAIN_CATEGORY' | 'SUBCATEGORY'
   >('MAIN_CATEGORY');
 
-  const categoryEpisodeCount = useMemo(() => {
-    if (categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId) {
-      return episodes.filter(
-        (e) => e.targetSubcategoryId === targetSubcategoryId
-      ).length;
-    }
-    return episodes.filter((e) => e.mainCategoryTagId === mainCategoryTagId)
-      .length;
-  }, [episodes, mainCategoryTagId, categoryEpisodeScope, targetSubcategoryId]);
+  // Unified Series Target & max(EP)+1 Auto-Runner Hook
+  const {
+    seriesCatalog,
+    seriesMode,
+    activeExistingSeries,
+    customSeriesName,
+    effectiveSeriesName,
+    effectiveSeriesKey,
+    effectiveSeriesTitle,
+    autoEpisodeNo,
+    effectiveEpisodeNo,
+    isManualEpisodeNo,
+    isDuplicateEpisodeNo,
+    existingSeriesEpisodesCount,
+    latestSeriesEpisodeNo,
+    title,
+    isTitleManuallyEdited,
+    standardizedTitlePreview,
+    matchingExistingSeriesForNewName,
+    suggestedSeriesForActiveTag,
+    selectExistingSeries,
+    switchToNewSeries,
+    updateCustomSeriesName,
+    setEpisodeNo,
+    resetAutoEpisodeNo,
+    handleUserChangeTitle,
+    applyCustomPreselectTitle,
+    resetTitleToStandard,
+    syncDefaultForPrimaryTag,
+    prepareNextEpisodeAfterSave,
+  } = useBuilderSeriesTarget({
+    episodes,
+    tags,
+    tagMap,
+    customSeriesTagMap: settings.seriesToTagIdsMap,
+    mainCategoryTagId,
+  });
 
-  const nextCategoryEpisodeNo = categoryEpisodeCount + 1;
-
-  // Build auto-title helper based on Primary Series Tag + Optional Facet Tags
-  const buildEpisodeAutoTitle = useCallback(
-    (primaryId: string, facetIds: string[]) => {
-      const primaryName = tagMap[primaryId]?.name || 'หมวดรวม';
-      const epNo =
-        episodes.filter((e) => e.mainCategoryTagId === primaryId).length + 1;
-      const facetNames = facetIds
-        .filter((fid) => fid !== primaryId && Boolean(tagMap[fid]))
-        .map((fid) => tagMap[fid].name);
-
-      if (facetNames.length > 0) {
-        return `5 อันดับ ${primaryName} (${facetNames.join(' · ')}) EP.${epNo} - จังหวะพีคคัดเน้นๆ`;
-      }
-      return `5 อันดับ ${primaryName} EP.${epNo} - จังหวะพีคคัดเน้นๆ`;
-    },
-    [tagMap, episodes]
-  );
-
-  const [title, setTitle] = useState(() =>
-    buildEpisodeAutoTitle(initialDefaultTagId, [])
-  );
+  const nextCategoryEpisodeNo = effectiveEpisodeNo;
+  const categoryEpisodeCount = existingSeriesEpisodesCount;
   const [publishDate, setPublishDate] = useState<string>('2026-10-28');
   const [publishSlot, setPublishSlot] = useState<PublishSlot>('MORNING_0600');
   const workflowStage: EpisodeWorkflowStage = '4_PUBLISHED';
@@ -214,6 +228,8 @@ export function useEpisodeBuilder() {
   );
 
   const [preselectNotice, setPreselectNotice] = useState<string | null>(null);
+  const [recipeShortfallNotice, setRecipeShortfallNotice] =
+    useState<RecipeShortfallNotice | null>(null);
   const [savedBannerMessage, setSavedBannerMessage] = useState<string | null>(
     null
   );
@@ -301,26 +317,41 @@ export function useEpisodeBuilder() {
     return Object.values(entityUsage).filter((item) => item.ranks.length > 1);
   }, [productionTarget, rankings, computedFootageMap, currentSubcategories]);
 
-  // Populate rankings 1..5 using a recipe and the active 3-Tier Scope
+  const scopeSummaryLabel = useMemo(
+    () =>
+      buildScopeSummaryLabel(
+        mainCategoryTagId,
+        selectedFacetTagIds,
+        scopeMatchMode,
+        tagMap
+      ),
+    [mainCategoryTagId, selectedFacetTagIds, scopeMatchMode, tagMap]
+  );
+
+  // Populate rankings 1..5 using a recipe and the active 3-Tier Scope (strictly respecting OR/AND)
   const applyRecipeForCategory = useCallback(
     (
       tagId: string,
       recipeId: MixRecipeId,
       overrideFacetIds?: string[],
-      overrideMatchMode?: 'AND' | 'OR'
+      overrideMatchMode?: 'AND' | 'OR',
+      overrideAllowCrossCategory?: boolean
     ) => {
       setActiveRecipe(recipeId);
       const facets = overrideFacetIds ?? selectedFacetTagIds;
+      const cleanFacets = facets.filter((id) => Boolean(id) && id !== tagId);
       const mode = overrideMatchMode ?? scopeMatchMode;
-      const targetTags = allowCrossCategory
+      const effectiveAllowCross =
+        overrideAllowCrossCategory ?? allowCrossCategory;
+      const targetTags = effectiveAllowCross
         ? []
-        : [tagId, ...facets.filter((id) => id !== tagId)];
+        : [tagId, ...cleanFacets];
 
       const autoPicked = generateSmartMixByRecipe(
         computedFootage,
         recipeId,
         targetTags,
-        allowCrossCategory,
+        effectiveAllowCross,
         mode
       );
 
@@ -346,40 +377,125 @@ export function useEpisodeBuilder() {
       );
 
       setRankings(nextRankings);
+
+      if (autoPicked.length < 5) {
+        setRecipeShortfallNotice({
+          matchedCount: autoPicked.length,
+          missingCount: 5 - autoPicked.length,
+          scopeMatchMode: mode,
+          wasCrossCategory: effectiveAllowCross,
+          scopeSummaryLabel: buildScopeSummaryLabel(
+            tagId,
+            cleanFacets,
+            mode,
+            tagMap
+          ),
+          hasFacetTags: cleanFacets.length > 0,
+        });
+      } else {
+        setRecipeShortfallNotice(null);
+      }
     },
-    [allowCrossCategory, computedFootage, scopeMatchMode, selectedFacetTagIds]
+    [
+      allowCrossCategory,
+      computedFootage,
+      scopeMatchMode,
+      selectedFacetTagIds,
+      tagMap,
+    ]
   );
 
-  // Select Primary Series Tag (works for Tier 1, Tier 2, or Tier 3)
-  const handleSelectCategory = (tagId: string, autoFillWithRecipe = false) => {
+  // Select Primary Series Tag (clears stale facet tags by default; preserveFacets=true swaps primary within current mix)
+  const handleSelectCategory = (
+    tagId: string,
+    autoFillWithRecipe = false,
+    options?: { preserveFacets?: boolean }
+  ) => {
     const tagObj = tagMap[tagId];
     if (tagObj) {
       setSelectedGroupId(resolveTagGroupId(tagObj));
     }
+
+    let nextFacets: string[] = [];
+    if (options?.preserveFacets) {
+      const remaining = selectedFacetTagIds.filter((id) => id !== tagId);
+      if (mainCategoryTagId && mainCategoryTagId !== tagId) {
+        nextFacets = Array.from(new Set([mainCategoryTagId, ...remaining]));
+      } else {
+        nextFacets = remaining;
+      }
+    }
+
     setMainCategoryTagId(tagId);
-    const nextFacets = selectedFacetTagIds.filter((id) => id !== tagId);
     setSelectedFacetTagIds(nextFacets);
-    setPoolSubcategoryFilterId(null);
-    setProductionTarget('MAIN_CATEGORY_VARIETY');
-    setTargetSubcategoryId(null);
+    setPoolCoTagFilterIds([]);
+    setProductionTarget(
+      nextFacets.length === 1
+        ? 'SINGLE_SUBCATEGORY_SPECIAL'
+        : 'MAIN_CATEGORY_VARIETY'
+    );
+    setTargetSubcategoryId(nextFacets.length === 1 ? nextFacets[0] : null);
     setAllowCrossCategory(false);
+    setRecipeShortfallNotice(null);
     setPickerPage(1);
-    setTitle(buildEpisodeAutoTitle(tagId, nextFacets));
+    syncDefaultForPrimaryTag(tagId);
 
     if (autoFillWithRecipe) {
-      applyRecipeForCategory(tagId, activeRecipe, nextFacets);
+      applyRecipeForCategory(tagId, activeRecipe, nextFacets, scopeMatchMode, false);
     }
   };
+
+  // Step 1: Pick an existing Series -> lock Series, auto-run max(EP)+1, and apply its bound 3-Tier tags
+  const handleSelectExistingSeriesInStep1 = useCallback(
+    (seriesKey: string) => {
+      const pickedSeries = selectExistingSeries(seriesKey);
+      if (!pickedSeries) return;
+
+      const validTagIds = pickedSeries.matchedTagIds.filter((id) =>
+        Boolean(tagMap[id])
+      );
+      if (validTagIds.length > 0) {
+        const primaryId = validTagIds[0];
+        const facetIds = validTagIds.slice(1);
+        const primaryTag = tagMap[primaryId];
+        if (primaryTag) {
+          setSelectedGroupId(resolveTagGroupId(primaryTag));
+        }
+        setMainCategoryTagId(primaryId);
+        setSelectedFacetTagIds(facetIds);
+        setScopeMatchMode('OR');
+        setPoolCoTagFilterIds([]);
+        setProductionTarget(
+          facetIds.length === 1
+            ? 'SINGLE_SUBCATEGORY_SPECIAL'
+            : 'MAIN_CATEGORY_VARIETY'
+        );
+        setTargetSubcategoryId(facetIds.length === 1 ? facetIds[0] : null);
+        setAllowCrossCategory(false);
+        setRecipeShortfallNotice(null);
+        setPickerPage(1);
+      }
+    },
+    [selectExistingSeries, tagMap, resolveTagGroupId, setSelectedFacetTagIds, setScopeMatchMode]
+  );
+
+  // Step 3: Switch Series right before saving without disturbing Step 2 rankings or Step 1 tags
+  const handleSelectExistingSeriesInStep3 = useCallback(
+    (seriesKey: string) => {
+      selectExistingSeries(seriesKey);
+    },
+    [selectExistingSeries]
+  );
 
   // Toggle an additional Facet Tag across Tier 1 / Tier 2 / Tier 3
   const handleToggleFacetTag = (tagId: string) => {
     if (tagId === mainCategoryTagId) return;
+    setRecipeShortfallNotice(null);
     setSelectedFacetTagIds((prev) => {
       const exists = prev.includes(tagId);
       const next = exists
         ? prev.filter((id) => id !== tagId)
         : [...prev, tagId];
-      setTitle(buildEpisodeAutoTitle(mainCategoryTagId, next));
       if (next.length === 1 && !exists) {
         setTargetSubcategoryId(tagId);
         setProductionTarget('SINGLE_SUBCATEGORY_SPECIAL');
@@ -396,9 +512,64 @@ export function useEpisodeBuilder() {
     setSelectedFacetTagIds([]);
     setTargetSubcategoryId(null);
     setProductionTarget('MAIN_CATEGORY_VARIETY');
-    setTitle(buildEpisodeAutoTitle(mainCategoryTagId, []));
+    setRecipeShortfallNotice(null);
     setPickerPage(1);
   };
+
+  const handleChangeScopeMatchMode = useCallback(
+    (mode: 'AND' | 'OR') => {
+      setScopeMatchMode(mode);
+      setRecipeShortfallNotice(null);
+    },
+    [setScopeMatchMode]
+  );
+
+  const handleSwitchToOrAndRefill = useCallback(() => {
+    setScopeMatchMode('OR');
+    setAllowCrossCategory(false);
+    applyRecipeForCategory(
+      mainCategoryTagId,
+      activeRecipe,
+      selectedFacetTagIds,
+      'OR',
+      false
+    );
+  }, [
+    setScopeMatchMode,
+    applyRecipeForCategory,
+    mainCategoryTagId,
+    activeRecipe,
+    selectedFacetTagIds,
+  ]);
+
+  const handleEnableCrossCategoryAndRefill = useCallback(() => {
+    setAllowCrossCategory(true);
+    applyRecipeForCategory(
+      mainCategoryTagId,
+      activeRecipe,
+      selectedFacetTagIds,
+      scopeMatchMode,
+      true
+    );
+  }, [
+    applyRecipeForCategory,
+    mainCategoryTagId,
+    activeRecipe,
+    selectedFacetTagIds,
+    scopeMatchMode,
+  ]);
+
+  const handleTogglePoolCoTag = useCallback((tagId: string) => {
+    setPoolCoTagFilterIds((prev) =>
+      prev.includes(tagId)
+        ? prev.filter((id) => id !== tagId)
+        : [...prev, tagId]
+    );
+  }, []);
+
+  const handleClearPoolCoTags = useCallback(() => {
+    setPoolCoTagFilterIds([]);
+  }, []);
 
   const handleSelectGroup = (groupId: string) => {
     setSelectedGroupId(groupId);
@@ -423,7 +594,6 @@ export function useEpisodeBuilder() {
     if (firstSub) {
       setTargetSubcategoryId(firstSub.id);
       setSelectedFacetTagIds([firstSub.id]);
-      setTitle(buildEpisodeAutoTitle(mainCategoryTagId, [firstSub.id]));
     }
   };
 
@@ -431,7 +601,6 @@ export function useEpisodeBuilder() {
     setTargetSubcategoryId(subId);
     setSelectedFacetTagIds([subId]);
     setProductionTarget('SINGLE_SUBCATEGORY_SPECIAL');
-    setTitle(buildEpisodeAutoTitle(mainCategoryTagId, [subId]));
     setPickerPage(1);
   };
 
@@ -444,17 +613,13 @@ export function useEpisodeBuilder() {
       targetSubcategoryId &&
       tagMap[targetSubcategoryId]
     ) {
-      const subName = tagMap[targetSubcategoryId].name;
-      const subEpNo =
-        episodes.filter((e) => e.targetSubcategoryId === targetSubcategoryId)
-          .length + 1;
-      setTitle(`5 อันดับ ${subName} EP.${subEpNo} - จังหวะพีคคัดเน้นๆ`);
+      switchToNewSeries(tagMap[targetSubcategoryId].name);
     } else {
-      setTitle(buildEpisodeAutoTitle(mainCategoryTagId, selectedFacetTagIds));
+      syncDefaultForPrimaryTag(mainCategoryTagId);
     }
   };
 
-  // Handle cross-view category pre-selection from Footage Vault or Source Mining Studio
+  // Handle cross-view category or Series pre-selection from Master Archive, Footage Vault, or Source Mining Studio
   useEffect(() => {
     if (!builderPreselectRequest) return;
     const {
@@ -464,27 +629,62 @@ export function useEpisodeBuilder() {
       targetSubcategoryId: reqSubId,
       customFootageIds,
       customEpisodeTitle,
+      seriesKey: reqSeriesKey,
+      seriesName: reqSeriesName,
+      matchedTagIds: reqMatchedTagIds,
     } = builderPreselectRequest;
 
-    const targetTag = tagMap[tagId];
+    const validSeriesTags = (reqMatchedTagIds || []).filter((id) =>
+      Boolean(tagMap[id])
+    );
+    const resolvedPrimaryId =
+      validSeriesTags[0] || (tagMap[tagId] ? tagId : mainCategoryTagId);
+    const targetTag = tagMap[resolvedPrimaryId];
     if (targetTag) {
       setSelectedGroupId(resolveTagGroupId(targetTag));
     }
-    setMainCategoryTagId(tagId);
-    const nextFacets = reqSubId && reqSubId !== tagId ? [reqSubId] : [];
+    setMainCategoryTagId(resolvedPrimaryId);
+
+    const nextFacets =
+      validSeriesTags.length > 1
+        ? validSeriesTags.slice(1)
+        : reqSubId && reqSubId !== resolvedPrimaryId
+          ? [reqSubId]
+          : [];
+    const preselectMode: 'AND' | 'OR' =
+      validSeriesTags.length > 1 ? 'OR' : nextFacets.length > 0 ? 'AND' : 'OR';
+
     setSelectedFacetTagIds(nextFacets);
+    setScopeMatchMode(preselectMode);
+    setPoolCoTagFilterIds([]);
     setProductionTarget(reqTarget || 'MAIN_CATEGORY_VARIETY');
     setTargetSubcategoryId(reqSubId || null);
     setAllowCrossCategory(false);
+    setRecipeShortfallNotice(null);
     setActiveRecipe(recipeId);
 
-    if (customEpisodeTitle) {
-      setTitle(customEpisodeTitle);
+    // Lock Series target when launched from Master Archive Series Shelf/Drawer
+    let preselectLabel = `#${targetTag?.name || resolvedPrimaryId}`;
+    if (reqSeriesKey) {
+      const matched = selectExistingSeries(reqSeriesKey);
+      if (matched) {
+        preselectLabel = `${matched.fullSeriesTitle} (EP.${matched.nextEpisodeNo})`;
+      } else if (reqSeriesName) {
+        switchToNewSeries(reqSeriesName);
+        preselectLabel = `5 อันดับ ${reqSeriesName}`;
+      }
+    } else if (reqSeriesName) {
+      switchToNewSeries(reqSeriesName);
+      preselectLabel = `5 อันดับ ${reqSeriesName}`;
     } else {
-      setTitle(buildEpisodeAutoTitle(tagId, nextFacets));
+      syncDefaultForPrimaryTag(resolvedPrimaryId);
     }
 
-    const filterTagIds = [tagId, ...nextFacets];
+    if (customEpisodeTitle) {
+      applyCustomPreselectTitle(customEpisodeTitle);
+    }
+
+    const filterTagIds = [resolvedPrimaryId, ...nextFacets];
 
     if (customFootageIds && customFootageIds.length > 0) {
       const customPicked = customFootageIds
@@ -536,7 +736,7 @@ export function useEpisodeBuilder() {
       recipeId,
       filterTagIds,
       false,
-      'AND'
+      preselectMode
     );
     const nextRankings: EpisodeRankingSlot[] = RANK_ORDER_1_TO_5.map(
       (rankNum, idx) => {
@@ -561,18 +761,22 @@ export function useEpisodeBuilder() {
     setRankings(nextRankings);
     setActiveBuilderStep(2);
     setPreselectNotice(
-      `ดึงวัตถุดิบหมวด #${targetTag?.name || tagId} มาจัดเรียงช่องอันดับ 1–5 ครบ ${
-        autoPicked.length
-      }/5 อันดับอัตโนมัติแล้ว!`
+      `เตรียมวัตถุดิบสำหรับ ${preselectLabel} จัดเรียงช่องอันดับ 1–5 ครบ ${autoPicked.length}/5 อันดับอัตโนมัติแล้ว!`
     );
     clearBuilderPreselectRequest();
   }, [
     builderPreselectRequest,
     tagMap,
     computedFootage,
+    mainCategoryTagId,
     clearBuilderPreselectRequest,
     resolveTagGroupId,
-    buildEpisodeAutoTitle,
+    selectExistingSeries,
+    switchToNewSeries,
+    syncDefaultForPrimaryTag,
+    applyCustomPreselectTitle,
+    setSelectedFacetTagIds,
+    setScopeMatchMode,
   ]);
 
   useEffect(() => {
@@ -584,7 +788,8 @@ export function useEpisodeBuilder() {
     scopeMatchMode,
     allowCrossCategory,
     poolFilterGroupId,
-    poolSubcategoryFilterId,
+    poolCoTagFilterIds,
+    poolCoTagMatchMode,
     poolQuickFilter,
     pickerSearch,
     pickerSortBy,
@@ -647,6 +852,15 @@ export function useEpisodeBuilder() {
         };
       })
     );
+
+    const nextFilledCount = new Set(
+      rankings
+        .map((s) => (s.rank === targetRank ? footageId : s.footageId))
+        .filter(Boolean)
+    ).size;
+    if (nextFilledCount >= 5) {
+      setRecipeShortfallNotice(null);
+    }
 
     const nextEmpty = rankings.find(
       (s) => s.rank !== targetRank && s.footageId === null
@@ -730,6 +944,7 @@ export function useEpisodeBuilder() {
 
   const clearAllSlots = () => {
     setRankings(DEFAULT_RANKINGS_1_TO_5);
+    setRecipeShortfallNotice(null);
   };
 
   const updateSlotScript = (rank: RankNumber, script: string) => {
@@ -778,79 +993,41 @@ export function useEpisodeBuilder() {
     return map;
   }, [rankings]);
 
-  // Filtered & Sorted candidate footages in right-hand pool based on 3-Tier Scope
-  const pickerCandidates = useMemo(() => {
-    const selectedSet = new Set(selectedFootageIds);
-    const basePool = allowCrossCategory ? computedFootage : scopedFootages;
-
-    const filtered = basePool.filter((ft) => {
-      if (allowCrossCategory && poolFilterGroupId !== 'ALL') {
-        const belongsToSelectedPoolGroup = ft.tags.some((tid) => {
-          const t = tagMap[tid];
-          return t && resolveTagGroupId(t) === poolFilterGroupId;
-        });
-        if (!belongsToSelectedPoolGroup) return false;
-      }
-
-      if (poolSubcategoryFilterId) {
-        if (!ft.tags.includes(poolSubcategoryFilterId)) return false;
-      }
-
-      if (poolQuickFilter === 'AVAILABLE_USABLE') {
-        const isUsable =
-          ft.cooldownStatus === 'NEW_UNTOUCHED' ||
-          ft.cooldownStatus === 'READY_FRESH';
-        if (!isUsable || selectedSet.has(ft.id)) return false;
-      } else if (poolQuickFilter === 'ONLY_NEW') {
-        if (ft.cooldownStatus !== 'NEW_UNTOUCHED' || selectedSet.has(ft.id)) {
-          return false;
-        }
-      } else if (poolQuickFilter === 'ONLY_FRESH') {
-        if (ft.cooldownStatus !== 'READY_FRESH' || selectedSet.has(ft.id)) {
-          return false;
-        }
-      }
-
-      if (pickerSearch.trim() !== '') {
-        const q = pickerSearch.toLowerCase();
-        if (
-          !ft.id.toLowerCase().includes(q) &&
-          !ft.title.toLowerCase().includes(q) &&
-          !ft.mascotNotes.toLowerCase().includes(q)
-        ) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    return [...filtered].sort((a, b) => {
-      if (pickerSortBy === 'REST_DAYS_DESC') {
-        const daysA =
-          a.daysSinceLastUsed === null ? 9999 : a.daysSinceLastUsed;
-        const daysB =
-          b.daysSinceLastUsed === null ? 9999 : b.daysSinceLastUsed;
-        if (daysB !== daysA) return daysB - daysA;
-        return a.usageLast90Days - b.usageLast90Days;
-      }
-      if (a.usageLast90Days !== b.usageLast90Days) {
-        return a.usageLast90Days - b.usageLast90Days;
-      }
-      return a.totalUsageCount - b.totalUsageCount;
-    });
-  }, [
-    allowCrossCategory,
-    computedFootage,
-    scopedFootages,
-    poolFilterGroupId,
-    poolSubcategoryFilterId,
-    poolQuickFilter,
-    selectedFootageIds,
-    pickerSearch,
-    pickerSortBy,
-    tagMap,
-    resolveTagGroupId,
-  ]);
+  // Unified Step 2 Candidate Pool Pipeline (Single Source of Truth for candidates, 4 tab counts, and co-tag chips)
+  const { pickerCandidates, poolTabCounts, poolCoTagChips, coTagAllCount } =
+    useMemo(
+    () =>
+      computeBuilderPoolPipeline({
+        computedFootage,
+        scopedFootages,
+        allowCrossCategory,
+        poolFilterGroupId,
+        poolCoTagFilterIds,
+        poolCoTagMatchMode,
+        poolQuickFilter,
+        pickerSearch,
+        pickerSortBy,
+        selectedFootageIds,
+        activeScopeTagIds,
+        tagMap,
+        resolveTagGroupId,
+      }),
+    [
+      computedFootage,
+      scopedFootages,
+      allowCrossCategory,
+      poolFilterGroupId,
+      poolCoTagFilterIds,
+      poolCoTagMatchMode,
+      poolQuickFilter,
+      pickerSearch,
+      pickerSortBy,
+      selectedFootageIds,
+      activeScopeTagIds,
+      tagMap,
+      resolveTagGroupId,
+    ]
+  );
 
   const paginatedPickerCandidates = useMemo(() => {
     const start = (pickerPage - 1) * pickerPageSize;
@@ -859,18 +1036,6 @@ export function useEpisodeBuilder() {
 
   const performActualSave = () => {
     if (!title.trim() || selectedFootageIds.length < 5) return;
-
-    const effectiveSeriesTitle =
-      categoryEpisodeScope === 'SUBCATEGORY' &&
-      targetSubcategoryId &&
-      tagMap[targetSubcategoryId]
-        ? `5 อันดับ ${tagMap[targetSubcategoryId].name}`
-        : `5 อันดับ ${tagMap[mainCategoryTagId]?.name || ''}`;
-
-    const effectiveSeriesId =
-      categoryEpisodeScope === 'SUBCATEGORY' && targetSubcategoryId
-        ? targetSubcategoryId
-        : mainCategoryTagId;
 
     const resolvedRankings: EpisodeRankingSlot[] = rankings.map((slot) => {
       const ft = slot.footageId ? computedFootageMap[slot.footageId] : null;
@@ -888,9 +1053,9 @@ export function useEpisodeBuilder() {
       title: title.trim(),
       categoryGroupId: selectedGroupId,
       mainCategoryTagId,
-      categoryEpisodeNo: nextCategoryEpisodeNo,
+      categoryEpisodeNo: effectiveEpisodeNo,
       categoryEpisodeScope,
-      seriesId: effectiveSeriesId,
+      seriesId: effectiveSeriesKey,
       seriesTitle: effectiveSeriesTitle,
       productionTarget,
       targetSubcategoryId:
@@ -920,7 +1085,7 @@ export function useEpisodeBuilder() {
     setNewlyCreatedEpisode(created);
     setSavedBannerMessage(
       `บันทึกคลิป 5 อันดับ ${created.id} (EP.${
-        created.categoryEpisodeNo || nextCategoryEpisodeNo
+        created.categoryEpisodeNo || effectiveEpisodeNo
       } · ${created.title}) เข้าสู่คลังเรียบร้อยแล้ว!`
     );
     setPreselectNotice(null);
@@ -933,9 +1098,10 @@ export function useEpisodeBuilder() {
   };
 
   const handleContinueNextEpisodeInCategory = () => {
+    const savedEpNo = newlyCreatedEpisode?.categoryEpisodeNo || effectiveEpisodeNo;
     setNewlyCreatedEpisode(null);
     clearAllSlots();
-    setTitle(buildEpisodeAutoTitle(mainCategoryTagId, selectedFacetTagIds));
+    prepareNextEpisodeAfterSave(effectiveSeriesKey, effectiveSeriesName, savedEpNo);
     setActiveBuilderStep(2);
     applyRecipeForCategory(mainCategoryTagId, activeRecipe);
   };
@@ -980,7 +1146,8 @@ export function useEpisodeBuilder() {
     tier3Groups,
     selectedFacetTagIds,
     scopeMatchMode,
-    setScopeMatchMode,
+    setScopeMatchMode: handleChangeScopeMatchMode,
+    scopeSummaryLabel,
     step1SearchQuery,
     setStep1SearchQuery,
     tagClickMode,
@@ -988,6 +1155,10 @@ export function useEpisodeBuilder() {
     activeScopeTagIds,
     handleToggleFacetTag,
     handleClearFacetTags,
+    recipeShortfallNotice,
+    setRecipeShortfallNotice,
+    handleSwitchToOrAndRefill,
+    handleEnableCrossCategoryAndRefill,
 
     groupStockStats,
     selectedGroupId,
@@ -1032,8 +1203,11 @@ export function useEpisodeBuilder() {
     setAllowCrossCategory,
     poolFilterGroupId,
     setPoolFilterGroupId,
-    poolSubcategoryFilterId,
-    setPoolSubcategoryFilterId,
+    poolCoTagFilterIds,
+    poolCoTagMatchMode,
+    setPoolCoTagMatchMode,
+    handleTogglePoolCoTag,
+    handleClearPoolCoTags,
     poolQuickFilter,
     setPoolQuickFilter,
     pickerSearch,
@@ -1045,10 +1219,38 @@ export function useEpisodeBuilder() {
     pickerPageSize,
     setPickerPageSize,
     pickerCandidates,
+    poolTabCounts,
+    poolCoTagChips,
+    coTagAllCount,
     paginatedPickerCandidates,
 
+    // Series Target & Auto-EP State & Actions
+    seriesCatalog,
+    seriesMode,
+    activeExistingSeries,
+    customSeriesName,
+    effectiveSeriesName,
+    effectiveSeriesTitle,
+    autoEpisodeNo,
+    effectiveEpisodeNo,
+    isManualEpisodeNo,
+    isDuplicateEpisodeNo,
+    existingSeriesEpisodesCount,
+    latestSeriesEpisodeNo,
+    isTitleManuallyEdited,
+    standardizedTitlePreview,
+    matchingExistingSeriesForNewName,
+    suggestedSeriesForActiveTag,
+    handleSelectExistingSeriesInStep1,
+    handleSelectExistingSeriesInStep3,
+    switchToNewSeries,
+    updateCustomSeriesName,
+    setEpisodeNo,
+    resetAutoEpisodeNo,
+    resetTitleToStandard,
+
     title,
-    setTitle,
+    setTitle: handleUserChangeTitle,
     publishDate,
     setPublishDate,
     publishSlot,

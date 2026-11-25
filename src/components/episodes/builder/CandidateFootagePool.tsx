@@ -33,12 +33,16 @@ import { PaginationBar } from '../../ui/PaginationBar';
 import { StatusBadge } from '../../ui/StatusBadge';
 import { TagPill } from '../../ui/TagPill';
 import {
+  BuilderScopeMatchMode,
   LiveCategoryStock,
   PickerSortBy,
+  PoolCoTagChip,
   PoolQuickFilter,
+  PoolTabCounts,
   RANK_ORDER_1_TO_5,
   RankNumber,
 } from './builder.types';
+import { PoolCoTagFilterDrawer } from './PoolCoTagFilterDrawer';
 
 interface CandidateFootagePoolProps {
   className?: string;
@@ -47,13 +51,20 @@ interface CandidateFootagePoolProps {
   categoryGroups: CategoryGroup[];
   activeGroup: CategoryGroup | null;
   activeCategoryStat: CategoryMatrixStat | null;
+  scopeSummaryLabel?: string;
   productionTarget: EpisodeProductionTarget;
   activeSubcategory: CategoryTag | null;
   currentSubcategories?: CategoryTag[];
-  poolSubcategoryFilterId?: string | null;
-  onChangePoolSubcategoryFilterId?: (subId: string | null) => void;
+  poolCoTagChips?: PoolCoTagChip[];
+  coTagAllCount?: number;
+  poolCoTagFilterIds?: string[];
+  poolCoTagMatchMode?: BuilderScopeMatchMode;
+  onChangePoolCoTagMatchMode?: (mode: BuilderScopeMatchMode) => void;
+  onTogglePoolCoTag?: (tagId: string) => void;
+  onClearPoolCoTags?: () => void;
   computedFootage?: ComputedFootage[];
   liveCategoryStock: LiveCategoryStock;
+  poolTabCounts?: PoolTabCounts;
   allowCrossCategory: boolean;
   onToggleCrossCategory: () => void;
   onEnableCrossCategory: () => void;
@@ -86,13 +97,20 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
   categoryGroups,
   activeGroup,
   activeCategoryStat,
+  scopeSummaryLabel,
   productionTarget,
   activeSubcategory,
   currentSubcategories = [],
-  poolSubcategoryFilterId,
-  onChangePoolSubcategoryFilterId,
+  poolCoTagChips,
+  coTagAllCount,
+  poolCoTagFilterIds = [],
+  poolCoTagMatchMode = 'AND',
+  onChangePoolCoTagMatchMode,
+  onTogglePoolCoTag,
+  onClearPoolCoTags,
   computedFootage = [],
   liveCategoryStock,
+  poolTabCounts,
   allowCrossCategory,
   onToggleCrossCategory,
   onEnableCrossCategory,
@@ -125,15 +143,39 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
     return emptySlot ? emptySlot.rank : null;
   }, [rankings]);
 
-  // Compute counts per subcategory in current main category to help user focus quickly
-  const subcategoryCounts = useMemo(() => {
-    if (!currentSubcategories || currentSubcategories.length === 0) return {};
-    const map: Record<string, number> = {};
-    for (const sub of currentSubcategories) {
-      map[sub.id] = computedFootage.filter((ft) => ft.tags.includes(sub.id)).length;
-    }
-    return map;
-  }, [currentSubcategories, computedFootage]);
+  const effectiveScopeLabel =
+    scopeSummaryLabel ||
+    (activeCategoryStat?.tag.name ? `#${activeCategoryStat.tag.name}` : 'ทุกหมวด');
+
+  const resolvedTabCounts: PoolTabCounts = poolTabCounts || {
+    usable: liveCategoryStock.remainingNew + liveCategoryStock.remainingFresh,
+    onlyNew: liveCategoryStock.remainingNew,
+    onlyFresh: liveCategoryStock.remainingFresh,
+    all: pickerCandidatesCount,
+  };
+
+  const effectiveCoTagChips: PoolCoTagChip[] = useMemo(() => {
+    if (poolCoTagChips) return poolCoTagChips;
+    return currentSubcategories.map((sub) => {
+      const count = computedFootage.filter((ft) =>
+        ft.tags.includes(sub.id)
+      ).length;
+      return {
+        tag: sub,
+        count,
+        usableInPool: count,
+        totalInPool: count,
+      };
+    });
+  }, [poolCoTagChips, currentSubcategories, computedFootage]);
+
+  const allInCurrentTabCount = useMemo(() => {
+    if (typeof coTagAllCount === 'number') return coTagAllCount;
+    if (poolQuickFilter === 'AVAILABLE_USABLE') return resolvedTabCounts.usable;
+    if (poolQuickFilter === 'ONLY_NEW') return resolvedTabCounts.onlyNew;
+    if (poolQuickFilter === 'ONLY_FRESH') return resolvedTabCounts.onlyFresh;
+    return resolvedTabCounts.all;
+  }, [coTagAllCount, poolQuickFilter, resolvedTabCounts]);
 
   return (
     <div
@@ -143,15 +185,22 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
     >
       {/* Header: Title + Cross-Category Toggle + Optional Collapse Button */}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#eee6da]">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-[#2d2926] flex items-center gap-1.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="text-sm font-bold text-[#2d2926] flex flex-wrap items-center gap-1.5 min-w-0">
             <Film className="w-4 h-4 text-[#3b6845] shrink-0" />
-            <span>คลังฟุตเทจ ({pickerCandidatesCount} คลิป)</span>{' '}
+            <span className="whitespace-nowrap font-mono tabular-nums">
+              คลังฟุตเทจ ({pickerCandidatesCount} คลิป)
+            </span>{' '}
             {allowCrossCategory ? (
-              <span className="text-[#3b6845] text-xs font-semibold">(ข้ามหมวด)</span>
+              <span className="text-[#3b6845] text-xs font-semibold whitespace-nowrap">
+                (ข้ามหมวด)
+              </span>
             ) : (
-              <span className="text-[#787066] text-xs font-semibold">
-                (#{activeCategoryStat?.tag.name})
+              <span
+                className="text-[#787066] text-xs font-semibold truncate max-w-[300px]"
+                title={effectiveScopeLabel}
+              >
+                ({effectiveScopeLabel})
               </span>
             )}
           </h3>
@@ -224,7 +273,7 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
         </div>
       )}
 
-      {/* Quick Stock Filter Tabs (Shortened, Concise & Focused) */}
+      {/* Quick Stock Filter Tabs (Exact live counts from active filtered pool) */}
       <div className="space-y-2.5">
         <div className="flex flex-wrap gap-1">
           {(
@@ -232,24 +281,22 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
               {
                 id: 'AVAILABLE_USABLE',
                 icon: Zap,
-                label: `พร้อมใช้ (${
-                  liveCategoryStock.remainingNew + liveCategoryStock.remainingFresh
-                })`,
+                label: `พร้อมใช้ (${resolvedTabCounts.usable})`,
               },
               {
                 id: 'ONLY_NEW',
                 icon: Sparkles,
-                label: `ใหม่ (${liveCategoryStock.remainingNew})`,
+                label: `ใหม่ (${resolvedTabCounts.onlyNew})`,
               },
               {
                 id: 'ONLY_FRESH',
                 icon: CheckCircle2,
-                label: `สด (${liveCategoryStock.remainingFresh})`,
+                label: `สด (${resolvedTabCounts.onlyFresh})`,
               },
               {
                 id: 'ALL',
                 icon: ListFilter,
-                label: `ทั้งหมด (${pickerCandidatesCount})`,
+                label: `ทั้งหมด (${resolvedTabCounts.all})`,
               },
             ] as const
           ).map((tab) => {
@@ -260,58 +307,31 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => onChangePoolQuickFilter(tab.id)}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer border ${
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer border whitespace-nowrap tabular-nums ${
                   isTabActive
                     ? 'bg-[#edf4ed] text-[#244b2f] border-[#bad8b9] shadow-xs'
                     : 'bg-[#faf7f2] text-[#4d4740] border-[#e8dfd3] hover:bg-white'
                 }`}
               >
-                <TabIcon className="w-3 h-3" />
+                <TabIcon className="w-3 h-3 shrink-0" />
                 <span>{tab.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Co-occurring Tier 2 / Tier 3 Quick Filter Chips */}
-        {currentSubcategories.length > 0 && onChangePoolSubcategoryFilterId && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#eee6da]">
-            <span className="text-[11px] font-bold text-[#787066] mr-0.5">
-              กรองแท็กร่วม (Tier 2/3):
-            </span>
-            <button
-              type="button"
-              onClick={() => onChangePoolSubcategoryFilterId(null)}
-              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer border ${
-                poolSubcategoryFilterId === null
-                  ? 'bg-[#3b6845] text-white border-[#3b6845]'
-                  : 'bg-white text-[#554d44] border-[#e2d8cb] hover:bg-[#faf7f2]'
-              }`}
-            >
-              ทั้งหมด ({pickerCandidatesCount})
-            </button>
-            {currentSubcategories.map((sub) => {
-              const isSelected = poolSubcategoryFilterId === sub.id;
-              const count = subcategoryCounts[sub.id] || 0;
-              return (
-                <button
-                  key={sub.id}
-                  type="button"
-                  onClick={() =>
-                    onChangePoolSubcategoryFilterId(isSelected ? null : sub.id)
-                  }
-                  className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer border ${
-                    isSelected
-                      ? 'bg-[#fdf3ec] text-[#8e4537] border-[#f5d7cf] ring-1 ring-[#f2bfae]'
-                      : 'bg-white text-[#554d44] border-[#e2d8cb] hover:bg-[#fdf3ec]'
-                  }`}
-                >
-                  <span>{sub.name}</span>{' '}
-                  <span className="text-[10px] opacity-75 font-mono">({count})</span>
-                </button>
-              );
-            })}
-          </div>
+        {/* Collapsible 2-Section Co-occurring Tier 2 / Tier 3 Multi-Select Filter Drawer */}
+        {onTogglePoolCoTag && onClearPoolCoTags && onChangePoolCoTagMatchMode && (
+          <PoolCoTagFilterDrawer
+            poolCoTagChips={effectiveCoTagChips}
+            selectedCoTagIds={poolCoTagFilterIds}
+            coTagMatchMode={poolCoTagMatchMode}
+            coTagAllCount={allInCurrentTabCount}
+            tagMap={tagMap}
+            onToggleCoTag={onTogglePoolCoTag}
+            onClearCoTags={onClearPoolCoTags}
+            onChangeCoTagMatchMode={onChangePoolCoTagMatchMode}
+          />
         )}
 
         {/* Search & Sort Row */}
@@ -352,24 +372,39 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
         {paginatedPickerCandidates.length === 0 ? (
           <div className="p-6 text-center bg-[#faf7f2] border border-[#e8dfd3] rounded-xl space-y-2">
             <p className="text-xs font-bold text-[#554d44]">
-              ไม่มีฟุตเทจที่ว่างตามตัวกรองนี้ในหมวด #{activeCategoryStat?.tag.name}
+              {allowCrossCategory
+                ? 'ไม่มีฟุตเทจที่ว่างตามตัวกรองนี้ในโหมดข้ามหมวด'
+                : `ไม่มีฟุตเทจที่ว่างตามตัวกรองนี้ในกรอบ ${effectiveScopeLabel}`}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => onChangePoolQuickFilter('ALL')}
-                className="px-3 py-1.5 text-xs font-bold text-[#4d4740] bg-white border border-[#e2d8cb] rounded-lg hover:bg-[#faf7f2] cursor-pointer"
-              >
-                ดูฟุตทั้งหมดในหมวดนี้
-              </button>
-              <button
-                type="button"
-                onClick={onEnableCrossCategory}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-[#3b6845] rounded-lg hover:bg-[#2c5234] cursor-pointer shadow-xs"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>ดึงฟุตข้ามหมวดอื่นมาช่วยผสม</span>
-              </button>
+              {poolCoTagFilterIds.length > 0 && onClearPoolCoTags && (
+                <button
+                  type="button"
+                  onClick={onClearPoolCoTags}
+                  className="px-3 py-1.5 text-xs font-bold text-[#8e4537] bg-[#fdf3ec] border border-[#f5d7cf] rounded-lg hover:bg-[#fae6de] cursor-pointer"
+                >
+                  ล้างตัวกรองแท็กร่วม ({poolCoTagFilterIds.length})
+                </button>
+              )}
+              {poolQuickFilter !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => onChangePoolQuickFilter('ALL')}
+                  className="px-3 py-1.5 text-xs font-bold text-[#4d4740] bg-white border border-[#e2d8cb] rounded-lg hover:bg-[#faf7f2] cursor-pointer"
+                >
+                  ดูฟุตทั้งหมดในกรอบนี้ ({resolvedTabCounts.all})
+                </button>
+              )}
+              {!allowCrossCategory && (
+                <button
+                  type="button"
+                  onClick={onEnableCrossCategory}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-[#3b6845] rounded-lg hover:bg-[#2c5234] cursor-pointer shadow-xs"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>ดึงฟุตข้ามหมวดอื่นมาช่วยผสม</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (

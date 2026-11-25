@@ -11,12 +11,16 @@ import {
 import { ActiveNavTab, CategoryMatrixStat } from '../../../context/CMSContext';
 import { EpisodeProductionTarget } from '../../../types/episode.types';
 import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
-import { BuilderStepNumber } from './builder.types';
+import { BuilderScopeMatchMode, BuilderStepNumber } from './builder.types';
 
 interface BuilderStudioHeaderProps {
   nextEpisodeId: string;
   selectedCount: number;
   activeCategoryStat: CategoryMatrixStat | null;
+  selectedFacetCount?: number;
+  scopeMatchMode?: BuilderScopeMatchMode;
+  activeSeriesLabel?: string;
+  effectiveEpisodeNo?: number;
   activeBuilderStep: BuilderStepNumber;
   onSelectStep: (step: BuilderStepNumber) => void;
   preselectNotice: string | null;
@@ -31,6 +35,10 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
   nextEpisodeId,
   selectedCount,
   activeCategoryStat,
+  selectedFacetCount = 0,
+  scopeMatchMode = 'OR',
+  activeSeriesLabel,
+  effectiveEpisodeNo = 1,
   activeBuilderStep,
   onSelectStep,
   preselectNotice,
@@ -38,12 +46,20 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
   savedBannerMessage,
   onNavigateTab,
 }) => {
+  const step1Sub = activeSeriesLabel
+    ? `${activeSeriesLabel} · EP.${effectiveEpisodeNo}`
+    : activeCategoryStat
+      ? selectedFacetCount > 0
+        ? `#${activeCategoryStat.tag.name} +${selectedFacetCount} (${scopeMatchMode})`
+        : `#${activeCategoryStat.tag.name}`
+      : 'ยังไม่เลือก';
+
   const steps = [
     {
       num: 1 as const,
-      label: '1. หมวดเป้าหมาย',
-      mobileLabel: '1. หมวดหมู่',
-      sub: activeCategoryStat ? `#${activeCategoryStat.tag.name}` : 'ยังไม่เลือก',
+      label: '1. ซีรีส์ & หมวดเป้าหมาย',
+      mobileLabel: '1. ซีรีส์/หมวด',
+      sub: step1Sub,
       icon: Target,
       isDone: Boolean(activeCategoryStat),
     },
@@ -59,7 +75,10 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
       num: 3 as const,
       label: '3. ข้อมูลตอน & บันทึก',
       mobileLabel: '3. บันทึกตอน',
-      sub: selectedCount === 5 ? 'พร้อมบันทึก' : 'รอครบ 5 คลิป',
+      sub:
+        selectedCount === 5
+          ? `EP.${effectiveEpisodeNo} · พร้อมบันทึก`
+          : `EP.${effectiveEpisodeNo} · รอครบ 5 คลิป`,
       icon: FileText,
       isDone: false,
     },

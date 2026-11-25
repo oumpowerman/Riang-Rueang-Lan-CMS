@@ -1,8 +1,12 @@
 import React from 'react';
-import { ArrowUpDown, Filter, RotateCcw, Search, X } from 'lucide-react';
+import { ArrowUpDown, Filter, MessageSquareQuote, RotateCcw, Search, X } from 'lucide-react';
 import { CategoryMatrixStat } from '../../context/CMSContext';
 import { CooldownStatus, IngestionFlow } from '../../types/footage.types';
 import { CategoryTag } from '../../types/tag.types';
+import type {
+  FootagePunchlineFilter,
+  VaultPunchlineCounts,
+} from '../footage/vault/vaultPunchlineFilter';
 
 export type FootageActionFilter =
   | 'ALL'
@@ -30,6 +34,9 @@ interface SearchFilterBarProps {
   onFlowFilterChange: (flow: IngestionFlow | 'ALL') => void;
   actionFilter: FootageActionFilter;
   onActionFilterChange: (filter: FootageActionFilter) => void;
+  punchlineFilter?: FootagePunchlineFilter;
+  onPunchlineFilterChange?: (filter: FootagePunchlineFilter) => void;
+  punchlineCounts?: VaultPunchlineCounts;
   sortBy: FootageLibrarySortBy;
   onSortByChange: (sort: FootageLibrarySortBy) => void;
   tags: CategoryTag[];
@@ -51,6 +58,9 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
   flowFilter,
   actionFilter,
   onActionFilterChange,
+  punchlineFilter = 'ALL',
+  onPunchlineFilterChange,
+  punchlineCounts,
   sortBy,
   onSortByChange,
   untaggedCount = 0,
@@ -65,7 +75,8 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
     selectedTags.length > 0 ||
     statusFilter !== 'ALL' ||
     flowFilter !== 'ALL' ||
-    actionFilter !== 'ALL';
+    actionFilter !== 'ALL' ||
+    punchlineFilter !== 'ALL';
 
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl p-3 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5 shadow-2xs">
@@ -126,12 +137,52 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
           </select>
         </div>
 
+        {/* Independent Punchline (คำสร้อย) Filter */}
+        {onPunchlineFilterChange && (
+          <div className="inline-flex items-center gap-1 w-full sm:w-auto">
+            <MessageSquareQuote
+              className={`w-3.5 h-3.5 hidden sm:inline shrink-0 ${
+                punchlineFilter === 'MISSING'
+                  ? 'text-amber-600'
+                  : punchlineFilter === 'HAS_PUNCHLINE'
+                    ? 'text-emerald-600'
+                    : 'text-slate-400'
+              }`}
+            />
+            <select
+              value={punchlineFilter}
+              onChange={(e) =>
+                onPunchlineFilterChange(e.target.value as FootagePunchlineFilter)
+              }
+              className={`w-full sm:w-auto px-2.5 py-1.5 text-xs font-semibold border rounded-xl focus:outline-none cursor-pointer truncate transition-colors ${
+                punchlineFilter === 'MISSING'
+                  ? 'bg-amber-50 border-amber-300 text-amber-900 focus:border-amber-500'
+                  : punchlineFilter === 'HAS_PUNCHLINE'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 focus:border-emerald-500'
+                    : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+              }`}
+              aria-label="กรองตามคำสร้อย"
+            >
+              <option value="ALL">
+                คำสร้อย: ทั้งหมด
+                {punchlineCounts ? ` (${punchlineCounts.all.toLocaleString()})` : ''}
+              </option>
+              <option value="MISSING">
+                ยังไม่มีคำสร้อย
+                {punchlineCounts ? ` (${punchlineCounts.missing.toLocaleString()})` : ''}
+              </option>
+              <option value="HAS_PUNCHLINE">
+                มีคำสร้อยแล้ว
+                {punchlineCounts
+                  ? ` (${punchlineCounts.hasPunchline.toLocaleString()})`
+                  : ''}
+              </option>
+            </select>
+          </div>
+        )}
+
         {/* Sort Selector */}
-        <div
-          className={`inline-flex items-center gap-1 ${
-            hasActiveFilters ? 'col-span-1' : 'col-span-2'
-          } sm:w-auto`}
-        >
+        <div className="inline-flex items-center gap-1 w-full sm:w-auto">
           <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline shrink-0" />
           <select
             value={sortBy}

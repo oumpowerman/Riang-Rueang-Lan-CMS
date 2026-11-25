@@ -45,7 +45,7 @@ export function useBuilderThreeTierScope({
   selectedGroupId,
 }: UseBuilderThreeTierScopeParams) {
   const [selectedFacetTagIds, setSelectedFacetTagIds] = useState<string[]>([]);
-  const [scopeMatchMode, setScopeMatchMode] = useState<BuilderScopeMatchMode>('AND');
+  const [scopeMatchMode, setScopeMatchMode] = useState<BuilderScopeMatchMode>('OR');
   const [step1SearchQuery, setStep1SearchQuery] = useState<string>('');
   const [tagClickMode, setTagClickMode] =
     useState<BuilderTagClickActionMode>('SET_PRIMARY');

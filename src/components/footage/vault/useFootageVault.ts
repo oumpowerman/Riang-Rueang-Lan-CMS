@@ -24,6 +24,11 @@ import {
   VaultMetricsSummary,
   VaultViewMode,
 } from './vault.types';
+import {
+  FootagePunchlineFilter,
+  computeVaultPunchlineCounts,
+  hasRealVaultPunchline,
+} from './vaultPunchlineFilter';
 
 import {
   getFootageSmartSearchIndex,
@@ -82,14 +87,16 @@ export const useFootageVault = () => {
   const [statusFilter, setStatusFilter] = useState<CooldownStatus | 'ALL'>('ALL');
   const [flowFilter, setFlowFilter] = useState<IngestionFlow | 'ALL'>('ALL');
   const [actionFilter, setActionFilter] = useState<FootageActionFilter>('ALL');
+  const [punchlineFilter, setPunchlineFilter] =
+    useState<FootagePunchlineFilter>('ALL');
   const [sortBy, setSortBy] = useState<FootageLibrarySortBy>('REST_DAYS_DESC');
   const [viewMode, setViewMode] = useState<VaultViewMode>('GRID');
 
   // Multi-Tag Match Mode: Default to 'AND' (ต้องมีครบทุกแท็กที่กดเลือก) with toggle to 'OR'
   const [tagMatchMode, setTagMatchMode] = useState<TagFilterMatchMode>('AND');
 
-  // 3-Tier Explorer State
-  const [isCategoryInventoryExpanded, setIsCategoryInventoryExpanded] = useState(true);
+  // 3-Tier Explorer State (collapsed by default)
+  const [isCategoryInventoryExpanded, setIsCategoryInventoryExpanded] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   // Fullscreen 2-Pane Staging Triage Studio State
@@ -107,6 +114,7 @@ export const useFootageVault = () => {
     statusFilter,
     flowFilter,
     actionFilter,
+    punchlineFilter,
     sortBy,
     selectedTagFilter,
     selectedGroupId,
@@ -497,6 +505,7 @@ export const useFootageVault = () => {
     setStatusFilter('ALL');
     setFlowFilter('ALL');
     setActionFilter('ALL');
+    setPunchlineFilter('ALL');
     setSortBy('REST_DAYS_DESC');
     setCurrentPage(1);
   };
@@ -586,10 +595,11 @@ export const useFootageVault = () => {
     [debouncedSearchQuery]
   );
 
-  const filteredAndSortedFootage = useMemo(() => {
+  // Stage 1: Filter by tags, status, flow, action, and search (pre-punchline scope for live counts)
+  const prePunchlineFilteredFootage = useMemo(() => {
     const hasQuery = queryTokens.length > 0;
 
-    const filtered = categoryScopedFootage.filter((ft) => {
+    return categoryScopedFootage.filter((ft) => {
       if (statusFilter !== 'ALL') {
         if (statusFilter === 'RECENT_COOLDOWN') {
           if (
@@ -638,6 +648,35 @@ export const useFootageVault = () => {
       }
       return true;
     });
+  }, [
+    categoryScopedFootage,
+    statusFilter,
+    flowFilter,
+    actionFilter,
+    queryTokens,
+    tagMap,
+    ready5CategoryIds,
+    allNew5CategoryIds,
+    smartMixCategoryIds,
+    duplicateScan,
+  ]);
+
+  // Live contextual punchline counts for the active scope (always visible even when viewing ALL)
+  const punchlineCounts = useMemo(
+    () => computeVaultPunchlineCounts(prePunchlineFilteredFootage),
+    [prePunchlineFilteredFootage]
+  );
+
+  // Stage 2: Apply independent punchlineFilter and sort
+  const filteredAndSortedFootage = useMemo(() => {
+    const filtered =
+      punchlineFilter === 'ALL'
+        ? prePunchlineFilteredFootage
+        : prePunchlineFilteredFootage.filter((ft) =>
+            punchlineFilter === 'MISSING'
+              ? !hasRealVaultPunchline(ft)
+              : hasRealVaultPunchline(ft)
+          );
 
     return [...filtered].sort((a, b) => {
       if (actionFilter === 'DUPLICATES_ONLY') {
@@ -666,16 +705,10 @@ export const useFootageVault = () => {
       return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
     });
   }, [
-    categoryScopedFootage,
-    statusFilter,
-    flowFilter,
+    prePunchlineFilteredFootage,
+    punchlineFilter,
     actionFilter,
-    queryTokens,
-    tagMap,
     sortBy,
-    ready5CategoryIds,
-    allNew5CategoryIds,
-    smartMixCategoryIds,
     duplicateScan,
   ]);
 
@@ -687,12 +720,13 @@ export const useFootageVault = () => {
   const hasHierarchySelection = Boolean(selectedGroupId || selectedTagFilter.length > 0);
 
   const resultsTransitionKey = useMemo(() => {
-    return `${activeScopeDescription.key}__${statusFilter}__${flowFilter}__${actionFilter}__${sortBy}__p${currentPage}`;
+    return `${activeScopeDescription.key}__${statusFilter}__${flowFilter}__${actionFilter}__${punchlineFilter}__${sortBy}__p${currentPage}`;
   }, [
     activeScopeDescription.key,
     statusFilter,
     flowFilter,
     actionFilter,
+    punchlineFilter,
     sortBy,
     currentPage,
   ]);
@@ -822,6 +856,9 @@ export const useFootageVault = () => {
     setFlowFilter,
     actionFilter,
     setActionFilter,
+    punchlineFilter,
+    setPunchlineFilter,
+    punchlineCounts,
     sortBy,
     setSortBy,
     viewMode,

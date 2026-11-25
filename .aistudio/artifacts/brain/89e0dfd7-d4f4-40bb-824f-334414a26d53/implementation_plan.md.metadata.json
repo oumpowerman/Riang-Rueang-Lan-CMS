@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for Enterprise Multi-Device SmartSync Hardening on Firestore: adds a persistent IndexedDB Offline Outbox Retry Queue, atomic transactional Tombstone merging, zero-read same-device BroadcastChannel multi-tab sync, zero-read Auto Drift Detection, and a compact Light Pastel Navbar Sync Control with a BaseModal Sync Center (Smart Delta Refresh & Authoritative Full Pull) while eliminating accidental stale-cache Cloud overwrites.",
-  "updatedAt":  "2026-11-19T17:37:06.826537169Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "แผนการปรับปรุง UI และสถานะปุ่มซิงก์ข้อมูลบน Navbar (ทั้งแบบ Desktop และ Mobile Compact) ให้แสดงผลสถานะ ซิงก์แล้ว ด้วยไอคอนคลาวด์และสีเขียวพาสเทลอย่างชัดเจน แก้ปัญหาความเข้าใจผิดว่าระบบยังไม่ซิงก์ พร้อมระบุสถานะอื่นๆ ครบถ้วนและคลิกเปิดศูนย์ซิงก์ได้ตามปกติ",
+  "updatedAt": "2026-11-25T03:20:14.548893068Z",
+  "requestFeedback": true,
+  "userFacing": true
 }
