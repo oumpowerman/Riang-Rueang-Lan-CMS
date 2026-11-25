@@ -11,7 +11,13 @@ import {
   normalizeCategoryTag,
   sanitizeForFirestore,
 } from './firestoreBatchUtils';
-import { emitSyncPulse } from './firestoreSyncPulse';
+import { CLIENT_INSTANCE_ID, emitSyncPulse } from './firestoreSyncPulse';
+import { evaluateEpisodeCompleteness } from '../utils/episodeValidator';
+
+export interface SeedResult {
+  upsertedCount: number;
+  deletedCount: number;
+}
 
 export async function seedInitialDatabase(
   categories: CategoryTag[],
@@ -20,11 +26,72 @@ export async function seedInitialDatabase(
   settings: SystemSettings,
   categoryGroups: CategoryGroup[] = INITIAL_CATEGORY_GROUPS,
   sources: RawSource[] = []
-): Promise<void> {
+): Promise<SeedResult> {
   const now = new Date().toISOString();
   const ops: BatchWriteOp[] = [];
+  let deletedCount = 0;
 
-  // Save settings
+  // 1. Scan Cloud to identify and purge orphaned documents not present in Machine A
+  try {
+    const [
+      categoriesSnap,
+      groupsSnap,
+      sourcesSnap,
+      footagesSnap,
+      episodesSnap,
+    ] = await Promise.all([
+      getDocs(collection(db, 'categories')),
+      getDocs(collection(db, 'category_groups')),
+      getDocs(collection(db, 'sources')),
+      getDocs(collection(db, 'footages')),
+      getDocs(collection(db, 'episodes')),
+    ]);
+
+    const incomingCatIds = new Set(categories.map((c) => c.id));
+    const incomingGroupIds = new Set(categoryGroups.map((g) => g.id));
+    const incomingSourceIds = new Set(sources.map((s) => s.id));
+    const incomingFootageIds = new Set(footages.map((f) => f.id));
+    const incomingEpisodeIds = new Set(episodes.map((e) => e.id));
+
+    categoriesSnap.forEach((docSnap) => {
+      if (!incomingCatIds.has(docSnap.id)) {
+        ops.push({ type: 'delete', ref: docSnap.ref });
+        deletedCount++;
+      }
+    });
+
+    groupsSnap.forEach((docSnap) => {
+      if (!incomingGroupIds.has(docSnap.id)) {
+        ops.push({ type: 'delete', ref: docSnap.ref });
+        deletedCount++;
+      }
+    });
+
+    sourcesSnap.forEach((docSnap) => {
+      if (!incomingSourceIds.has(docSnap.id)) {
+        ops.push({ type: 'delete', ref: docSnap.ref });
+        deletedCount++;
+      }
+    });
+
+    footagesSnap.forEach((docSnap) => {
+      if (!incomingFootageIds.has(docSnap.id)) {
+        ops.push({ type: 'delete', ref: docSnap.ref });
+        deletedCount++;
+      }
+    });
+
+    episodesSnap.forEach((docSnap) => {
+      if (!incomingEpisodeIds.has(docSnap.id)) {
+        ops.push({ type: 'delete', ref: docSnap.ref });
+        deletedCount++;
+      }
+    });
+  } catch (scanErr) {
+    console.warn('seedInitialDatabase: scan for orphans warning:', scanErr);
+  }
+
+  // 2. Save settings
   ops.push({
     type: 'set',
     ref: doc(db, 'system_settings', 'global_rules'),
@@ -34,7 +101,7 @@ export async function seedInitialDatabase(
     >,
   });
 
-  // Seed Category Groups
+  // 3. Seed Category Groups
   for (const grp of categoryGroups) {
     ops.push({
       type: 'set',
@@ -46,7 +113,7 @@ export async function seedInitialDatabase(
     });
   }
 
-  // Seed Categories
+  // 4. Seed Categories
   for (const cat of categories) {
     const normalized = normalizeCategoryTag(cat);
     ops.push({
@@ -59,7 +126,7 @@ export async function seedInitialDatabase(
     });
   }
 
-  // Seed Sources
+  // 5. Seed Sources
   for (const src of sources) {
     ops.push({
       type: 'set',
@@ -71,7 +138,7 @@ export async function seedInitialDatabase(
     });
   }
 
-  // Seed Footages
+  // 6. Seed Footages
   for (const ft of footages) {
     ops.push({
       type: 'set',
@@ -83,7 +150,7 @@ export async function seedInitialDatabase(
     });
   }
 
-  // Seed Episodes
+  // 7. Seed Episodes
   for (const ep of episodes) {
     ops.push({
       type: 'set',
@@ -94,6 +161,59 @@ export async function seedInitialDatabase(
       >,
     });
   }
+
+  // 8. Recalibrate and Authoritatively Write archive_summary_stats
+  let completeEpisodesCount = 0;
+  let incompleteEpisodesCount = 0;
+  let incompleteFootageEpisodesCount = 0;
+  for (const ep of episodes) {
+    const comp = evaluateEpisodeCompleteness(ep);
+    if (comp.isComplete) completeEpisodesCount++;
+    else incompleteEpisodesCount++;
+    if (!comp.hasFullFiveSlots) incompleteFootageEpisodesCount++;
+  }
+
+  let untaggedFootageCount = 0;
+  let missingDriveCount = 0;
+  for (const ft of footages) {
+    if (!ft.tags || ft.tags.length === 0) untaggedFootageCount++;
+    if (!ft.driveFileUrl) missingDriveCount++;
+  }
+
+  const archiveSummaryData = {
+    totalEpisodes: episodes.length,
+    completeEpisodesCount,
+    incompleteEpisodesCount,
+    incompleteFootageEpisodesCount,
+    distinctSeriesCount: 0,
+    totalFootage: footages.length,
+    usedFootageCount: 0,
+    readyFootageCount: footages.length,
+    newFootageCount: footages.length,
+    coolingFootageCount: 0,
+    untaggedFootageCount,
+    missingDriveCount,
+    totalSources: sources.length,
+    updatedAt: now,
+    lastMutationAt: now,
+    lastMutationBy: CLIENT_INSTANCE_ID,
+    lastMutationType: 'admin:seed',
+    collectionVersions: {
+      categories: now,
+      category_groups: now,
+      sources: now,
+      footages: now,
+      episodes: now,
+    },
+    recentDeletes: [],
+  };
+
+  ops.push({
+    type: 'set',
+    ref: doc(db, 'system_settings', 'archive_summary_stats'),
+    data: sanitizeForFirestore(archiveSummaryData) as unknown as Record<string, unknown>,
+    merge: false,
+  });
 
   await commitOperationsInChunks(ops);
   emitSyncPulse({
@@ -106,6 +226,17 @@ export async function seedInitialDatabase(
     ],
     mutationType: 'admin:seed',
   });
+
+  const upsertedCount =
+    1 +
+    categoryGroups.length +
+    categories.length +
+    sources.length +
+    footages.length +
+    episodes.length +
+    1;
+
+  return { upsertedCount, deletedCount };
 }
 
 export async function clearAllClipsFromCloud(): Promise<void> {

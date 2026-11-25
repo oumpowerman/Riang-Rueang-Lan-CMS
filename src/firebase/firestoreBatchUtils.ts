@@ -20,6 +20,7 @@ export interface BatchWriteOp {
   type: 'set' | 'delete';
   ref: DocumentReference;
   data?: Record<string, unknown>;
+  merge?: boolean;
 }
 
 let activeBatchWritesCount = 0;
@@ -94,7 +95,11 @@ export async function commitOperationsInChunks(
       const batch = writeBatch(db);
       for (const op of chunk) {
         if (op.type === 'set' && op.data) {
-          batch.set(op.ref, op.data, { merge: true });
+          if (op.merge === false) {
+            batch.set(op.ref, op.data);
+          } else {
+            batch.set(op.ref, op.data, { merge: true });
+          }
         } else if (op.type === 'delete') {
           batch.delete(op.ref);
         }

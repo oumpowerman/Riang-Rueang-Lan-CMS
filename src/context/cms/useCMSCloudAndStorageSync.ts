@@ -28,6 +28,7 @@ import { RawSource } from '../../types/source.types';
 import { CategoryGroup, CategoryTag, SystemSettings } from '../../types/tag.types';
 import { useCMSManualSyncActions } from './useCMSManualSyncActions';
 import { useCMSSyncHealth } from './useCMSSyncHealth';
+import { evaluateEpisodeCompleteness } from '../../utils/episodeValidator';
 
 export function useCMSCloudAndStorageSync(
   setSelectedTagFilter: React.Dispatch<React.SetStateAction<string[]>>
@@ -302,8 +303,10 @@ export function useCMSCloudAndStorageSync(
             (typeof cloudSummary.totalSources === 'number' &&
               sourcesCountRef.current !== cloudSummary.totalSources));
 
-        // 3. Cold brand-new machine OR legacy cache with count mismatch -> Full authoritative fetch across all 5 collections
-        if (isFreshMachine || legacyCountMismatch) {
+        const isAdminSeedMutation = cloudSummary.lastMutationType === 'admin:seed';
+
+        // 3. Cold brand-new machine OR legacy cache with count mismatch OR remote admin master seed -> Full authoritative fetch across all 5 collections
+        if (isFreshMachine || legacyCountMismatch || isAdminSeedMutation) {
           const [allFootages, allEpisodes, allSources, allCats, allGroups] =
             await Promise.all([
               firestoreService.fetchFootagesDelta(),
@@ -313,22 +316,22 @@ export function useCMSCloudAndStorageSync(
               firestoreService.fetchCategoryGroupsDelta(),
             ]);
 
-          if (allFootages.length > 0 || legacyCountMismatch) {
+          if (allFootages.length > 0 || legacyCountMismatch || isAdminSeedMutation) {
             setFootage(allFootages);
             cmsRepository.saveFootage(allFootages);
             hasFullCloudFootageRef.current = true;
           }
-          if (allEpisodes.length > 0 || legacyCountMismatch) {
+          if (allEpisodes.length > 0 || legacyCountMismatch || isAdminSeedMutation) {
             setEpisodes(allEpisodes);
             cmsRepository.saveEpisodes(allEpisodes);
             hasFullCloudEpisodesRef.current = true;
           }
-          if (allSources.length > 0 || legacyCountMismatch) {
+          if (allSources.length > 0 || legacyCountMismatch || isAdminSeedMutation) {
             setSources(allSources);
             cmsRepository.saveSources(allSources);
             hasFullCloudSourcesRef.current = true;
           }
-          if (allCats.length > 0) {
+          if (allCats.length > 0 || isAdminSeedMutation) {
             const normalizedCats = cmsRepository.normalizeAndRepairTags(
               allCats,
               allCats.length <= 1
@@ -336,7 +339,7 @@ export function useCMSCloudAndStorageSync(
             setTags(normalizedCats);
             cmsRepository.saveTags(normalizedCats);
           }
-          if (allGroups.length > 0) {
+          if (allGroups.length > 0 || isAdminSeedMutation) {
             setCategoryGroups(allGroups);
             cmsRepository.saveCategoryGroups(allGroups);
           }
@@ -655,7 +658,7 @@ export function useCMSCloudAndStorageSync(
   const seedToCloud = async () => {
     setIsSeedingToCloud(true);
     try {
-      await firestoreService.seedInitialDatabase(
+      const seedResult = await firestoreService.seedInitialDatabase(
         tags,
         footage,
         episodes,
@@ -668,14 +671,62 @@ export function useCMSCloudAndStorageSync(
       setLastSyncedAt(nowIso);
       setLocalMutationVersion((v) => v + 1);
       setIsCloudSynced(true);
+
+      hasFullCloudEpisodesRef.current = true;
+      hasFullCloudFootageRef.current = true;
+      hasFullCloudSourcesRef.current = true;
+
+      setServerCounts({
+        totalFootage: footage.length,
+        totalEpisodes: episodes.length,
+        totalSources: sources.length,
+        fetchedAt: nowIso,
+      });
+
+      let completeEpisodesCount = 0;
+      let incompleteEpisodesCount = 0;
+      let incompleteFootageEpisodesCount = 0;
+      for (const ep of episodes) {
+        const comp = evaluateEpisodeCompleteness(ep);
+        if (comp.isComplete) completeEpisodesCount++;
+        else incompleteEpisodesCount++;
+        if (!comp.hasFullFiveSlots) incompleteFootageEpisodesCount++;
+      }
+
+      const updatedSummary: ArchiveSummaryStats = {
+        totalEpisodes: episodes.length,
+        completeEpisodesCount,
+        incompleteEpisodesCount,
+        incompleteFootageEpisodesCount,
+        distinctSeriesCount: 0,
+        totalFootage: footage.length,
+        usedFootageCount: 0,
+        readyFootageCount: footage.length,
+        newFootageCount: footage.length,
+        coolingFootageCount: 0,
+        untaggedFootageCount: footage.filter((f) => !f.tags || f.tags.length === 0).length,
+        missingDriveCount: footage.filter((f) => !f.driveFileUrl).length,
+        totalSources: sources.length,
+        updatedAt: nowIso,
+        lastMutationAt: nowIso,
+        lastMutationBy: CLIENT_INSTANCE_ID,
+        lastMutationType: 'admin:seed',
+      };
+      setArchiveSummaryStats(updatedSummary);
+      void idbStorageService.setMeta('archive_summary_stats', updatedSummary);
+
       setLastReport({
         mode: 'push_seed',
         upsertedCount:
+          seedResult?.upsertedCount ??
           footage.length + episodes.length + sources.length + tags.length + categoryGroups.length,
-        deletedCount: 0,
+        deletedCount: seedResult?.deletedCount ?? 0,
         syncedAt: nowIso,
         ok: true,
-        message: 'อัปโหลดข้อมูลจากเครื่องขึ้น Cloud เรียบร้อยแล้ว',
+        message:
+          (seedResult?.deletedCount ?? 0) > 0
+            ? `สำรองข้อมูลขึ้น Cloud สำเร็จ (ตรงกับเครื่องนี้ 100% ลบข้อมูลเก่าส่วนเกินบน Cloud ไป ${seedResult.deletedCount} รายการ)`
+            : 'สำรองข้อมูลขึ้น Cloud สำเร็จ (ตรงกับเครื่องนี้ 100%)',
       });
     } catch (err) {
       console.error('Manual cloud sync error:', err);

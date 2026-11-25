@@ -505,7 +505,7 @@ export const SyncCenterModal: React.FC = () => {
         {showAdvancedPush && (
           <div className="px-4 pb-3.5 pt-2 border-t border-slate-100 space-y-2.5 bg-slate-50/40">
             <p className="text-[11px] text-slate-600 leading-relaxed">
-              คำสั่งนี้จะส่งข้อมูลทั้งหมดที่อยู่ในเครื่องนี้ขึ้นไปบันทึกบน Firestore ใช้เฉพาะกรณีฉุกเฉินเมื่อฐานข้อมูล Cloud ว่างเปล่า หรือต้องการกู้คืนข้อมูลจากเครื่องหลักนี้เท่านั้น (ไม่ควรใช้หากเครื่องนี้มีข้อมูลเก่ากว่า Cloud)
+              คำสั่งนี้จะยึดข้อมูลในเครื่องนี้เป็นหลัก (Master) แล้วส่งขึ้นไปทับบน Firestore ทั้งหมด พร้อมลบข้อมูลเก่าหรือส่วนเกินบน Cloud ออกให้อัตโนมัติ เพื่อให้ Cloud ตรงกับเครื่องนี้ 100% (หลังจากทำเสร็จ เครื่องเพื่อนสามารถกด &quot;2. ดึงข้อมูลใหม่ทั้งหมดจาก Cloud&quot; เพื่อรับข้อมูลชุดเดียวกันได้ทันที)
             </p>
             {!confirmPushSeed ? (
               <button
@@ -515,7 +515,7 @@ export const SyncCenterModal: React.FC = () => {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <UploadCloud className="w-3.5 h-3.5" />
-                <span>อัปโหลดข้อมูลจากเครื่องขึ้น Cloud...</span>
+                <span>อัปโหลดข้อมูลจากเครื่องนี้เป็นหลักขึ้น Cloud...</span>
               </button>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
@@ -526,8 +526,8 @@ export const SyncCenterModal: React.FC = () => {
                   className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
                 >
                   {isSeedingToCloud
-                    ? 'กำลังอัปโหลด...'
-                    : 'ยืนยันส่งข้อมูลจากเครื่องขึ้น Cloud'}
+                    ? 'กำลังอัปโหลดและปรับ Cloud...'
+                    : 'ยืนยันตั้งเครื่องนี้เป็นหลักขึ้น Cloud'}
                 </button>
                 <button
                   type="button"
