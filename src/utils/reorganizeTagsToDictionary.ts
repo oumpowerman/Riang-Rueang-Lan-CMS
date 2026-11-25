@@ -159,14 +159,6 @@ export function needsDictionaryCleanup(
     ) {
       return true;
     }
-    // In Tier 1 'วงการ/หมวดหลัก', only the 7 canonical tags should exist
-    if (
-      (t.tier || 1) === 1 &&
-      t.subCategory === 'วงการ/หมวดหลัก' &&
-      !SEVEN_MAIN_TIER1_NAMES.has(t.name.trim().toLowerCase())
-    ) {
-      return true;
-    }
   }
 
   // 4. Check if tierSubCategories still has obsolete subcategory names
@@ -346,12 +338,11 @@ export function computeDictionaryTagReorganization(params: {
     const resolvedTier: CategoryTier =
       tag.tier === 1 || tag.tier === 2 || tag.tier === 3 ? tag.tier : 1;
 
-    // For Tier 1: 'วงการ/หมวดหลัก' is strictly reserved for the 7 main tags in tag_3_tiers.md.
-    // Any non-dictionary tag in Tier 1 goes into 'รอคัดแยก' so the user can see it in the top inbox!
-    const normalizedSub =
-      resolvedTier === 1
-        ? DEFAULT_UNCLASSIFIED_SUBCATEGORY
-        : normalizeLegacySubCategory(resolvedTier, tag.subCategory);
+    // Respect existing subCategory if already assigned (e.g. 'วงการ/หมวดหลัก', custom subcategory, or 'รอคัดแยก')
+    const normalizedSub = normalizeLegacySubCategory(
+      resolvedTier,
+      tag.subCategory || (resolvedTier === 1 ? DEFAULT_UNCLASSIFIED_SUBCATEGORY : undefined)
+    );
 
     const lowerKey = finalName.toLowerCase();
     const existingCustom = customTagByLowerName.get(lowerKey);

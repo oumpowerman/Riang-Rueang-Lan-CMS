@@ -4,6 +4,7 @@ import {
   ChevronDown,
   CornerDownRight,
   Edit2,
+  Folder,
   FolderPlus,
   Inbox,
   Info,
@@ -227,12 +228,19 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
   const filteredTags = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return realTagsInTier;
-    return realTagsInTier.filter(
+    // Primary search: Match tag name, subCategory, or tag ID directly
+    const directMatches = realTagsInTier.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
-        (t.subCategory || '').toLowerCase().includes(q) ||
-        (t.description || '').toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q)
+        t.id.toLowerCase().includes(q) ||
+        (t.subCategory || '').toLowerCase().includes(q)
+    );
+    if (directMatches.length > 0) {
+      return directMatches;
+    }
+    // Fallback: If no direct matches, search in tag description
+    return realTagsInTier.filter((t) =>
+      (t.description || '').toLowerCase().includes(q)
     );
   }, [realTagsInTier, searchQuery]);
 
@@ -285,7 +293,9 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
 
   const extractDraggedTagIds = (e: React.DragEvent): string[] => {
     try {
-      const raw = e.dataTransfer.getData('application/x-cms-tag-ids');
+      const raw =
+        e.dataTransfer.getData('application/x-cms-tag-ids') ||
+        e.dataTransfer.getData('text/plain');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -594,7 +604,8 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
                 e.dataTransfer.dropEffect = 'move';
                 if (dragOverSubCat !== subCategory) setDragOverSubCat(subCategory);
               }}
-              onDragLeave={() => {
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
                 if (dragOverSubCat === subCategory) setDragOverSubCat(null);
               }}
               onDrop={(e) => handleDropOnSubCategory(e, subCategory)}
@@ -633,8 +644,10 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
                     />
                   </button>
 
-                  {isUnclassified && (
+                  {isUnclassified ? (
                     <Inbox className="w-3.5 h-3.5 text-[#A66B1F] shrink-0" />
+                  ) : (
+                    <Folder className="w-3.5 h-3.5 text-[#524538] shrink-0 opacity-70" />
                   )}
 
                   {renamingSubCat === subCategory ? (
@@ -682,7 +695,8 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
 
                 {/* Sub-category Right Actions */}
                 <div className="flex items-center gap-1 shrink-0">
-                  {selectedTagIds.length > 0 && (
+                  {selectedTagIds.length > 0 &&
+                    selectedTagIds.some((id) => !subTagIds.includes(id)) && (
                     <button
                       type="button"
                       onClick={() =>
@@ -780,7 +794,7 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
                     <div
                       className={
                         isExpandedGrid
-                          ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2'
+                          ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5'
                           : 'grid grid-cols-1 gap-1.5'
                       }
                     >

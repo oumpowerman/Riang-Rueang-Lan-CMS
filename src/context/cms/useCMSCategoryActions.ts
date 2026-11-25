@@ -590,6 +590,18 @@ export function useCMSCategoryActions({
           parentId: null,
           color: t.color || defaultColorForTier,
           entityType: destination.entityType || t.entityType || defaultEntityForTier,
+          groupId:
+            targetTier === 3
+              ? 'GRP-PERSON'
+              : targetTier === 2
+              ? 'GRP-ACTION'
+              : t.groupId || 'GRP-THEME',
+          groupType:
+            targetTier === 3
+              ? 'PERSON'
+              : targetTier === 2
+              ? 'ACTION'
+              : t.groupType || 'THEME',
         };
         changedTags.push(updated);
         return updated;

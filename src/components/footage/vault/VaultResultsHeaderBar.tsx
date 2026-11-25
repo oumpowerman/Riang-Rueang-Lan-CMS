@@ -1,10 +1,12 @@
 import React from 'react';
 import {
+  ArrowUpDown,
   CheckSquare,
   LayoutGrid,
   List,
   Square,
 } from 'lucide-react';
+import type { FootageLibrarySortBy } from '../../ui/SearchFilterBar';
 import { AnimatedMetricNumber } from './AnimatedMetricNumber';
 import { ActiveScopeDescription, VaultViewMode } from './vault.types';
 import type {
@@ -30,6 +32,8 @@ export interface VaultResultsHeaderBarProps {
   punchlineFilter?: FootagePunchlineFilter;
   punchlineCounts?: VaultPunchlineCounts;
   onPunchlineFilterChange?: (filter: FootagePunchlineFilter) => void;
+  sortBy?: FootageLibrarySortBy;
+  onSortByChange?: (sort: FootageLibrarySortBy) => void;
 }
 
 export const VaultResultsHeaderBar: React.FC<VaultResultsHeaderBarProps> = ({
@@ -43,6 +47,8 @@ export const VaultResultsHeaderBar: React.FC<VaultResultsHeaderBarProps> = ({
   punchlineFilter = 'ALL',
   punchlineCounts,
   onPunchlineFilterChange,
+  sortBy,
+  onSortByChange,
 }) => {
   const isCustomScope = activeScopeDescription.key !== 'ALL_VAULT';
   const missingPunchlineCount = punchlineCounts?.missing ?? 0;
@@ -101,8 +107,34 @@ export const VaultResultsHeaderBar: React.FC<VaultResultsHeaderBarProps> = ({
         )}
       </div>
 
-      {/* Right: Select Current Page + View Mode Switcher */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Right: Sort Selector + Select Current Page + View Mode Switcher */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {sortBy && onSortByChange && (
+          <div className="relative inline-flex items-center">
+            <select
+              value={sortBy}
+              onChange={(e) =>
+                onSortByChange(e.target.value as FootageLibrarySortBy)
+              }
+              className="pl-7 pr-2.5 py-1 text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors max-w-[140px] sm:max-w-[185px] truncate"
+              title="เลือกรูปแบบการเรียงลำดับ"
+              aria-label="เรียงลำดับ"
+            >
+              <option value="REST_DAYS_DESC">เรียง: พักนานสุด</option>
+              <option value="REST_DAYS_ASC">เรียง: เพิ่งใช้ล่าสุด</option>
+              <option value="NEWEST_CREATED">เรียง: เพิ่มล่าสุด</option>
+              <option value="OLDEST_CREATED">เรียง: เพิ่มเก่าสุด</option>
+              <option value="TITLE_ASC">เรียง: ชื่อคลิป (ก-ฮ)</option>
+              <option value="TITLE_DESC">เรียง: ชื่อคลิป (ฮ-ก)</option>
+              <option value="ID_ASC">เรียง: รหัส (น้อย➔มาก)</option>
+              <option value="ID_DESC">เรียง: รหัส (มาก➔น้อย)</option>
+              <option value="USAGE_90D_ASC">เรียง: ใช้น้อยสุด</option>
+              <option value="USAGE_90D_DESC">เรียง: ใช้บ่อยสุด</option>
+            </select>
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 absolute left-2 pointer-events-none" />
+          </div>
+        )}
+
         {paginatedCount > 0 && (
           <button
             type="button"

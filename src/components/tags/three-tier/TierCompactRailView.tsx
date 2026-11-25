@@ -83,7 +83,8 @@ export const TierCompactRailView: React.FC<TierCompactRailViewProps> = ({
                 e.dataTransfer.dropEffect = 'move';
                 if (dragOverSubCat !== subCategory) setDragOverSubCat(subCategory);
               }}
-              onDragLeave={() => {
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
                 if (dragOverSubCat === subCategory) setDragOverSubCat(null);
               }}
               onDrop={(e) => onDropOnSubCategory(e, subCategory)}
@@ -102,7 +103,8 @@ export const TierCompactRailView: React.FC<TierCompactRailViewProps> = ({
                 </span>
               </div>
 
-              {selectedTagIds.length > 0 && (
+              {selectedTagIds.length > 0 &&
+                selectedTagIds.some((id) => !subTags.some((t) => t.id === id)) && (
                 <button
                   type="button"
                   onClick={() =>

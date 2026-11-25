@@ -163,6 +163,8 @@ export const FootageLibraryView: React.FC = () => {
         punchlineFilter={vault.punchlineFilter}
         punchlineCounts={vault.punchlineCounts}
         onPunchlineFilterChange={vault.setPunchlineFilter}
+        sortBy={vault.sortBy}
+        onSortByChange={vault.setSortBy}
       />
 
       {/* 5. Staggered Spring Footage Results (Grid / Table / Empty State / Pagination) */}
@@ -186,6 +188,8 @@ export const FootageLibraryView: React.FC = () => {
         onEndDragFootage={vault.handleEndDragFootage}
         onResetFilters={vault.handleResetFilters}
         onOpenDirectFootageModal={() => vault.setIsDirectFootageModalOpen(true)}
+        sortBy={vault.sortBy}
+        onSortByChange={vault.setSortBy}
       />
 
       {/* 6. Fullscreen Dual-Pane Staging Triage Studio Modal */}

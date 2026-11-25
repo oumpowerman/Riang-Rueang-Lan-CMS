@@ -1,6 +1,12 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight, GripVertical } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronRight,
+  GripVertical,
+} from 'lucide-react';
 import { useCMS } from '../../../context/CMSContext';
 import { STAGING_TAG_ID, isFootageInStaging } from '../../../services/seedData';
 import { ComputedFootage } from '../../../types/footage.types';
@@ -10,6 +16,7 @@ import {
   getDuplicateReasonLabel,
 } from '../../../utils/duplicateClusterScanner';
 import { PaginationBar } from '../../ui/PaginationBar';
+import type { FootageLibrarySortBy } from '../../ui/SearchFilterBar';
 import { StatusBadge } from '../../ui/StatusBadge';
 import { TagPill } from '../../ui/TagPill';
 import { FootageCard } from '../FootageCard';
@@ -36,6 +43,8 @@ export interface VaultFootageResultsSectionProps {
   onEndDragFootage: () => void;
   onResetFilters: () => void;
   onOpenDirectFootageModal: () => void;
+  sortBy?: FootageLibrarySortBy;
+  onSortByChange?: (sort: FootageLibrarySortBy) => void;
 }
 
 export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProps> = ({
@@ -56,6 +65,8 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
   onStartDragFootage,
   onEndDragFootage,
   onResetFilters,
+  sortBy,
+  onSortByChange,
 }) => {
   const {
     selectedFootageIdsForBatch,
@@ -90,6 +101,45 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-footage-ids', JSON.stringify(batchIds));
     e.dataTransfer.setData('text/plain', batchIds.join(','));
+  };
+
+  const handleSortColumn = (column: 'ID' | 'TITLE' | 'STATUS') => {
+    if (!onSortByChange) return;
+    if (column === 'ID') {
+      onSortByChange(sortBy === 'ID_ASC' ? 'ID_DESC' : 'ID_ASC');
+    } else if (column === 'TITLE') {
+      onSortByChange(sortBy === 'TITLE_ASC' ? 'TITLE_DESC' : 'TITLE_ASC');
+    } else if (column === 'STATUS') {
+      onSortByChange(sortBy === 'REST_DAYS_DESC' ? 'REST_DAYS_ASC' : 'REST_DAYS_DESC');
+    }
+  };
+
+  const renderSortIndicator = (column: 'ID' | 'TITLE' | 'STATUS') => {
+    if (column === 'ID') {
+      if (sortBy === 'ID_ASC') {
+        return <ArrowUp className="w-3.5 h-3.5 text-indigo-600 inline ml-1 shrink-0" />;
+      }
+      if (sortBy === 'ID_DESC') {
+        return <ArrowDown className="w-3.5 h-3.5 text-indigo-600 inline ml-1 shrink-0" />;
+      }
+    } else if (column === 'TITLE') {
+      if (sortBy === 'TITLE_ASC') {
+        return <ArrowUp className="w-3.5 h-3.5 text-indigo-600 inline ml-1 shrink-0" />;
+      }
+      if (sortBy === 'TITLE_DESC') {
+        return <ArrowDown className="w-3.5 h-3.5 text-indigo-600 inline ml-1 shrink-0" />;
+      }
+    } else if (column === 'STATUS') {
+      if (sortBy === 'REST_DAYS_DESC') {
+        return <ArrowDown className="w-3.5 h-3.5 text-indigo-600 inline ml-1 shrink-0" />;
+      }
+      if (sortBy === 'REST_DAYS_ASC') {
+        return <ArrowUp className="w-3.5 h-3.5 text-indigo-600 inline ml-1 shrink-0" />;
+      }
+    }
+    return (
+      <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-500 inline ml-1 shrink-0 transition-colors" />
+    );
   };
 
   return (
@@ -205,10 +255,40 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                       />
                     </th>
                     <th className="py-2.5 px-3 w-24">พรีวิว</th>
-                    <th className="py-2.5 px-3 w-24">รหัส</th>
-                    <th className="py-2.5 px-4">ชื่อคลิป</th>
+                    <th className="py-2.5 px-3 w-28">
+                      <button
+                        type="button"
+                        onClick={() => handleSortColumn('ID')}
+                        className="group inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-indigo-700 cursor-pointer transition-colors"
+                        title="คลิกเพื่อเรียงตามรหัส (น้อย➔มาก / มาก➔น้อย)"
+                      >
+                        <span>รหัส</span>
+                        {renderSortIndicator('ID')}
+                      </button>
+                    </th>
+                    <th className="py-2.5 px-4">
+                      <button
+                        type="button"
+                        onClick={() => handleSortColumn('TITLE')}
+                        className="group inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-indigo-700 cursor-pointer transition-colors"
+                        title="คลิกเพื่อเรียงตามชื่อคลิป (ก-ฮ / ฮ-ก)"
+                      >
+                        <span>ชื่อคลิป</span>
+                        {renderSortIndicator('TITLE')}
+                      </button>
+                    </th>
                     <th className="py-2.5 px-4">หมวดหมู่</th>
-                    <th className="py-2.5 px-4 w-36">สถานะ</th>
+                    <th className="py-2.5 px-4 w-40">
+                      <button
+                        type="button"
+                        onClick={() => handleSortColumn('STATUS')}
+                        className="group inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-indigo-700 cursor-pointer transition-colors"
+                        title="คลิกเพื่อเรียงตามวันพัก (พักนานสุด / เพิ่งใช้ล่าสุด)"
+                      >
+                        <span>สถานะ (วันพัก)</span>
+                        {renderSortIndicator('STATUS')}
+                      </button>
+                    </th>
                     <th className="py-2.5 px-3 w-12 text-right"></th>
                   </tr>
                 </thead>

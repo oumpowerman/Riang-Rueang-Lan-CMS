@@ -19,9 +19,15 @@ export type FootageActionFilter =
 
 export type FootageLibrarySortBy =
   | 'REST_DAYS_DESC'
-  | 'USAGE_90D_ASC'
+  | 'REST_DAYS_ASC'
   | 'NEWEST_CREATED'
-  | 'ID_ASC';
+  | 'OLDEST_CREATED'
+  | 'TITLE_ASC'
+  | 'TITLE_DESC'
+  | 'ID_ASC'
+  | 'ID_DESC'
+  | 'USAGE_90D_ASC'
+  | 'USAGE_90D_DESC';
 
 interface SearchFilterBarProps {
   searchQuery: string;
@@ -191,9 +197,15 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
             aria-label="เรียงลำดับ"
           >
             <option value="REST_DAYS_DESC">เรียง: พักนานสุด</option>
+            <option value="REST_DAYS_ASC">เรียง: เพิ่งใช้ล่าสุด</option>
             <option value="NEWEST_CREATED">เรียง: เพิ่มล่าสุด</option>
+            <option value="OLDEST_CREATED">เรียง: เพิ่มเก่าสุด</option>
+            <option value="TITLE_ASC">เรียง: ชื่อคลิป (ก-ฮ)</option>
+            <option value="TITLE_DESC">เรียง: ชื่อคลิป (ฮ-ก)</option>
+            <option value="ID_ASC">เรียง: รหัส (น้อย➔มาก)</option>
+            <option value="ID_DESC">เรียง: รหัส (มาก➔น้อย)</option>
             <option value="USAGE_90D_ASC">เรียง: ใช้น้อยสุด</option>
-            <option value="ID_ASC">เรียง: ตามรหัส</option>
+            <option value="USAGE_90D_DESC">เรียง: ใช้บ่อยสุด</option>
           </select>
         </div>
 

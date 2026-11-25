@@ -121,21 +121,21 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     }
   }, [isThreeTierManagerOpen, threeTierStudioTab]);
 
-  // Automatically deduplicate and reorganize tags into the clean Data Dictionary structure once Cloud sync is ready
-  const isAutoCleaningRef = React.useRef(false);
+  // Safely run initial dictionary cleanup once when Cloud sync is ready, avoiding interfering with live user edits
+  const hasRunInitialCleanRef = React.useRef(false);
   React.useEffect(() => {
-    if (!isCloudSynced || isAutoCleaningRef.current || tags.length <= 1) {
+    if (!isCloudSynced || hasRunInitialCleanRef.current || tags.length <= 1) {
       return;
     }
+    hasRunInitialCleanRef.current = true;
     if (!needsDictionaryCleanup(tags, settings.tierSubCategories)) {
       return;
     }
 
-    isAutoCleaningRef.current = true;
     reorganizeTagsToDataDictionary()
-      .catch((err) => console.warn('Auto dictionary cleanup error:', err))
-      .finally(() => {
-        isAutoCleaningRef.current = false;
+      .catch((err) => {
+        console.warn('Auto dictionary cleanup error:', err);
+        hasRunInitialCleanRef.current = false;
       });
   }, [
     isCloudSynced,

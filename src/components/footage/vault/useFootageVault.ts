@@ -690,16 +690,47 @@ export const useFootageVault = () => {
         if (daysB !== daysA) return daysB - daysA;
         return a.usageLast90Days - b.usageLast90Days;
       }
+      if (sortBy === 'REST_DAYS_ASC') {
+        const daysA = a.daysSinceLastUsed === null ? -1 : a.daysSinceLastUsed;
+        const daysB = b.daysSinceLastUsed === null ? -1 : b.daysSinceLastUsed;
+        if (daysA !== daysB) return daysA - daysB;
+        return b.usageLast90Days - a.usageLast90Days;
+      }
       if (sortBy === 'USAGE_90D_ASC') {
         if (a.usageLast90Days !== b.usageLast90Days) {
           return a.usageLast90Days - b.usageLast90Days;
         }
         return a.totalUsageCount - b.totalUsageCount;
       }
+      if (sortBy === 'USAGE_90D_DESC') {
+        if (b.usageLast90Days !== a.usageLast90Days) {
+          return b.usageLast90Days - a.usageLast90Days;
+        }
+        return b.totalUsageCount - a.totalUsageCount;
+      }
       if (sortBy === 'NEWEST_CREATED') {
         if (b.createdAt !== a.createdAt) {
           return b.createdAt > a.createdAt ? 1 : -1;
         }
+        return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
+      }
+      if (sortBy === 'OLDEST_CREATED') {
+        if (a.createdAt !== b.createdAt) {
+          return a.createdAt > b.createdAt ? 1 : -1;
+        }
+        return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
+      }
+      if (sortBy === 'TITLE_ASC') {
+        const comp = (a.title || '').localeCompare(b.title || '', 'th');
+        if (comp !== 0) return comp;
+        return NUMERIC_ID_COLLATOR.compare(a.id, b.id);
+      }
+      if (sortBy === 'TITLE_DESC') {
+        const comp = (b.title || '').localeCompare(a.title || '', 'th');
+        if (comp !== 0) return comp;
+        return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
+      }
+      if (sortBy === 'ID_DESC') {
         return NUMERIC_ID_COLLATOR.compare(b.id, a.id);
       }
       return NUMERIC_ID_COLLATOR.compare(a.id, b.id);

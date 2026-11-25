@@ -60,6 +60,7 @@ export const TierSubCategoryTagCard: React.FC<TierSubCategoryTagCardProps> = ({
         const batch = onStartDragTag(tag.id);
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('application/x-cms-tag-ids', JSON.stringify(batch));
+        e.dataTransfer.setData('text/plain', JSON.stringify(batch));
       }}
       onDragEnd={onEndDragTag}
       onClick={(e) => {
@@ -143,26 +144,29 @@ export const TierSubCategoryTagCard: React.FC<TierSubCategoryTagCardProps> = ({
           {usableCount}/{totalCount}
         </span>
 
-        <button
-          type="button"
-          onClick={(e) => onOpenEditTag(tag, e)}
-          className="w-6 h-6 rounded-lg flex items-center justify-center text-[#7D6E61] hover:text-[#3D332A] hover:bg-[#EFE7DC] transition-colors cursor-pointer"
-          title="แก้ไขรายละเอียดแท็ก (หรือดับเบิลคลิกที่ชื่อเพื่อเปลี่ยนชื่อด่วน)"
-        >
-          <Edit2 className="w-3 h-3" />
-        </button>
+        {/* Quick Actions: Revealed on hover on desktop, always accessible on touch */}
+        <div className="flex sm:hidden sm:group-hover:flex items-center gap-0.5 shrink-0 transition-opacity duration-150">
+          <button
+            type="button"
+            onClick={(e) => onOpenEditTag(tag, e)}
+            className="w-6 h-6 rounded-lg flex items-center justify-center text-[#7D6E61] hover:text-[#3D332A] hover:bg-[#EFE7DC] transition-colors cursor-pointer"
+            title="แก้ไขรายละเอียดแท็ก (หรือดับเบิลคลิกที่ชื่อเพื่อเปลี่ยนชื่อด่วน)"
+          >
+            <Edit2 className="w-3 h-3" />
+          </button>
 
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRequestDeleteTag(tag.id);
-          }}
-          className="w-6 h-6 rounded-lg flex items-center justify-center text-[#A38E7D] hover:text-[#8A3C31] hover:bg-[#FDF2F0] transition-colors cursor-pointer"
-          title="ลบป้ายแท็กนี้"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDeleteTag(tag.id);
+            }}
+            className="w-6 h-6 rounded-lg flex items-center justify-center text-[#A38E7D] hover:text-[#8A3C31] hover:bg-[#FDF2F0] transition-colors cursor-pointer"
+            title="ลบป้ายแท็กนี้"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
     </div>
   );
