@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
-import { Download, Share2, Smartphone, CheckCircle2, Plus, ExternalLink } from 'lucide-react';
+import {
+  Download,
+  Share2,
+  Smartphone,
+  CheckCircle2,
+  Plus,
+  ExternalLink,
+  Copy,
+  Check,
+} from 'lucide-react';
 import { usePWAInstall } from './usePWAInstall';
+import { IOSShortcutGuideDrawer } from './IOSShortcutGuideDrawer';
 import { Modal } from '../ui/Modal';
 import { useCMS } from '../../context/CMSContext';
 
@@ -11,9 +21,18 @@ interface PWAInstallButtonProps {
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   compact = false,
 }) => {
-  const { isInstalled, isInstallable, isIOS, installApp } = usePWAInstall();
+  const {
+    isInstalled,
+    isInstallable,
+    isIOS,
+    isAndroid,
+    isInIframe,
+    isInAppBrowser,
+    installApp,
+  } = usePWAInstall();
   const { setIsDirectFootageModalOpen } = useCMS();
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [copiedType, setCopiedType] = useState<'app' | 'shortcut' | null>(null);
 
   const handleInstallClick = async () => {
     if (isInstallable) {
@@ -23,6 +42,23 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       }
     } else {
       setIsGuideOpen(true);
+    }
+  };
+
+  const handleCopyUrl = async (type: 'app' | 'shortcut') => {
+    if (typeof window === 'undefined') return;
+    const targetUrl =
+      type === 'shortcut'
+        ? `${window.location.origin}/?share-target=1&url=`
+        : window.location.origin;
+    try {
+      await navigator.clipboard.writeText(targetUrl);
+      setCopiedType(type);
+      window.setTimeout(() => {
+        setCopiedType((prev) => (prev === type ? null : prev));
+      }, 2000);
+    } catch {
+      // Ignore clipboard failure
     }
   };
 
@@ -54,51 +90,73 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         maxWidthClass="max-w-lg"
       >
         <div className="space-y-4">
-          {/* Notice if inside AI Studio preview iframe */}
-          <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900 space-y-1.5">
+          {/* Warning when inside AI Studio iframe or LINE / IG / FB In-App Browser */}
+          <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-900 space-y-2">
             <div className="font-bold flex items-center gap-1.5 text-amber-950">
               <ExternalLink className="w-4 h-4 text-amber-700 shrink-0" />
-              <span>เคล็ดลับสำคัญก่อนติดตั้งลงมือถือ</span>
+              <span>
+                {isInIframe || isInAppBrowser
+                  ? 'ตอนนี้กำลังเปิดผ่านหน้าต่างย่อย (ติดตั้งแอปโดยตรงไม่ได้)'
+                  : 'เคล็ดลับสำคัญก่อนติดตั้งลงมือถือ'}
+              </span>
             </div>
             <p className="leading-relaxed text-amber-800">
-              ให้เปิดลิงก์แอปนี้บนเบราว์เซอร์หลักของเครื่อง (เช่น <strong>Chrome</strong> บน Android หรือ <strong>Safari</strong> บน iPhone) โดยตรงเพื่อกดติดตั้งลงหน้าจอโฮม
+              {isInIframe || isInAppBrowser
+                ? 'ระบบติดตั้งแอปและเมนูแชร์ข้ามแอปจะทำงานได้เฉพาะเมื่อเปิดจากหน้าเว็บจริงบน Google Chrome (Android) หรือ Safari (iPhone) โดยตรง'
+                : 'ให้เปิดลิงก์เว็บจริงที่ Deploy แล้วบน Google Chrome (Android) หรือ Safari (iPhone) โดยตรงเพื่อกดติดตั้งลงหน้าจอโฮม'}
             </p>
+            <button
+              type="button"
+              onClick={() => handleCopyUrl('app')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100/60 border border-amber-300/80 text-amber-950 font-semibold text-[11px] cursor-pointer transition-colors"
+            >
+              {copiedType === 'app' ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>คัดลอกลิงก์แล้ว — นำไปวางเปิดใน Chrome / Safari</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 text-amber-700" />
+                  <span>คัดลอกลิงก์เปิดใน Chrome / Safari</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Android / Chrome Web Share Target Flow */}
           <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
                   <Share2 className="w-4 h-4" />
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">
-                    สำหรับ Android / Chrome (แชร์ข้ามแอปอัตโนมัติ)
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-slate-900 truncate">
+                    Android / Chrome (ขึ้นในเมนู Share อัตโนมัติ)
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    แอปจะไปอยู่ในเมนู Share ของมือถือทันทีหลังติดตั้ง
+                    รองรับ IG, Facebook, TikTok, YouTube หลังติดตั้งเป็น WebAPK
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                Web Share Target
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                {isAndroid ? 'อุปกรณ์ของคุณ' : 'Web Share Target'}
               </span>
             </div>
 
             <ol className="text-xs text-slate-700 space-y-1.5 list-decimal list-inside pl-1">
               <li>
                 เปิดเว็บนี้ด้วย <strong>Google Chrome</strong> แล้วกดเมนูมุมขวาบน เลือก{' '}
-                <strong>"ติดตั้งแอป" (Install app)</strong>
+                <strong>&quot;ติดตั้งแอป&quot; (Install app)</strong>
               </li>
               <li>
                 เวลาดูคลิปในแอป <strong>YouTube, Instagram, Facebook, TikTok</strong> กดปุ่ม{' '}
-                <strong>แชร์ (Share)</strong> แล้วเลือกแชร์ไปยังแอปอื่น
+                <strong>แชร์ (Share)</strong> แล้วเลือก &quot;เพิ่มเติม&quot;
               </li>
               <li>
-                แตะไอคอนแอป <strong>"เรียงเรื่องลั่น"</strong> ระบบจะเปิดหน้าต่าง{' '}
-                <strong>นำเข้าฟุตเดี่ยว</strong> พร้อมใส่ลิงก์ให้เสร็จ กด{' '}
-                <strong>"บันทึกด่วน"</strong> เก็บเข้าคิวรอฝาก Google Drive ได้ทันที!
+                แตะไอคอนแอป <strong>&quot;เรียงเรื่องลั่น&quot;</strong> ระบบจะเปิดหน้าต่าง{' '}
+                <strong>นำเข้าฟุตเดี่ยว</strong> พร้อมใส่ลิงก์และชื่อคลิปให้ทันที
               </li>
             </ol>
           </div>
@@ -106,21 +164,21 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           {/* iPhone / iOS Flow */}
           <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
                   <Smartphone className="w-4 h-4" />
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">
-                    สำหรับ iPhone / iPad (iOS Safari)
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-slate-900 truncate">
+                    iPhone / iPad (iOS Safari)
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    ติดตั้งเป็นแอปเต็มจอ + กดวางและบันทึกด่วนในขั้นตอนที่ 1
+                    iOS ยังไม่รองรับ PWA Share Target — ใช้คัดลอกวางหรือ Apple Shortcuts
                   </p>
                 </div>
               </div>
               {isIOS && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
                   อุปกรณ์ของคุณ
                 </span>
               )}
@@ -128,15 +186,15 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
             <ol className="text-xs text-slate-700 space-y-1.5 list-decimal list-inside pl-1">
               <li>
-                เปิดเว็บนี้ใน <strong>Safari</strong> แล้วแตะปุ่ม <strong>แชร์ (Share)</strong> ด้านล่างของจอ
+                เปิดเว็บนี้ใน <strong>Safari</strong> แตะปุ่ม <strong>แชร์ (Share)</strong> เลือก{' '}
+                <strong>&quot;เพิ่มไปยังหน้าจอโฮม&quot;</strong>
               </li>
               <li>
-                เลื่อนลงมาเลือก <strong>"เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)</strong>
-              </li>
-              <li>
-                เวลาเจอคลิปใน IG / YouTube / TikTok ให้กด <strong>คัดลอกลิงก์</strong> แล้วเปิดแอป กดปุ่ม <strong>"นำเข้า" -&gt; ปุ่ม "วาง" -&gt; "บันทึกด่วน"</strong> ได้ในหน้าแรกทันที
+                วิธีปกติ: คัดลอกลิงก์จาก IG / TT / YT แล้วเปิดแอป กดปุ่ม <strong>&quot;นำเข้า&quot; -&gt; &quot;วาง&quot;</strong>
               </li>
             </ol>
+
+            <IOSShortcutGuideDrawer defaultExpanded={isIOS} />
           </div>
 
           {/* Footer Actions */}

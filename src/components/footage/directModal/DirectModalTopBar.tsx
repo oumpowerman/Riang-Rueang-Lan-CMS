@@ -21,7 +21,7 @@ export const DirectModalTopBar: React.FC<DirectModalTopBarProps> = ({
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#F4EFE6] rounded-xl border border-[#E5DACB]">
+    <div className="grid grid-cols-3 gap-1 p-0.5 bg-[#F4EFE6] rounded-lg border border-[#E5DACB]">
       {steps.map((s) => {
         const isActive = currentStep === s.num;
         const isPassed = currentStep > s.num;
@@ -33,7 +33,7 @@ export const DirectModalTopBar: React.FC<DirectModalTopBarProps> = ({
             type="button"
             disabled={!canClick}
             onClick={() => canClick && onSelectStep(s.num)}
-            className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold transition-colors whitespace-nowrap ${
               isActive
                 ? 'bg-emerald-700 text-white shadow-2xs'
                 : isPassed
@@ -44,7 +44,7 @@ export const DirectModalTopBar: React.FC<DirectModalTopBarProps> = ({
             }`}
           >
             <span
-              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-mono font-bold shrink-0 ${
+              className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-mono tabular-nums font-bold shrink-0 ${
                 isActive
                   ? 'bg-white text-emerald-800'
                   : isPassed

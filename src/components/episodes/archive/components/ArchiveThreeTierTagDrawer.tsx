@@ -1,11 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
-  Check,
-  ChevronDown,
   ChevronUp,
-  ChevronsDownUp,
-  ChevronsUpDown,
   Filter,
   Layers,
   RotateCcw,
@@ -21,8 +17,11 @@ import {
   DEFAULT_TIER_SUBCATEGORIES,
   DEFAULT_UNCLASSIFIED_SUBCATEGORY,
 } from '../../../../types/tag.types';
-import { TIER_THEME_CONFIGS } from '../../../tags/three-tier/IndependentTierColumn';
-import { TagPill, getEntityIcon } from '../../../ui/TagPill';
+import { TagPill } from '../../../ui/TagPill';
+import {
+  ArchiveTierColumn,
+  ArchiveTierSubCategoryGroup,
+} from './ArchiveTierColumn';
 
 interface ArchiveThreeTierTagDrawerProps {
   isExpanded: boolean;
@@ -49,8 +48,12 @@ export const ArchiveThreeTierTagDrawer: React.FC<
   tagEpisodeCounts,
   matchedEpisodesCount,
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const { tags, tagMap, settings } = useCMS();
   const [tagSearch, setTagSearch] = useState('');
+  const [cascadeTier, setCascadeTier] = useState<CategoryTier | null>(null);
+  const [expandedTierColumn, setExpandedTierColumn] =
+    useState<CategoryTier | null>(null);
   const [expandedSubKeys, setExpandedSubKeys] = useState<
     Record<string, boolean>
   >({});
@@ -63,7 +66,10 @@ export const ArchiveThreeTierTagDrawer: React.FC<
     [tags]
   );
 
-  const buildTierGroups = (tier: CategoryTier, subList: string[]) => {
+  const buildTierGroups = (
+    tier: CategoryTier,
+    subList: string[]
+  ): ArchiveTierSubCategoryGroup[] => {
     const q = tagSearch.trim().toLowerCase();
     const tierTags = realTags.filter((t) => {
       const tTier: CategoryTier = t.tier === 2 || t.tier === 3 ? t.tier : 1;
@@ -113,248 +119,206 @@ export const ArchiveThreeTierTagDrawer: React.FC<
     [realTags, tierSubCategories.tier3, tagSearch, tagEpisodeCounts]
   );
 
-  const allSubKeys = useMemo(() => {
-    const keys: string[] = [];
-    tier1Groups.forEach((g) => keys.push(`1__${g.subCategory}`));
-    tier2Groups.forEach((g) => keys.push(`2__${g.subCategory}`));
-    tier3Groups.forEach((g) => keys.push(`3__${g.subCategory}`));
-    return keys;
-  }, [tier1Groups, tier2Groups, tier3Groups]);
-
-  const handleExpandAll = () => {
-    const next: Record<string, boolean> = {};
-    allSubKeys.forEach((k) => {
-      next[k] = true;
-    });
-    setExpandedSubKeys(next);
-  };
-
-  const handleCollapseAll = () => {
-    setExpandedSubKeys({});
-  };
-
-  const renderTierColumn = (
+  const handleToggleTierSubs = (
     tier: CategoryTier,
-    groups: { subCategory: string; tags: CategoryTag[] }[]
+    groups: ArchiveTierSubCategoryGroup[]
   ) => {
-    const theme = TIER_THEME_CONFIGS[tier];
-    const totalInTier = groups.reduce((acc, g) => acc + g.tags.length, 0);
+    const tierKeys = groups.map((g) => `${tier}__${g.subCategory}`);
+    const allExpandedInTier =
+      tierKeys.length > 0 && tierKeys.every((k) => Boolean(expandedSubKeys[k]));
 
-    return (
-      <div
-        key={`archive-tag-tier-${tier}`}
-        className="flex flex-col rounded-2xl border border-[#E5DED4] bg-white overflow-hidden shadow-2xs"
-      >
-        <div
-          className={`px-3 py-2 border-b ${theme.headerBorder} ${theme.headerBg} flex items-center justify-between gap-1.5 sm:gap-2`}
-        >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold whitespace-nowrap shrink-0 ${theme.badgeBg} ${theme.badgeTextCls}`}
-            >
-              <span className="md:hidden">T{tier}</span>
-              <span className="hidden md:inline">{theme.badgeText}</span>
-            </span>
-            <span
-              className={`text-xs font-extrabold ${theme.accentText} truncate min-w-0`}
-            >
-              {theme.title}
-            </span>
-          </div>
-          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/90 text-[#524538] border border-black/5 tabular-nums shrink-0">
-            {totalInTier} แท็ก
-          </span>
-        </div>
+    setCascadeTier(!allExpandedInTier ? tier : null);
 
-        <div className="p-2.5 space-y-2 max-h-72 overflow-y-auto scrollbar-thin bg-[#FAF8F5]">
-          {groups.map(({ subCategory, tags: subTags }) => {
-            const subKey = `${tier}__${subCategory}`;
-            const isSearching = tagSearch.trim().length > 0;
-            const isCollapsed = !isSearching && !Boolean(expandedSubKeys[subKey]);
-            const selectedInSub = subTags.filter((t) =>
-              selectedFootageTagIds.includes(t.id)
-            ).length;
-
-            return (
-              <div
-                key={subKey}
-                className="rounded-xl border border-[#E5DED4] bg-white overflow-hidden"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedSubKeys((prev) => ({
-                      ...prev,
-                      [subKey]: !prev[subKey],
-                    }))
-                  }
-                  className={`w-full px-2.5 py-1.5 border-b flex items-center justify-between gap-1.5 text-left cursor-pointer ${
-                    isCollapsed ? 'border-b-transparent' : ''
-                  } ${theme.subHeaderBg} ${theme.subHeaderBorder}`}
-                >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#524538] transition-transform shrink-0 ${
-                        isCollapsed ? '-rotate-90' : ''
-                      }`}
-                    />
-                    <span className="text-[11px] font-extrabold text-[#3D332A] truncate">
-                      หมวด: {subCategory}
-                    </span>
-                    {selectedInSub > 0 && (
-                      <span className="px-1.5 py-0.2 rounded bg-[#3B6845] text-white text-[9px] font-extrabold shrink-0">
-                        เลือก {selectedInSub}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-white text-[#6E5F52] border border-black/10 tabular-nums shrink-0">
-                    {isCollapsed ? `กางดู (${subTags.length})` : subTags.length}
-                  </span>
-                </button>
-
-                {!isCollapsed && (
-                  <div className="p-2">
-                    {subTags.length === 0 ? (
-                      <p className="text-[11px] text-[#8C7B6C] italic text-center py-1">
-                        ยังไม่มีแท็กในหมวดนี้
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {subTags.map((tag) => {
-                          const isSelected = selectedFootageTagIds.includes(
-                            tag.id
-                          );
-                          const epCount = tagEpisodeCounts[tag.id] || 0;
-                          return (
-                            <button
-                              key={tag.id}
-                              type="button"
-                              onClick={() => onToggleFootageTag(tag.id)}
-                              className={`text-xs px-2.5 py-1 rounded-xl font-semibold inline-flex items-center gap-1 transition-all cursor-pointer border ${
-                                isSelected
-                                  ? 'bg-[#D5EBDA] text-[#144220] font-bold border-[#AED7B7] shadow-2xs ring-1 ring-[#C5E6CD]'
-                                  : epCount > 0
-                                  ? 'bg-[#FAF8F5] text-[#3D332A] border-[#DFD7CA] hover:bg-[#EDF6F0] hover:border-[#C5DFCC]'
-                                  : 'bg-[#FAF8F5]/60 text-[#9C9286] border-[#EAE2D6] hover:bg-white'
-                              }`}
-                              title={`#${tag.name} — ปรากฏในคลิปหลัก ${epCount} ตอน`}
-                            >
-                              {isSelected && (
-                                <Check className="w-3 h-3 text-[#1B572A] shrink-0" />
-                              )}
-                              <span className="text-xs shrink-0">
-                                {getEntityIcon(tag)}
-                              </span>
-                              <span>#{tag.name}</span>
-                              <span
-                                className={`text-[10px] font-mono px-1 rounded tabular-nums ${
-                                  isSelected
-                                    ? 'bg-[#BFE0C8] text-[#144220] font-bold'
-                                    : epCount > 0
-                                    ? 'bg-[#EAF5ED] text-[#245233] font-bold'
-                                    : 'bg-[#EFECE6] text-[#9C9286]'
-                                }`}
-                              >
-                                {epCount} EP
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    setExpandedSubKeys((prev) => {
+      const next = { ...prev };
+      tierKeys.forEach((k) => {
+        next[k] = !allExpandedInTier;
+      });
+      return next;
+    });
   };
 
-  if (!isExpanded && selectedFootageTagIds.length === 0) {
-    return null;
-  }
+  const handleToggleSubCategory = (subKey: string) => {
+    setCascadeTier(null);
+    setExpandedSubKeys((prev) => ({
+      ...prev,
+      [subKey]: !prev[subKey],
+    }));
+  };
+
+  const handleToggleExpandColumn = (tier: CategoryTier) => {
+    setExpandedTierColumn((prev) => (prev === tier ? null : tier));
+  };
+
+  const handleExpandAndOpenSubCategory = (
+    tier: CategoryTier,
+    subKey: string
+  ) => {
+    setCascadeTier(null);
+    setExpandedTierColumn(tier);
+    setExpandedSubKeys((prev) => ({
+      ...prev,
+      [subKey]: true,
+    }));
+  };
+
+  const isSearching = tagSearch.trim().length > 0;
+  const hasSelectedTags = selectedFootageTagIds.length > 0;
+  const shouldRenderDrawerShell = isExpanded || hasSelectedTags;
 
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl shadow-2xs overflow-hidden">
-      {/* Active Selected Footage Tags Strip */}
-      {selectedFootageTagIds.length > 0 && (
-        <div className="px-3.5 sm:px-4 py-2 bg-[#EEF6F0] flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-extrabold text-[#1F4828] flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-[#2D623C]" />
-              <span>แท็กที่เลือก ({selectedFootageTagIds.length}):</span>
-            </span>
+    <AnimatePresence initial={false}>
+      {shouldRenderDrawerShell && (
+        <motion.div
+          key="archive-three-tier-shell"
+          initial={
+            prefersReducedMotion
+              ? { opacity: 0 }
+              : { height: 0, opacity: 0, y: -8 }
+          }
+          animate={
+            prefersReducedMotion
+              ? { opacity: 1 }
+              : { height: 'auto', opacity: 1, y: 0 }
+          }
+          exit={
+            prefersReducedMotion
+              ? { opacity: 0 }
+              : { height: 0, opacity: 0, y: -8 }
+          }
+          transition={{
+            duration: prefersReducedMotion ? 0.08 : 0.24,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+          className="overflow-hidden"
+        >
+          <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl shadow-2xs overflow-hidden">
+            {/* Active Selected Footage Tags Strip */}
+            <AnimatePresence initial={false}>
+              {hasSelectedTags && (
+                <motion.div
+                  key="archive-selected-tags-strip"
+                  initial={
+                    prefersReducedMotion
+                      ? { opacity: 0 }
+                      : { height: 0, opacity: 0 }
+                  }
+                  animate={
+                    prefersReducedMotion
+                      ? { opacity: 1 }
+                      : { height: 'auto', opacity: 1 }
+                  }
+                  exit={
+                    prefersReducedMotion
+                      ? { opacity: 0 }
+                      : { height: 0, opacity: 0 }
+                  }
+                  transition={{
+                    duration: prefersReducedMotion ? 0.08 : 0.18,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-3.5 py-2 bg-[#EEF6F0] flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-extrabold text-[#1F4828] flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-[#2D623C]" />
+                        <span className="tabular-nums">
+                          ({selectedFootageTagIds.length})
+                        </span>
+                      </span>
 
-            {selectedFootageTagIds.map((tid, idx) => {
-              const t = tagMap[tid];
-              if (!t) return null;
-              return (
-                <React.Fragment key={tid}>
-                  {idx > 0 && (
-                    <span className="text-[11px] font-mono font-extrabold text-[#2D623C] px-0.5">
-                      {footageTagMatchMode === 'AND' ? '+' : 'หรือ'}
-                    </span>
-                  )}
-                  <TagPill
-                    tag={t}
-                    showEntityIcon={true}
-                    onRemove={() => onToggleFootageTag(tid)}
-                  />
-                </React.Fragment>
-              );
-            })}
-          </div>
+                      {selectedFootageTagIds.map((tid, idx) => {
+                        const t = tagMap[tid];
+                        if (!t) return null;
+                        return (
+                          <React.Fragment key={tid}>
+                            {idx > 0 && (
+                              <span className="text-[11px] font-mono font-extrabold text-[#2D623C] px-0.5">
+                                {footageTagMatchMode === 'AND' ? '+' : 'หรือ'}
+                              </span>
+                            )}
+                            <TagPill
+                              tag={t}
+                              showEntityIcon={true}
+                              onRemove={() => onToggleFootageTag(tid)}
+                            />
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-mono font-bold text-[#1F4828] tabular-nums">
-              พบ {matchedEpisodesCount} ตอน
-            </span>
-            <button
-              type="button"
-              onClick={onClearFootageTags}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-[#8E3B3B] bg-white border border-[#F5D0D0] rounded-lg hover:bg-[#FDF2F2] cursor-pointer transition-colors whitespace-nowrap"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>ล้างแท็ก</span>
-            </button>
-          </div>
-        </div>
-      )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-mono font-bold text-[#1F4828] tabular-nums">
+                        พบ {matchedEpisodesCount} ตอน
+                      </span>
+                      <button
+                        type="button"
+                        onClick={onClearFootageTags}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-[#8E3B3B] bg-white border border-[#F5D0D0] rounded-lg hover:bg-[#FDF2F2] cursor-pointer transition-colors whitespace-nowrap"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>ล้าง</span>
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-      {/* Expandable 3-Tier Tag Columns Body */}
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden"
-          >
-            <div
-              className={`p-3.5 space-y-3 bg-[#FAF8F5] ${
-                selectedFootageTagIds.length > 0
-                  ? 'border-t border-[#E5DED4]'
-                  : ''
-              }`}
-            >
+            {/* Expandable 3-Tier Tag Columns Body */}
+            <AnimatePresence initial={false}>
+              {isExpanded && (
+                <motion.div
+                  key="archive-three-tier-body"
+                  initial={
+                    prefersReducedMotion
+                      ? { opacity: 0 }
+                      : { height: 0, opacity: 0, y: -6 }
+                  }
+                  animate={
+                    prefersReducedMotion
+                      ? { opacity: 1 }
+                      : { height: 'auto', opacity: 1, y: 0 }
+                  }
+                  exit={
+                    prefersReducedMotion
+                      ? { opacity: 0 }
+                      : { height: 0, opacity: 0, y: -6 }
+                  }
+                  transition={{
+                    duration: prefersReducedMotion ? 0.08 : 0.24,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="overflow-hidden"
+                >
+                  <div
+                    className={`p-3.5 space-y-3 bg-[#FAF8F5] ${
+                      hasSelectedTags ? 'border-t border-[#E5DED4]' : ''
+                    }`}
+                  >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="relative flex-1 min-w-[200px] max-w-md">
                   <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     value={tagSearch}
-                    onChange={(e) => setTagSearch(e.target.value)}
-                    placeholder="ค้นหาแท็กฟุตเทจ 3 ชั้น..."
+                    onChange={(e) => {
+                      setCascadeTier(null);
+                      setTagSearch(e.target.value);
+                    }}
+                    placeholder="ค้นหาแท็ก 3 ชั้น..."
                     className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#DED3C5] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#3B6845]"
                   />
                   {tagSearch && (
                     <button
                       type="button"
-                      onClick={() => setTagSearch('')}
+                      onClick={() => {
+                        setCascadeTier(null);
+                        setTagSearch('');
+                      }}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
+                      aria-label="ล้างคำค้นหาแท็ก"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -362,8 +326,7 @@ export const ArchiveThreeTierTagDrawer: React.FC<
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {/* AND / OR Match Mode inside expanded drawer */}
-                  <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-white border border-[#DED3C5]">
+                  <div className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-white border border-[#DED3C5]">
                     <button
                       type="button"
                       onClick={() => onChangeFootageTagMatchMode('AND')}
@@ -392,40 +355,52 @@ export const ArchiveThreeTierTagDrawer: React.FC<
 
                   <button
                     type="button"
-                    onClick={handleExpandAll}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-white hover:bg-[#EDF4ED] text-[#244B2F] border border-[#CFDECE] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <ChevronsUpDown className="w-3.5 h-3.5 text-[#3B6845]" />
-                    <span>กางทั้งหมด</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCollapseAll}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-white hover:bg-[#F4EEE4] text-[#524538] border border-[#DFD7CA] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <ChevronsDownUp className="w-3.5 h-3.5 text-[#786B5C]" />
-                    <span>พับทั้งหมด</span>
-                  </button>
-                  <button
-                    type="button"
                     onClick={onClose}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-white hover:bg-[#FAF6F0] text-[#4D4740] border border-[#E2D8C9] transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    <span>ซ่อนถาดแท็ก</span>
+                    <span>ซ่อน</span>
                     <ChevronUp className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                {renderTierColumn(1, tier1Groups)}
-                {renderTierColumn(2, tier2Groups)}
-                {renderTierColumn(3, tier3Groups)}
+              {/* 3 Parallel Columns with Smooth Flex Expand & Compact Rail */}
+              <div className="flex flex-col lg:flex-row gap-3 items-stretch">
+                {(
+                  [
+                    { tier: 1 as CategoryTier, groups: tier1Groups },
+                    { tier: 2 as CategoryTier, groups: tier2Groups },
+                    { tier: 3 as CategoryTier, groups: tier3Groups },
+                  ] as const
+                ).map(({ tier, groups }) => (
+                  <ArchiveTierColumn
+                    key={`archive-tier-col-${tier}`}
+                    tier={tier}
+                    groups={groups}
+                    expandedSubKeys={expandedSubKeys}
+                    isCascadeActive={cascadeTier === tier && !isSearching}
+                    isSearching={isSearching}
+                    isExpandedColumn={expandedTierColumn === tier}
+                    isCompactRail={
+                      expandedTierColumn !== null && expandedTierColumn !== tier
+                    }
+                    selectedFootageTagIds={selectedFootageTagIds}
+                    tagEpisodeCounts={tagEpisodeCounts}
+                    onToggleTierSubs={handleToggleTierSubs}
+                    onToggleSubCategory={handleToggleSubCategory}
+                    onExpandAndOpenSubCategory={handleExpandAndOpenSubCategory}
+                    onToggleExpandColumn={handleToggleExpandColumn}
+                    onToggleFootageTag={onToggleFootageTag}
+                  />
+                ))}
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

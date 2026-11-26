@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Trash2,
@@ -14,21 +14,14 @@ import {
   Search,
   X,
   FolderX,
-  ArrowRight,
   Eraser,
   Settings,
   ChevronDown,
   BookOpen,
+  GitMerge,
+  Loader2,
 } from 'lucide-react';
-import { CategoryMatrixStat } from '../../../context/CMSContext';
-import { isStagingTagId } from '../../../services/seedData';
-import {
-  CategoryGroup,
-  CategoryTag,
-  CategoryTier,
-  DEFAULT_UNCLASSIFIED_SUBCATEGORY,
-} from '../../../types/tag.types';
-import { getPastelColorConfig } from '../constants/tagPastelPalette';
+import { CategoryTier } from '../../../types/tag.types';
 
 export type UnifiedTagStudioTab = 'STUDIO_3TIER' | 'COOLDOWN_RULES';
 
@@ -115,6 +108,9 @@ interface ThreeTierHeaderRightControlsProps {
   isBulkFocusMode?: boolean;
   onOpenJunkTagCleanup?: () => void;
   onOpenTagRulesDictionary?: () => void;
+  duplicateGroupsCount?: number;
+  isDeduplicatingTags?: boolean;
+  onRunDeduplicateTags?: () => void;
 }
 
 export const ThreeTierHeaderRightControls: React.FC<
@@ -136,6 +132,9 @@ export const ThreeTierHeaderRightControls: React.FC<
   isBulkFocusMode = false,
   onOpenJunkTagCleanup,
   onOpenTagRulesDictionary,
+  duplicateGroupsCount = 0,
+  isDeduplicatingTags = false,
+  onRunDeduplicateTags,
 }) => {
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
   const isExpandedView = isFullScreen || isBulkFocusMode;
@@ -164,16 +163,12 @@ export const ThreeTierHeaderRightControls: React.FC<
             </IconTooltipButton>
           </div>
 
-          {/* Search Toggle Icon */}
+          {/* Search Focus Icon */}
           {onToggleGlobalSearch && (
             <IconTooltipButton
               onClick={onToggleGlobalSearch}
               active={showGlobalSearch}
-              tooltip={
-                showGlobalSearch
-                  ? 'ซ่อนแถบค้นหาด่วนข้าม 3 ชั้น'
-                  : 'ค้นหาด่วนข้ามทั้ง 3 ชั้น (ชื่อแท็ก, หมวดย่อย)'
-              }
+              tooltip="กดเพื่อเสิร์ช TAG รวมพร้อมกันทั้ง 3 Tier"
             >
               <Search className="w-4 h-4 text-[#78593A]" />
             </IconTooltipButton>
@@ -245,6 +240,36 @@ export const ThreeTierHeaderRightControls: React.FC<
                     >
                       <BookOpen className="w-4 h-4 text-[#3B6845] shrink-0" />
                       <span>คู่มือกฎ Tag & Data Dictionary</span>
+                    </button>
+                  )}
+
+                  {onRunDeduplicateTags && (
+                    <button
+                      type="button"
+                      disabled={isDeduplicatingTags}
+                      onClick={() => {
+                        onRunDeduplicateTags();
+                        setIsToolsMenuOpen(false);
+                      }}
+                      className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center justify-between gap-2 font-bold cursor-pointer disabled:opacity-60 ${
+                        duplicateGroupsCount > 0
+                          ? 'text-[#9A3412] bg-[#FEF3EB] hover:bg-[#FDE6D8]'
+                          : 'text-[#4D3A24] hover:bg-[#FAF7F2]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {isDeduplicatingTags ? (
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        ) : (
+                          <GitMerge className="w-4 h-4 shrink-0" />
+                        )}
+                        <span>ตรวจและรวมแท็กซ้ำ</span>
+                      </span>
+                      {duplicateGroupsCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-[#C2410C] text-white tabular-nums">
+                          {duplicateGroupsCount}
+                        </span>
+                      )}
                     </button>
                   )}
 
@@ -320,6 +345,39 @@ export const ThreeTierHeaderRightControls: React.FC<
               </motion.button>
             )}
 
+            {onRunDeduplicateTags && (
+              <motion.button
+                type="button"
+                disabled={isDeduplicatingTags}
+                whileHover={isDeduplicatingTags ? undefined : { scale: 1.02 }}
+                whileTap={isDeduplicatingTags ? undefined : { scale: 0.96 }}
+                onClick={onRunDeduplicateTags}
+                aria-label="ตรวจและรวมแท็กที่ชื่อซ้ำกัน"
+                className={`h-8 px-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs disabled:opacity-60 ${
+                  duplicateGroupsCount > 0
+                    ? 'bg-[#FEF3EB] hover:bg-[#FDE6D8] text-[#9A3412] border-[#F4C2A1]'
+                    : 'bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border-[#E2D5C4]'
+                }`}
+                title={
+                  duplicateGroupsCount > 0
+                    ? `พบแท็กชื่อซ้ำ ${duplicateGroupsCount} กลุ่ม — คลิกเพื่อรวมเป็นแท็กเดียวทันที`
+                    : 'สแกนตรวจสอบแท็กที่ชื่อซ้ำกันในระบบและรวมเป็นอันเดียว'
+                }
+              >
+                {isDeduplicatingTags ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                ) : (
+                  <GitMerge className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span>ตรวจรวมแท็กซ้ำ</span>
+                {duplicateGroupsCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-extrabold bg-[#C2410C] text-white tabular-nums">
+                    {duplicateGroupsCount}
+                  </span>
+                )}
+              </motion.button>
+            )}
+
             <IconTooltipButton
               onClick={onToggleConceptBanner}
               active={showConceptBanner}
@@ -385,151 +443,125 @@ export const ThreeTierHeaderRightControls: React.FC<
 };
 
 interface ThreeTierQuickSearchAndSummaryBarProps {
-  categoryGroups: CategoryGroup[];
-  tags: CategoryTag[];
-  categoryMatrix: CategoryMatrixStat[];
-  onJumpToTag: (tier: CategoryTier, tagName: string) => void;
-  isSearchOpen?: boolean;
-  onCloseSearch?: () => void;
+  globalSearchQuery: string;
+  onGlobalSearchQueryChange: (q: string) => void;
+  hasAnySearchActive: boolean;
+  onClearAllSearches: () => void;
+  totalCounts: {
+    tier1: number;
+    tier2: number;
+    tier3: number;
+  };
+  matchCounts: {
+    tier1: number;
+    tier2: number;
+    tier3: number;
+  };
+  onSelectTierTab?: (tier: CategoryTier) => void;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export const ThreeTierQuickSearchAndSummaryBar: React.FC<
   ThreeTierQuickSearchAndSummaryBarProps
-> = ({ tags, categoryMatrix, onJumpToTag, isSearchOpen = false, onCloseSearch }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const realTags = useMemo(
-    () => tags.filter((t) => !isStagingTagId(t.id)),
-    [tags]
-  );
-
-  // Instant search across Tier 1, Tier 2, and Tier 3 tags
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-
-    return realTags
-      .filter((t) => {
-        const matchName = t.name.toLowerCase().includes(q);
-        const matchSub = (t.subCategory || '').toLowerCase().includes(q);
-        const matchId = t.id.toLowerCase().includes(q);
-        return matchName || matchSub || matchId;
-      })
-      .slice(0, 8)
-      .map((tag) => {
-        const stat = categoryMatrix.find((m) => m.tag.id === tag.id);
-        return {
-          tag,
-          tier: (tag.tier || 1) as CategoryTier,
-          subCategory: tag.subCategory || DEFAULT_UNCLASSIFIED_SUBCATEGORY,
-          usableCount: stat?.usableCount || 0,
-          totalCount: stat?.totalCount || 0,
-        };
-      });
-  }, [searchQuery, realTags, categoryMatrix]);
+> = ({
+  globalSearchQuery,
+  onGlobalSearchQueryChange,
+  hasAnySearchActive,
+  onClearAllSearches,
+  totalCounts,
+  matchCounts,
+  onSelectTierTab,
+  searchInputRef,
+}) => {
+  const totalAll = totalCounts.tier1 + totalCounts.tier2 + totalCounts.tier3;
+  const totalMatched = matchCounts.tier1 + matchCounts.tier2 + matchCounts.tier3;
 
   return (
-    <AnimatePresence initial={false}>
-      {isSearchOpen && (
-        <motion.div
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          className="bg-[#FAF8F5] border-b border-[#E8DFD3] px-3.5 sm:px-5 py-2.5 shrink-0 space-y-2 overflow-hidden"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold text-[#4D3A24] flex items-center gap-1.5">
-              <Search className="w-3.5 h-3.5 text-[#78593A]" />
-              <span>ค้นหาด่วนข้ามทั้ง 3 ชั้น</span>
-            </span>
-            {onCloseSearch && (
+    <div className="bg-[#FAF8F5] border-b border-[#E8DFD3] px-3.5 sm:px-5 py-2 shrink-0">
+      <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2.5">
+        {/* Unified Cross-Tier Search Input */}
+        <div className="relative flex-1 min-w-[220px] max-w-2xl">
+          <Search className="w-4 h-4 text-[#78593A] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={globalSearchQuery}
+            onChange={(e) => onGlobalSearchQueryChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && globalSearchQuery) {
+                e.stopPropagation();
+                onGlobalSearchQueryChange('');
+              }
+            }}
+            placeholder="เสิร์ช TAG รวมทุก Tier พร้อมกัน (พิมพ์ชื่อแท็ก, หมวดย่อย, หรือ #...)"
+            aria-label="เสิร์ช TAG รวมทุก Tier พร้อมกัน"
+            className="w-full h-9 pl-9 pr-8 rounded-xl bg-white border border-[#DED2C2] text-xs sm:text-sm text-[#3D332A] placeholder:text-[#9D8E7F] focus:outline-none focus:border-[#78593A] shadow-2xs"
+          />
+          {globalSearchQuery && (
+            <button
+              type="button"
+              onClick={() => onGlobalSearchQueryChange('')}
+              aria-label="ล้างคำค้นหารวม"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-md text-[#8C7B6C] hover:text-[#3D332A] hover:bg-[#FAF7F2] cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Live Cross-Tier Match Summary / Quiet Total Metadata */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0 text-xs">
+          {hasAnySearchActive ? (
+            <>
+              <span className="text-[#4D3A24] font-semibold tabular-nums whitespace-nowrap">
+                พบ {totalMatched} / {totalAll} แท็ก
+              </span>
+              <span aria-hidden="true" className="text-[#C8B9A6] hidden sm:inline">
+                ·
+              </span>
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[#EFE7DC] border border-[#E2D5C4]">
+                {([
+                  { tier: 1 as CategoryTier, label: 'T1', count: matchCounts.tier1 },
+                  { tier: 2 as CategoryTier, label: 'T2', count: matchCounts.tier2 },
+                  { tier: 3 as CategoryTier, label: 'T3', count: matchCounts.tier3 },
+                ]).map((item) => (
+                  <button
+                    key={item.tier}
+                    type="button"
+                    onClick={() => onSelectTierTab?.(item.tier)}
+                    className={`px-2 py-1 rounded-md text-[11px] font-bold tabular-nums transition-colors cursor-pointer whitespace-nowrap ${
+                      item.count > 0
+                        ? 'bg-white text-[#2D241C] shadow-2xs hover:bg-[#FDFBF7]'
+                        : 'text-[#8C7B6C] hover:text-[#524538]'
+                    }`}
+                    title={`ดูผลลัพธ์ใน Tier ${item.tier} (${item.count} แท็ก)`}
+                  >
+                    {item.label}: {item.count}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
-                onClick={onCloseSearch}
-                className="text-xs text-[#7D6E61] hover:text-[#3D332A] inline-flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded-md hover:bg-white border border-transparent hover:border-[#E2D5C4]"
+                onClick={onClearAllSearches}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-[#78593A] hover:text-[#3D332A] bg-white hover:bg-[#F5EFE6] border border-[#DED2C2] transition-colors cursor-pointer whitespace-nowrap"
               >
-                <X className="w-3.5 h-3.5" />
-                <span>ปิด</span>
+                ล้างค้นหา
               </button>
-            )}
-          </div>
-
-          <div className="relative w-full max-w-xl">
-            <Search className="w-3.5 h-3.5 text-[#8C7B6C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              autoFocus
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="พิมพ์ชื่อแท็ก, หมวดย่อย, หรือรหัส TAG-xxxx..."
-              className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#E3D8CB] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#8FA892] shadow-2xs"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Instant Search Jump Strip */}
-          <AnimatePresence initial={false}>
-            {searchQuery.trim().length > 0 && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.16, ease: 'easeOut' }}
-                className="overflow-hidden pt-1"
-              >
-                <div className="p-2 rounded-xl bg-white border border-[#E3D8CB] flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-[#7D6E61] px-1">
-                    ผลการค้นหา ({searchResults.length}):
-                  </span>
-                  {searchResults.length === 0 ? (
-                    <span className="text-xs text-[#8C7B6C] italic">
-                      ไม่พบแท็กที่ตรงกับ &ldquo;{searchQuery}&rdquo;
-                    </span>
-                  ) : (
-                    searchResults.map((item) => {
-                      const colorCfg = getPastelColorConfig(item.tag.color);
-                      return (
-                        <button
-                          key={item.tag.id}
-                          type="button"
-                          onClick={() => {
-                            onJumpToTag(item.tier, item.tag.name);
-                            setSearchQuery('');
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#FAF7F2] hover:bg-[#EEF5EE] text-[#3D332A] border border-[#E2D5C4] transition-colors cursor-pointer"
-                          title={`คลิกเพื่อกรองในคอลัมน์ Tier ${item.tier} (${item.subCategory})`}
-                        >
-                          <span
-                            className={`w-2 h-2 rounded-full ${colorCfg.swatchBg}`}
-                          />
-                          <span className="text-[10px] font-mono px-1 rounded bg-[#EFE7DC] text-[#524538]">
-                            T{item.tier}:{item.subCategory}
-                          </span>
-                          <span>#{item.tag.name}</span>
-                          <span className="text-[10px] font-mono text-[#6E5F52]">
-                            ({item.usableCount}/{item.totalCount} ฟุต)
-                          </span>
-                          <ArrowRight className="w-3 h-3 text-[#3B6845]" />
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-[#6E5F52] tabular-nums whitespace-nowrap">
+              <span className="font-semibold text-[#4D3A24]">ทั้งหมด {totalAll} แท็ก</span>
+              <span aria-hidden="true">·</span>
+              <span>T1 {totalCounts.tier1}</span>
+              <span aria-hidden="true">/</span>
+              <span>T2 {totalCounts.tier2}</span>
+              <span aria-hidden="true">/</span>
+              <span>T3 {totalCounts.tier3}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

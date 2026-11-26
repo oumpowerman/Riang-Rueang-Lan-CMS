@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Package,
   Film,
@@ -44,129 +45,128 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
   onOpenTemplateStandardizer,
   templateNeedsUpdateCount = 0,
 }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl p-3 sm:p-4 space-y-3 shadow-2xs">
-      {/* Single-Row Header: Title + Mode Switcher + Unified Manage Menu */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-        <div className="flex items-center justify-between gap-2 min-w-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="p-1.5 bg-[#F3E9D8] border border-[#DFCEB4] text-[#785324] rounded-xl shrink-0">
-              <Package className="w-4 h-4 sm:w-5 sm:h-5" />
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <h1 className="text-base sm:text-lg font-extrabold text-[#2D2926] whitespace-nowrap">
-                  คลังคลิปหลัก
-                </h1>
-                <span className="text-xs font-medium text-[#716960] font-mono tabular-nums whitespace-nowrap">
-                  Master Archive · {overviewMetrics.totalEpisodes.toLocaleString()} คลิป ·{' '}
-                  {categoryRanking.length} รายการ
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile Unified Menu Button (shown < sm next to title) */}
-          <div className="relative sm:hidden shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#FAF3E6] hover:bg-[#F3E6CE] text-[#6B4616] border border-[#DFC69E] cursor-pointer whitespace-nowrap"
-            >
-              <span>จัดการคลัง</span>
-              {templateNeedsUpdateCount > 0 && (
-                <span className="font-mono text-[10px] font-extrabold text-[#7A3F17] tabular-nums">
-                  ({templateNeedsUpdateCount})
-                </span>
-              )}
-              <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform ${
-                  isMobileMenuOpen ? 'rotate-180' : ''
-                }`}
+    <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl p-3 sm:p-3.5 space-y-2.5 shadow-2xs">
+      {/* Slim Top Control Row: View Mode Switcher + Live Count + Manage Dropdown */}
+      <div className="flex items-center justify-between gap-2 relative">
+        <div className="inline-flex items-center gap-0.5 p-1 bg-[#F5EFE6] border border-[#E2D6C5] rounded-xl shadow-2xs min-w-0">
+          <button
+            type="button"
+            onClick={() => onTabChange('EPISODES')}
+            className={`relative inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap min-w-0 ${
+              archiveTab === 'EPISODES'
+                ? 'text-[#224A2D]'
+                : 'text-[#5C544C] hover:text-[#2D2926]'
+            }`}
+          >
+            {archiveTab === 'EPISODES' && (
+              <motion.span
+                layoutId="archiveHeaderTabPill"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="absolute inset-0 rounded-lg bg-[#E6F2E6] border border-[#9EC49C] shadow-2xs"
               />
-            </button>
-          </div>
+            )}
+            <Film className="relative z-10 w-3.5 h-3.5 shrink-0" />
+            <span className="relative z-10 tabular-nums truncate">
+              รายตอน ({sortedEpisodesCount.toLocaleString()})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('SERIES_SHELF')}
+            className={`relative inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer whitespace-nowrap min-w-0 ${
+              archiveTab === 'SERIES_SHELF'
+                ? 'text-[#224A2D]'
+                : 'text-[#5C544C] hover:text-[#2D2926]'
+            }`}
+          >
+            {archiveTab === 'SERIES_SHELF' && (
+              <motion.span
+                layoutId="archiveHeaderTabPill"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="absolute inset-0 rounded-lg bg-[#E6F2E6] border border-[#9EC49C] shadow-2xs"
+              />
+            )}
+            <Layers className="relative z-10 w-3.5 h-3.5 shrink-0" />
+            <span className="relative z-10 tabular-nums truncate">
+              ชั้นวาง ({categoryRanking.length})
+            </span>
+          </button>
         </div>
 
-        {/* Right Controls: Prominent Mode Switcher + Unified Manage Dropdown (Desktop) */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 w-full lg:w-auto relative">
-          {/* Dual View Mode Switcher: รายตอน vs ชั้นวาง */}
-          <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-[#F5EFE6] border border-[#E2D6C5] rounded-xl shadow-2xs w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => onTabChange('EPISODES')}
-              className={`inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
-                archiveTab === 'EPISODES'
-                  ? 'bg-[#E6F2E6] text-[#224A2D] border-[#9EC49C] shadow-2xs'
-                  : 'border-transparent text-[#5C544C] hover:text-[#2D2926] hover:bg-white/60'
-              }`}
+        {/* Right: Manage Dropdown Trigger */}
+        <div className="shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer whitespace-nowrap shadow-2xs ${
+              isMenuOpen
+                ? 'bg-[#F3E6CE] text-[#5C3A0E] border-[#D4B483]'
+                : 'bg-[#FAF3E6] hover:bg-[#F3E6CE] text-[#6B4616] border-[#DFC69E]'
+            }`}
+            title="เมนูจัดการคลังคลิป"
+          >
+            <span>จัดการคลัง</span>
+            {templateNeedsUpdateCount > 0 && (
+              <span className="font-mono text-[11px] font-extrabold text-[#8A4A18] tabular-nums">
+                ({templateNeedsUpdateCount})
+              </span>
+            )}
+            <motion.span
+              animate={{ rotate: isMenuOpen ? 180 : 0 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.16 }}
+              className="inline-flex"
             >
-              <Film className="w-3.5 h-3.5 shrink-0" />
-              <span className="sm:hidden">
-                รายตอน ({sortedEpisodesCount.toLocaleString()})
-              </span>
-              <span className="hidden sm:inline">
-                มุมมองรายตอน ({sortedEpisodesCount.toLocaleString()})
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onTabChange('SERIES_SHELF')}
-              className={`inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
-                archiveTab === 'SERIES_SHELF'
-                  ? 'bg-[#E6F2E6] text-[#224A2D] border-[#9EC49C] shadow-2xs'
-                  : 'border-transparent text-[#5C544C] hover:text-[#2D2926] hover:bg-white/60'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5 shrink-0" />
-              <span className="sm:hidden">ชั้นวาง ({categoryRanking.length})</span>
-              <span className="hidden sm:inline">
-                ชั้นวางรายการ 5 อันดับ ({categoryRanking.length})
-              </span>
-            </button>
-          </div>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </motion.span>
+          </button>
+        </div>
 
-          {/* Desktop Unified Manage Dropdown Trigger */}
-          <div className="hidden sm:block shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
-                isMobileMenuOpen
-                  ? 'bg-[#F3E6CE] text-[#5C3A0E] border-[#D4B483]'
-                  : 'bg-[#FAF3E6] hover:bg-[#F3E6CE] text-[#6B4616] border-[#DFC69E]'
-              }`}
-              title="เปิดเมนูเครื่องมือจัดการคลังคลิปหลัก"
-            >
-              <span>จัดการคลัง</span>
-              {templateNeedsUpdateCount > 0 && (
-                <span className="font-mono text-[11px] font-extrabold text-[#8A4A18] tabular-nums">
-                  ({templateNeedsUpdateCount})
-                </span>
-              )}
-              <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform ${
-                  isMobileMenuOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Shared Dropdown Menu (Mobile & Desktop) */}
-          {isMobileMenuOpen && (
+        {/* Shared Dropdown Menu */}
+        <AnimatePresence>
+          {isMenuOpen && (
             <>
-              <div
+              <motion.div
+                key="manage-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.12 }}
                 className="fixed inset-0 z-30"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={() => setIsMenuOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-1.5 w-64 z-40 bg-[#FFFDF9] border border-[#DFC69E] rounded-2xl shadow-xl p-1.5 space-y-1">
+              <motion.div
+                key="manage-menu"
+                initial={
+                  prefersReducedMotion
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: -6, scale: 0.97 }
+                }
+                animate={
+                  prefersReducedMotion
+                    ? { opacity: 1 }
+                    : { opacity: 1, y: 0, scale: 1 }
+                }
+                exit={
+                  prefersReducedMotion
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: -4, scale: 0.97 }
+                }
+                transition={{
+                  duration: prefersReducedMotion ? 0.08 : 0.16,
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+                className="absolute right-0 top-full mt-1.5 w-60 z-40 bg-[#FFFDF9] border border-[#DFC69E] rounded-2xl shadow-xl p-1.5 space-y-1 origin-top-right"
+              >
                 {onOpenManageCategories && (
                   <button
                     type="button"
                     onClick={() => {
-                      setIsMobileMenuOpen(false);
+                      setIsMenuOpen(false);
                       onOpenManageCategories();
                     }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-[#6B4616] hover:bg-[#FAF3E6] text-left cursor-pointer transition-colors"
@@ -180,7 +180,7 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setIsMobileMenuOpen(false);
+                      setIsMenuOpen(false);
                       onOpenTemplateStandardizer();
                     }}
                     className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#7A3F17] hover:bg-[#FBF0E4] text-left cursor-pointer transition-colors"
@@ -201,29 +201,28 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setIsMobileMenuOpen(false);
+                      setIsMenuOpen(false);
                       onOpenSupabaseSync();
                     }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-[#1C4824] hover:bg-[#EEF5EE] text-left cursor-pointer transition-colors"
                   >
                     <Share2 className="w-4 h-4 text-[#2E7D32] shrink-0" />
-                    <span>เพิ่มคลังคลิปสู่ Kontent OS</span>
+                    <span>ซิงก์สู่ Kontent OS</span>
                   </button>
                 )}
-              </div>
+              </motion.div>
             </>
           )}
-        </div>
+        </AnimatePresence>
       </div>
 
-      {/* Slim 4 Pastel Earth-Tone KPI Strip */}
+      {/* Slim 4 KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        {/* Card 1: Total Episodes & Total Distinct 5 อันดับ Series */}
         <button
           type="button"
           onClick={() => onCategoryFilterChange('ALL')}
-          title="จำนวนคลิปหลักและจำนวนรายการ 5 อันดับทั้งหมดในระบบ (คลิกเพื่อแสดงทุกรายการ)"
-          className={`text-left px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border transition-all cursor-pointer ${
+          title="แสดงทุกรายการ"
+          className={`text-left px-3 py-2 rounded-xl border transition-colors cursor-pointer ${
             categoryFilter === 'ALL'
               ? 'bg-[#FAF3E6] text-[#3D3327] border-[#DEC49A] ring-1 ring-[#E8D4B4] shadow-2xs'
               : 'bg-[#FAF7F2] hover:bg-[#FAF3E6]/70 border-[#E6DDD0] text-[#2D2926]'
@@ -231,10 +230,10 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
         >
           <div className="text-[11px] font-bold text-[#785324] flex items-center gap-1 truncate">
             <Package className="w-3.5 h-3.5 text-[#8A5A22] shrink-0" />
-            <span className="truncate">คลังคลิปทั้งหมด</span>
+            <span className="truncate">ทั้งหมด</span>
           </div>
           <div className="mt-0.5 flex items-baseline justify-between gap-1 flex-wrap">
-            <span className="text-base sm:text-xl font-mono font-extrabold tabular-nums text-[#2D2926]">
+            <span className="text-base sm:text-lg font-mono font-extrabold tabular-nums text-[#2D2926]">
               {overviewMetrics.totalEpisodes.toLocaleString()}
               <span className="text-[11px] font-sans font-bold text-[#787066] ml-1">
                 คลิป
@@ -246,17 +245,16 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
           </div>
         </button>
 
-        {/* Card 2: Footage Utilization Rate */}
         <div
-          title="สัดส่วนฟุตเทจในคลังที่ถูกนำมาผลิตคลิปหลักแล้วอย่างน้อย 1 ครั้ง"
-          className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-[#C6DEC5] bg-[#EFF6EE] text-[#2D2926] cursor-default"
+          title="สัดส่วนฟุตเทจในคลังที่ถูกใช้ผลิตแล้ว"
+          className="px-3 py-2 rounded-xl border border-[#C6DEC5] bg-[#EFF6EE] text-[#2D2926] cursor-default"
         >
           <div className="text-[11px] font-bold text-[#285333] flex items-center gap-1 truncate">
             <Repeat className="w-3.5 h-3.5 text-[#386B46] shrink-0" />
-            <span className="truncate">อัตราใช้ฟุตเทจ</span>
+            <span className="truncate">ใช้ฟุตเทจแล้ว</span>
           </div>
           <div className="mt-0.5 flex items-baseline justify-between gap-1 flex-wrap">
-            <span className="text-base sm:text-xl font-mono font-extrabold tabular-nums text-[#244B2F]">
+            <span className="text-base sm:text-lg font-mono font-extrabold tabular-nums text-[#244B2F]">
               {overviewMetrics.utilizationRate}%
             </span>
             <span className="text-[11px] font-mono tabular-nums text-[#2F5E3B]">
@@ -265,7 +263,6 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Most Produced 5 อันดับ Series */}
         {overviewMetrics.topCategory && (
           <button
             type="button"
@@ -276,8 +273,8 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
                   : overviewMetrics.topCategory!.seriesKey
               )
             }
-            title={`รายการที่มีการผลิตคลิปหลักมากที่สุดในคลัง: ${overviewMetrics.topCategory.fullSeriesTitle} (คลิกเพื่อกรอง)`}
-            className={`text-left px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border transition-all cursor-pointer ${
+            title={`กรอง: ${overviewMetrics.topCategory.fullSeriesTitle}`}
+            className={`text-left px-3 py-2 rounded-xl border transition-colors cursor-pointer ${
               categoryFilter === overviewMetrics.topCategory.seriesKey
                 ? 'bg-[#E5F1F6] text-[#1E465C] border-[#9EC6D8] ring-1 ring-[#B8D7E6] shadow-2xs'
                 : 'bg-[#EFF6F9] hover:bg-[#E5F1F6] border-[#C9E0EB] text-[#2D2926]'
@@ -289,7 +286,7 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
                 <span className="truncate">ผลิตสูงสุด</span>
               </span>
               <span className="text-[11px] font-mono font-extrabold tabular-nums text-[#23546E] shrink-0">
-                {overviewMetrics.topCategory.episodeCount} คลิป
+                {overviewMetrics.topCategory.episodeCount}
               </span>
             </div>
             <div className="mt-0.5 text-xs sm:text-sm font-extrabold text-[#2D2926] truncate">
@@ -298,7 +295,6 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
           </button>
         )}
 
-        {/* Card 4: Least Produced 5 อันดับ Series */}
         {overviewMetrics.leastCategory && (
           <button
             type="button"
@@ -309,8 +305,8 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
                   : overviewMetrics.leastCategory!.seriesKey
               )
             }
-            title={`รายการที่ผลิตน้อยที่สุด: ${overviewMetrics.leastCategory.fullSeriesTitle}`}
-            className={`text-left px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border transition-all cursor-pointer ${
+            title={`กรอง: ${overviewMetrics.leastCategory.fullSeriesTitle}`}
+            className={`text-left px-3 py-2 rounded-xl border transition-colors cursor-pointer ${
               categoryFilter === overviewMetrics.leastCategory.seriesKey
                 ? 'bg-[#FBF0DC] text-[#664214] border-[#DEC190] ring-1 ring-[#EAD3AC] shadow-2xs'
                 : 'bg-[#FDF6EA] hover:bg-[#FBF0DC] border-[#EAD9BC] text-[#2D2926]'
@@ -322,7 +318,7 @@ export const ArchiveOverviewHeader: React.FC<ArchiveOverviewHeaderProps> = ({
                 <span className="truncate">ผลิตน้อยสุด</span>
               </span>
               <span className="text-[11px] font-mono font-extrabold tabular-nums text-[#785324] shrink-0">
-                {overviewMetrics.leastCategory.episodeCount} คลิป
+                {overviewMetrics.leastCategory.episodeCount}
               </span>
             </div>
             <div className="mt-0.5 text-xs sm:text-sm font-extrabold text-[#2D2926] truncate">

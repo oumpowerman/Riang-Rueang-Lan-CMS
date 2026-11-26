@@ -634,6 +634,8 @@ export const useFootageVault = () => {
         const isNew = ft.cooldownStatus === 'NEW_UNTOUCHED';
         const belongsToAllNewCat = ft.tags.some((tid) => allNew5CategoryIds.has(tid));
         if (!isNew || !belongsToAllNewCat) return false;
+      } else if (actionFilter === 'HIGH_VELOCITY_WARNING') {
+        if (ft.cooldownStatus !== 'HIGH_VELOCITY_WARNING') return false;
       } else if (actionFilter === 'RECIPE_SMART_MIX') {
         if (isFootageInStaging(ft.tags)) return false;
         const isUsable =

@@ -7,6 +7,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
+import { findDuplicateTagConflict } from '../../utils/tagDeduplicator';
 import { Modal } from '../ui/Modal';
 import { Tab1StatusRulesConfig } from './tabs/Tab1StatusRulesConfig';
 import {
@@ -65,9 +66,12 @@ export const CategoryTagManagerModal: React.FC = () => {
     e.preventDefault();
     const trimmedName = formState.name.trim();
     if (!trimmedName) return null;
+    if (findDuplicateTagConflict(trimmedName, tags, formState.editingTagId)) {
+      return null;
+    }
 
     if (formState.editingTagId) {
-      updateTag(formState.editingTagId, {
+      const res = updateTag(formState.editingTagId, {
         name: trimmedName,
         groupType: formState.groupType,
         color: formState.color,
@@ -76,6 +80,7 @@ export const CategoryTagManagerModal: React.FC = () => {
         parentId: formState.tier === 2 ? formState.parentId || null : null,
         entityType: formState.tier === 2 ? formState.entityType : undefined,
       });
+      if (!res.ok) return null;
     } else {
       createTag(
         trimmedName,

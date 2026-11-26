@@ -512,8 +512,8 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => onAssignFootageToRank(nextEmptyRank, ft.id)}
-                        className="px-2 py-1 rounded-lg text-[11px] font-bold bg-[#edf4ed] text-[#244b2f] border border-[#bad8b9] hover:bg-[#3b6845] hover:text-white transition-colors cursor-pointer flex items-center gap-0.5 mr-1"
-                        title={`ใส่ในอันดับที่ ${nextEmptyRank} ที่ยังว่าง`}
+                        className="px-2 py-1 rounded-lg text-[11px] font-bold bg-[#edf4ed] text-[#244b2f] border border-[#bad8b9] hover:bg-[#3b6845] hover:text-white cursor-pointer flex items-center gap-0.5 mr-1"
+                        title={`ใส่ในอันดับที่ ${nextEmptyRank}`}
                       >
                         <Plus className="w-3 h-3" />
                         <span>ลงอันดับ {nextEmptyRank}</span>
@@ -536,7 +536,7 @@ export const CandidateFootagePool: React.FC<CandidateFootagePoolProps> = ({
                             whileHover={{ scale: 1.08 }}
                             whileTap={{ scale: 0.92 }}
                             onClick={() => onAssignFootageToRank(rankNum, ft.id)}
-                            className={`w-6 h-6 rounded-lg text-xs font-mono font-extrabold transition-colors cursor-pointer ${
+                            className={`w-6 h-6 rounded-lg text-xs font-mono font-extrabold cursor-pointer ${
                               isAssignedHere
                                 ? 'bg-[#3b6845] text-white shadow-xs'
                                 : slotHasOtherClip

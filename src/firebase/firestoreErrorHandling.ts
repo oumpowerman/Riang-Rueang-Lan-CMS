@@ -65,16 +65,34 @@ export function markFirestoreQuotaExhausted(exhausted = true): void {
 }
 
 /**
+ * Checks whether an error is a transient network/offline state (`code=unavailable`).
+ */
+export function isTransientOfflineError(err: unknown): boolean {
+  if (!err) return false;
+  const anyErr = err as { code?: string; message?: string };
+  const code = anyErr.code || '';
+  const message = anyErr.message || String(err);
+  return (
+    code === 'unavailable' ||
+    message.includes('[code=unavailable]') ||
+    message.includes('Could not reach Cloud Firestore backend') ||
+    message.includes('client is offline')
+  );
+}
+
+/**
  * Wraps snapshot listener error callbacks so that Firebase's internal
  * "Uncaught Error in snapshot listener" is never thrown globally.
  */
 export function createSafeSnapshotErrorHandler(
   listenerName: string,
   customOnError?: (err: Error) => void
-): (err: any) => void {
-  return (err: any) => {
+): (err: unknown) => void {
+  return (err: unknown) => {
     const isQuota = isQuotaExhaustedError(err);
-    const msg = err?.message || String(err || '');
+    const isOffline = isTransientOfflineError(err);
+    const anyErr = err as { message?: string };
+    const msg = anyErr?.message || String(err || '');
 
     if (isQuota) {
       markFirestoreQuotaExhausted(true);
@@ -84,7 +102,7 @@ export function createSafeSnapshotErrorHandler(
           `[Firestore] Cloud free daily read quota reached (50,000 units). Operating seamlessly in local IndexedDB mode.`
         );
       }
-    } else {
+    } else if (!isOffline) {
       console.warn(`[Firestore] Snapshot warning in '${listenerName}':`, err);
     }
 
@@ -99,7 +117,7 @@ export function createSafeSnapshotErrorHandler(
   };
 }
 
-// Global browser window event listeners to suppress unhandled Firestore quota errors
+// Global browser window event listeners to suppress unhandled Firestore quota / transient offline errors
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
     const msg = event?.message || '';
@@ -112,6 +130,13 @@ if (typeof window !== 'undefined') {
       (msg.includes('@firebase/firestore') && msg.includes('Quota'))
     ) {
       markFirestoreQuotaExhausted(true);
+      event.preventDefault();
+      event.stopPropagation();
+    } else if (
+      msg.includes('Could not reach Cloud Firestore backend') ||
+      msg.includes('[code=unavailable]') ||
+      errStr.includes('[code=unavailable]')
+    ) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -127,6 +152,12 @@ if (typeof window !== 'undefined') {
       (msg.includes('@firebase/firestore') && msg.includes('Quota'))
     ) {
       markFirestoreQuotaExhausted(true);
+      event.preventDefault();
+    } else if (
+      msg.includes('Could not reach Cloud Firestore backend') ||
+      msg.includes('[code=unavailable]') ||
+      msg.includes('client is offline')
+    ) {
       event.preventDefault();
     }
   });

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -23,6 +24,7 @@ import {
   EntitySubtype,
   TagGroupType,
 } from '../../../types/tag.types';
+import { findDuplicateTagConflict } from '../../../utils/tagDeduplicator';
 import {
   COLOR_OPTIONS,
   ENTITY_SUBTYPE_OPTIONS,
@@ -77,7 +79,21 @@ export const Tab2CategoryForm: React.FC<Tab2CategoryFormProps> = ({
     : null;
   const activeColorConfig = getPastelColorConfig(formState.color);
 
+  const duplicateConflict = useMemo(
+    () =>
+      findDuplicateTagConflict(
+        formState.name,
+        allTags,
+        formState.editingTagId
+      ),
+    [formState.name, allTags, formState.editingTagId]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
+    if (duplicateConflict) {
+      e.preventDefault();
+      return;
+    }
     const savedName = onSaveTag(e);
     if (savedName) {
       setLastSavedName(savedName);
@@ -353,8 +369,23 @@ export const Tab2CategoryForm: React.FC<Tab2CategoryFormProps> = ({
                     ? 'เช่น 06 - ตำนานไวรัล, สัตว์โลกน่ารัก, รวมช็อตสตรีมเมอร์...'
                     : 'เช่น พี่แจ๊ส, เอก HRK, คอร์กี้, ปลาสวาย, เกมผี...'
                 }
-                className="w-full px-3.5 py-2.5 text-sm font-bold text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors"
+                aria-invalid={Boolean(duplicateConflict)}
+                className={`w-full px-3.5 py-2.5 text-sm font-bold rounded-xl focus:outline-none transition-colors border-2 ${
+                  duplicateConflict
+                    ? 'text-red-900 bg-red-50/70 border-red-400 focus:border-red-600'
+                    : 'text-slate-900 bg-white border-slate-200 focus:border-indigo-500'
+                }`}
               />
+              {duplicateConflict && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="mt-1.5 flex items-start gap-1.5 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-700"
+                >
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <span>{duplicateConflict.message}</span>
+                </div>
+              )}
             </div>
 
             <div>
@@ -514,9 +545,18 @@ export const Tab2CategoryForm: React.FC<Tab2CategoryFormProps> = ({
           <div className="space-y-2 pt-2">
             <motion.button
               type="submit"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
+              disabled={!formState.name.trim() || Boolean(duplicateConflict)}
+              whileHover={
+                !formState.name.trim() || Boolean(duplicateConflict)
+                  ? undefined
+                  : { scale: 1.01 }
+              }
+              whileTap={
+                !formState.name.trim() || Boolean(duplicateConflict)
+                  ? undefined
+                  : { scale: 0.98 }
+              }
+              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-45 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
             >
               {formState.editingTagId ? (
                 <>

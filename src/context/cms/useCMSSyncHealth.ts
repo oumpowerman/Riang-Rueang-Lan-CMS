@@ -13,6 +13,7 @@ import {
   subscribeOutboxState,
 } from '../../firebase/firestoreService';
 import { cmsRepository } from '../../services/cmsRepository';
+import { syncHistoryService } from '../../services/syncHistoryService';
 
 export type SyncHealthStatus =
   | 'synced'
@@ -227,6 +228,39 @@ export function useCMSSyncHealth({
     }),
     [settledDrift, rawDrift, localFootageCount, localEpisodesCount, localSourcesCount]
   );
+
+  // 3.6 Log detected conflict or mark resolved in Sync History
+  useEffect(() => {
+    if (drift.hasDrift) {
+      syncHistoryService.recordConflict({
+        localCounts: {
+          footage: localFootageCount,
+          episodes: localEpisodesCount,
+          sources: localSourcesCount,
+        },
+        cloudCounts: {
+          footage: rawDrift.cloudFootage,
+          episodes: rawDrift.cloudEpisodes,
+          sources: rawDrift.cloudSources,
+        },
+        diffSummary: `ตรวจพบยอดไม่ตรงกับ Firestore (${rawDrift.totalAbsDiff} รายการ)`,
+      });
+    } else if (!rawDrift.hasRawMismatch && isIdbHydrated && !isManualSyncing) {
+      syncHistoryService.resolveActiveConflicts('ข้อมูลในเครื่องและ Firestore ตรงกัน 100%');
+    }
+  }, [
+    drift.hasDrift,
+    rawDrift.hasRawMismatch,
+    rawDrift.totalAbsDiff,
+    rawDrift.cloudFootage,
+    rawDrift.cloudEpisodes,
+    rawDrift.cloudSources,
+    localFootageCount,
+    localEpisodesCount,
+    localSourcesCount,
+    isIdbHydrated,
+    isManualSyncing,
+  ]);
 
   const status: SyncHealthStatus = useMemo(() => {
     if (isManualSyncing || outbox.isFlushing || isSeedingToCloud || isClearingClips) {

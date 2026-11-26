@@ -71,9 +71,6 @@ export function useMasterArchiveFilter({
   const [sortBy, setSortBy] = useState<SortOption>('DATE_DESC');
   const [viewMode, setViewMode] = useState<ViewMode>('CARDS');
 
-  // Filter for non-standard / problem episodes
-  const [issueFilterOnly, setIssueFilterOnly] = useState(false);
-
   // 3-Tier Footage Tag Filter for Master Episodes
   const [selectedFootageTagIds, setSelectedFootageTagIds] = useState<string[]>(
     []
@@ -101,7 +98,6 @@ export function useMasterArchiveFilter({
     productionTargetFilter,
     selectedGroupId,
     completenessFilter,
-    issueFilterOnly,
     selectedFootageTagIds,
     footageTagMatchMode,
     sortBy,
@@ -139,30 +135,20 @@ export function useMasterArchiveFilter({
     [debouncedSearchQuery]
   );
 
-  // Series displayed in Series Shelf tab (Active Series + optional 0-EP Series)
+  // Series displayed in Series Shelf tab (Search-only across Active + optional 0-EP Series)
   const shelfSeriesItems = useMemo(() => {
     const baseList = showUnproducedSeries
       ? [...categoryRanking, ...unproducedSeriesRanking]
       : categoryRanking;
-    const byGroup =
-      selectedGroupId === 'ALL'
-        ? baseList
-        : baseList.filter((item) => item.archiveCategoryId === selectedGroupId);
 
-    if (queryTokens.length === 0) return byGroup;
-    return byGroup.filter((item) => {
+    if (queryTokens.length === 0) return baseList;
+    return baseList.filter((item) => {
       const compactSeriesText = normalizeCompactSearchText(
         `${item.seriesName} ${item.fullSeriesTitle} ${item.matchedTagNames.join(' ')}`
       );
       return matchesSmartSearchTokens(compactSeriesText, queryTokens);
     });
-  }, [
-    showUnproducedSeries,
-    categoryRanking,
-    unproducedSeriesRanking,
-    selectedGroupId,
-    queryTokens,
-  ]);
+  }, [showUnproducedSeries, categoryRanking, unproducedSeriesRanking, queryTokens]);
 
   const availableSubcategories = useMemo(() => {
     const allowedMainIds = new Set(
@@ -189,12 +175,6 @@ export function useMasterArchiveFilter({
     const hasQuery = queryTokens.length > 0;
 
     return episodes.filter((ep: Episode) => {
-      // 0. Issue Filter (Non-standard / Incomplete / Missing Title)
-      if (issueFilterOnly) {
-        const val = validateEpisodeStandard(ep);
-        if (val.isStandard) return false;
-      }
-
       const epSeriesKey = episodeSeriesKeyMap[ep.id];
 
       // 1. Filter by Master Archive Category
@@ -250,7 +230,6 @@ export function useMasterArchiveFilter({
     });
   }, [
     episodes,
-    issueFilterOnly,
     episodeSeriesKeyMap,
     selectedGroupId,
     seriesKeyToArchiveCatMap,
@@ -270,7 +249,6 @@ export function useMasterArchiveFilter({
     subcategoryFilter !== 'ALL' ||
     productionTargetFilter !== 'ALL' ||
     selectedGroupId !== 'ALL' ||
-    issueFilterOnly ||
     selectedFootageTagIds.length > 0;
 
   // Step 2: Compute live counts per completeness state from baseFilteredEpisodes
@@ -283,9 +261,11 @@ export function useMasterArchiveFilter({
       COMPLETE: 0,
       INCOMPLETE: 0,
       INCOMPLETE_FOOTAGE: 0,
+      NEEDS_STANDARD_FIX: 0,
     };
     for (let i = 0; i < baseFilteredEpisodes.length; i++) {
-      const comp = evaluateEpisodeCompleteness(baseFilteredEpisodes[i]);
+      const ep = baseFilteredEpisodes[i];
+      const comp = evaluateEpisodeCompleteness(ep);
       if (comp.isComplete) {
         counts.COMPLETE += 1;
       } else {
@@ -293,6 +273,9 @@ export function useMasterArchiveFilter({
       }
       if (!comp.hasFullFiveSlots) {
         counts.INCOMPLETE_FOOTAGE += 1;
+      }
+      if (!validateEpisodeStandard(ep).isStandard) {
+        counts.NEEDS_STANDARD_FIX += 1;
       }
     }
 
@@ -328,6 +311,9 @@ export function useMasterArchiveFilter({
       completenessFilter === 'ALL'
         ? [...baseFilteredEpisodes]
         : baseFilteredEpisodes.filter((ep) => {
+            if (completenessFilter === 'NEEDS_STANDARD_FIX') {
+              return !validateEpisodeStandard(ep).isStandard;
+            }
             const comp = evaluateEpisodeCompleteness(ep);
             if (completenessFilter === 'COMPLETE') return comp.isComplete;
             if (completenessFilter === 'INCOMPLETE_FOOTAGE') {
@@ -391,7 +377,6 @@ export function useMasterArchiveFilter({
     productionTargetFilter !== 'ALL' ||
     selectedGroupId !== 'ALL' ||
     completenessFilter !== 'ALL' ||
-    issueFilterOnly ||
     selectedFootageTagIds.length > 0;
 
   const resetFilters = () => {
@@ -401,7 +386,6 @@ export function useMasterArchiveFilter({
     setProductionTargetFilter('ALL');
     setSelectedGroupId('ALL');
     setCompletenessFilter('ALL');
-    setIssueFilterOnly(false);
     setSelectedFootageTagIds([]);
   };
 
@@ -433,8 +417,6 @@ export function useMasterArchiveFilter({
     completenessFilter,
     setCompletenessFilter,
     completenessCounts,
-    issueFilterOnly,
-    setIssueFilterOnly,
     auditSummary,
     selectedFootageTagIds,
     handleToggleFootageTag,

@@ -1,18 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ChevronDown,
-  CornerDownRight,
-  Edit2,
-  Folder,
   FolderPlus,
-  Inbox,
   Info,
   Maximize2,
   Minimize2,
-  Plus,
   Search,
-  Trash2,
   X,
 } from 'lucide-react';
 import { CategoryMatrixStat } from '../../../context/CMSContext';
@@ -24,93 +17,31 @@ import {
   DEFAULT_UNCLASSIFIED_SUBCATEGORY,
   EntitySubtype,
 } from '../../../types/tag.types';
+import {
+  findDuplicateTagConflict,
+  matchesTagSearchQuery,
+  TagDuplicateConflict,
+} from '../../../utils/tagDeduplicator';
+import {
+  TIER_THEME_CONFIGS,
+  type TierThemeConfig,
+} from '../constants/tierThemeConfigs';
 import { TierCompactRailView } from './TierCompactRailView';
 import { TierInlineTagForm } from './TierInlineTagForm';
-import { TierSubCategoryTagCard } from './TierSubCategoryTagCard';
+import { TierSubCategorySection } from './TierSubCategorySection';
 
-export interface TierThemeConfig {
-  tier: CategoryTier;
-  badgeText: string;
-  title: string;
-  subtitle: string;
-  headerBg: string;
-  headerBorder: string;
-  badgeBg: string;
-  badgeTextCls: string;
-  accentText: string;
-  accentBtnBg: string;
-  accentBtnHover: string;
-  subHeaderBg: string;
-  subHeaderBorder: string;
-  defaultColor: string;
-  defaultEntity: EntitySubtype;
-  examplesPlaceholder: string;
-}
-
-export const TIER_THEME_CONFIGS: Record<CategoryTier, TierThemeConfig> = {
-  1: {
-    tier: 1,
-    badgeText: 'TIER 1',
-    title: 'มิติปลายทาง / หมวดกว้าง',
-    subtitle: 'บอกว่าคลิปนี้อยู่วงการไหน เช่น #คนมีชื่อเสียง #วิถีชาวบ้าน #สัตว์โลก #อาชีพ',
-    headerBg: 'bg-[#EEF5FB]',
-    headerBorder: 'border-[#C5DCEF]',
-    badgeBg: 'bg-[#2C5378]',
-    badgeTextCls: 'text-white',
-    accentText: 'text-[#184366]',
-    accentBtnBg: 'bg-[#2C5378]',
-    accentBtnHover: 'hover:bg-[#1E3D59]',
-    subHeaderBg: 'bg-[#F4F9FD]',
-    subHeaderBorder: 'border-[#D5E6F5]',
-    defaultColor: 'blue',
-    defaultEntity: 'TOPIC',
-    examplesPlaceholder: 'เช่น คนมีชื่อเสียง, วิถีชาวบ้าน, สัตว์โลก, อาชีพ...',
-  },
-  2: {
-    tier: 2,
-    badgeText: 'TIER 2',
-    title: 'บริบท / สไตล์คลิป',
-    subtitle: 'เกิดเหตุการณ์อะไรขึ้น หรือคลิปเป็นทรงไหน เช่น #พูดผิด #ช็อตฟีล #ไลฟ์สด #สัมภาษณ์ข่าว',
-    headerBg: 'bg-[#FEF6E8]',
-    headerBorder: 'border-[#E8CFA6]',
-    badgeBg: 'bg-[#8A5A22]',
-    badgeTextCls: 'text-white',
-    accentText: 'text-[#6B4415]',
-    accentBtnBg: 'bg-[#8A5A22]',
-    accentBtnHover: 'hover:bg-[#6E4518]',
-    subHeaderBg: 'bg-[#FFFDF9]',
-    subHeaderBorder: 'border-[#EFE0C6]',
-    defaultColor: 'amber',
-    defaultEntity: 'ACTION',
-    examplesPlaceholder: 'เช่น พูดผิด, ช็อตฟีล, ไลฟ์สด, สัมภาษณ์ข่าว, กล้องวงจรปิด...',
-  },
-  3: {
-    tier: 3,
-    badgeText: 'TIER 3',
-    title: 'บุคคลเจาะจง / รายการ',
-    subtitle: 'ระบุว่าใคร หรือรายการอะไร เช่น #พี่แจ๊ส #พี่เสก #เซียนหรั่ง #โหนกระแส',
-    headerBg: 'bg-[#EDF6F0]',
-    headerBorder: 'border-[#BFE0C8]',
-    badgeBg: 'bg-[#2D623C]',
-    badgeTextCls: 'text-white',
-    accentText: 'text-[#1D4D2B]',
-    accentBtnBg: 'bg-[#2D623C]',
-    accentBtnHover: 'hover:bg-[#214B2D]',
-    subHeaderBg: 'bg-[#F6FBF7]',
-    subHeaderBorder: 'border-[#CEE8D5]',
-    defaultColor: 'emerald',
-    defaultEntity: 'PERSON',
-    examplesPlaceholder: 'เช่น พี่แจ๊ส, พี่เสก, เซียนหรั่ง, โหนกระแส...',
-  },
-};
+export { TIER_THEME_CONFIGS, type TierThemeConfig };
 
 export interface IndependentTierColumnProps {
   tier: CategoryTier;
   subCategories: string[];
   tagsInTier: CategoryTag[];
+  allTags: CategoryTag[];
   categoryMatrix: CategoryMatrixStat[];
+  globalSearchQuery?: string;
   searchQuery: string;
   onSearchQueryChange: (q: string) => void;
+  onClearAllSearch?: () => void;
   selectedTagIds: string[];
   draggingTagIds: string[];
   isBatchMovingTags: boolean;
@@ -129,8 +60,9 @@ export interface IndependentTierColumnProps {
   inlineEditingTagId: string | null;
   inlineEditingName: string;
   setInlineEditingName: (name: string) => void;
+  inlineDuplicateConflict?: TagDuplicateConflict | null;
   onStartInlineRename: (tag: CategoryTag, e?: React.MouseEvent) => void;
-  onCommitInlineRename: (tagId: string) => void;
+  onCommitInlineRename: (tagId: string, trigger?: 'enter' | 'blur') => void;
   onCancelInlineRename: () => void;
   onCreateTagInSubCategory: (
     tier: CategoryTier,
@@ -167,9 +99,12 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
   tier,
   subCategories,
   tagsInTier,
+  allTags,
   categoryMatrix,
+  globalSearchQuery = '',
   searchQuery,
   onSearchQueryChange,
+  onClearAllSearch,
   selectedTagIds,
   draggingTagIds,
   isBatchMovingTags,
@@ -181,6 +116,7 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
   inlineEditingTagId,
   inlineEditingName,
   setInlineEditingName,
+  inlineDuplicateConflict = null,
   onStartInlineRename,
   onCommitInlineRename,
   onCancelInlineRename,
@@ -225,24 +161,17 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
     [tagsInTier]
   );
 
+  const isSearchActive =
+    globalSearchQuery.trim().length > 0 || searchQuery.trim().length > 0;
+
   const filteredTags = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return realTagsInTier;
-    // Primary search: Match tag name, subCategory, or tag ID directly
-    const directMatches = realTagsInTier.filter(
+    if (!isSearchActive) return realTagsInTier;
+    return realTagsInTier.filter(
       (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q) ||
-        (t.subCategory || '').toLowerCase().includes(q)
+        matchesTagSearchQuery(t, globalSearchQuery) &&
+        matchesTagSearchQuery(t, searchQuery)
     );
-    if (directMatches.length > 0) {
-      return directMatches;
-    }
-    // Fallback: If no direct matches, search in tag description
-    return realTagsInTier.filter((t) =>
-      (t.description || '').toLowerCase().includes(q)
-    );
-  }, [realTagsInTier, searchQuery]);
+  }, [realTagsInTier, globalSearchQuery, searchQuery, isSearchActive]);
 
   // Group filtered tags by subCategory
   const groupedBySubCategory = useMemo(() => {
@@ -261,22 +190,24 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
 
     // Order subCategories: in Tier 1, always keep 'รอคัดแยก' at the very top
     const orderedKeys = Array.from(new Set([...subCategories, ...Object.keys(map)]));
-    if (tier === 1 && orderedKeys.includes(DEFAULT_UNCLASSIFIED_SUBCATEGORY)) {
-      const rest = orderedKeys.filter((k) => k !== DEFAULT_UNCLASSIFIED_SUBCATEGORY);
-      return [
-        {
-          subCategory: DEFAULT_UNCLASSIFIED_SUBCATEGORY,
-          tags: map[DEFAULT_UNCLASSIFIED_SUBCATEGORY] || [],
-        },
-        ...rest.map((k) => ({ subCategory: k, tags: map[k] || [] })),
-      ];
-    }
+    const ordered =
+      tier === 1 && orderedKeys.includes(DEFAULT_UNCLASSIFIED_SUBCATEGORY)
+        ? [
+            {
+              subCategory: DEFAULT_UNCLASSIFIED_SUBCATEGORY,
+              tags: map[DEFAULT_UNCLASSIFIED_SUBCATEGORY] || [],
+            },
+            ...orderedKeys
+              .filter((k) => k !== DEFAULT_UNCLASSIFIED_SUBCATEGORY)
+              .map((k) => ({ subCategory: k, tags: map[k] || [] })),
+          ]
+        : orderedKeys.map((k) => ({
+            subCategory: k,
+            tags: map[k] || [],
+          }));
 
-    return orderedKeys.map((k) => ({
-      subCategory: k,
-      tags: map[k] || [],
-    }));
-  }, [subCategories, filteredTags, tier]);
+    return isSearchActive ? ordered.filter((g) => g.tags.length > 0) : ordered;
+  }, [subCategories, filteredTags, tier, isSearchActive]);
 
   const visibleOrderIds = useMemo(
     () => filteredTags.map((t) => t.id),
@@ -345,10 +276,19 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
     setTagFormDesc(tag.description || '');
   };
 
+  const formDuplicateConflict = useMemo(
+    () =>
+      activeTagFormSubCat !== null
+        ? findDuplicateTagConflict(tagFormName, allTags, editingTagId)
+        : null,
+    [activeTagFormSubCat, tagFormName, allTags, editingTagId]
+  );
+
   const handleSubmitTagForm = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = tagFormName.trim().replace(/^#+/, '').trim();
     if (!cleanName) return;
+    if (findDuplicateTagConflict(cleanName, allTags, editingTagId)) return;
     const targetSub = (tagFormSubCat || activeTagFormSubCat || subCategories[0] || '').trim();
 
     if (editingTagId) {
@@ -437,7 +377,9 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
               {theme.title}
             </h3>
             <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/80 text-[#524538] border border-black/5 tabular-nums shrink-0">
-              {realTagsInTier.length} แท็ก
+              {isSearchActive
+                ? `${filteredTags.length}/${realTagsInTier.length} แท็ก`
+                : `${realTagsInTier.length} แท็ก`}
             </span>
             {/* Info toggle button for description with Framer Motion */}
             <button
@@ -576,6 +518,7 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
           setTagFormColor={setTagFormColor}
           tagFormEntity={tagFormEntity}
           setTagFormEntity={setTagFormEntity}
+          duplicateConflict={formDuplicateConflict}
           onSubmitTagForm={handleSubmitTagForm}
           onCloseTagForm={() => {
             setActiveTagFormSubCat(null);
@@ -586,247 +529,85 @@ export const IndependentTierColumn: React.FC<IndependentTierColumnProps> = ({
 
       {/* Sub-category Frames Body */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-3 space-y-3">
-        {groupedBySubCategory.map(({ subCategory, tags: subTags }) => {
-          const isUnclassified = subCategory === DEFAULT_UNCLASSIFIED_SUBCATEGORY;
-          const isCollapsed = Boolean(collapsedSubMap[subCategory]);
-          const isDropHover = dragOverSubCat === subCategory;
-          const subTagIds = subTags.map((t) => t.id);
-          const allSubSelected =
-            subTagIds.length > 0 &&
-            subTagIds.every((id) => selectedTagIds.includes(id));
-
-          return (
-            <div
-              key={subCategory}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.dataTransfer.dropEffect = 'move';
-                if (dragOverSubCat !== subCategory) setDragOverSubCat(subCategory);
-              }}
-              onDragLeave={(e) => {
-                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                if (dragOverSubCat === subCategory) setDragOverSubCat(null);
-              }}
-              onDrop={(e) => handleDropOnSubCategory(e, subCategory)}
-              className={`rounded-2xl border transition-all overflow-hidden ${
-                isDropHover
-                  ? 'bg-[#EEF5EE] border-2 border-[#3B6845] ring-2 ring-[#C5E2CA] shadow-sm'
-                  : isUnclassified
-                  ? 'bg-[#FFFDF8] border-[#E8D2AE] shadow-2xs'
-                  : 'bg-white border-[#E5DED4] shadow-2xs'
-              }`}
-            >
-              {/* Sub-category Frame Header */}
-              <div
-                className={`px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 ${
-                  isUnclassified
-                    ? 'bg-[#FEF6E6] border-[#E8D2AE]'
-                    : `${theme.subHeaderBg} ${theme.subHeaderBorder}`
-                }`}
-              >
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCollapsedSubMap((prev) => ({
-                        ...prev,
-                        [subCategory]: !prev[subCategory],
-                      }))
-                    }
-                    className="p-0.5 rounded hover:bg-black/5 text-[#524538] cursor-pointer shrink-0"
-                    title={isCollapsed ? 'กางหมวดย่อย' : 'พับหมวดย่อย'}
-                  >
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform ${
-                        isCollapsed ? '-rotate-90' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {isUnclassified ? (
-                    <Inbox className="w-3.5 h-3.5 text-[#A66B1F] shrink-0" />
-                  ) : (
-                    <Folder className="w-3.5 h-3.5 text-[#524538] shrink-0 opacity-70" />
-                  )}
-
-                  {renamingSubCat === subCategory ? (
-                    <input
-                      type="text"
-                      value={renamingSubCatValue}
-                      onChange={(e) => setRenamingSubCatValue(e.target.value)}
-                      onBlur={() => handleCommitSubCatRename(subCategory)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleCommitSubCatRename(subCategory);
-                        } else if (e.key === 'Escape') {
-                          setRenamingSubCat(null);
-                        }
-                      }}
-                      autoFocus
-                      className="px-2 py-0.5 text-xs font-bold bg-white border border-[#78593A] rounded text-[#3D332A] focus:outline-none"
-                    />
-                  ) : (
-                    <span
-                      onDoubleClick={() => {
-                        if (!isUnclassified) {
-                          setRenamingSubCat(subCategory);
-                          setRenamingSubCatValue(subCategory);
-                        }
-                      }}
-                      className={`text-xs font-extrabold truncate ${
-                        isUnclassified ? 'text-[#734811]' : theme.accentText
-                      }`}
-                      title={
-                        isUnclassified
-                          ? 'แท็กเดิมทั้งหมดถูกพักไว้ที่นี่ ลากหรือติ๊กเลือกเพื่อย้ายเข้า Tier 1, 2, 3 ได้เลย'
-                          : 'ดับเบิลคลิกเพื่อเปลี่ยนชื่อหมวดหมู่ย่อย'
-                      }
-                    >
-                      {subCategory}
-                    </span>
-                  )}
-
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-white text-[#524538] border border-black/10 tabular-nums shrink-0">
-                    {subTags.length}
-                  </span>
-                </div>
-
-                {/* Sub-category Right Actions */}
-                <div className="flex items-center gap-1 shrink-0">
-                  {selectedTagIds.length > 0 &&
-                    selectedTagIds.some((id) => !subTagIds.includes(id)) && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onExecuteBatchMove(selectedTagIds, {
-                          mode: 'MOVE_TO_TIER_SUBCATEGORY',
-                          targetTier: tier,
-                          targetSubCategory: subCategory,
-                        })
-                      }
-                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-[#3B6845] hover:bg-[#2C5235] text-white transition-colors cursor-pointer flex items-center gap-1"
-                      title={`ย้ายแท็กที่เลือก (${selectedTagIds.length} รายการ) เข้ามาไว้ในหมวด "${subCategory}"`}
-                    >
-                      <CornerDownRight className="w-3 h-3" />
-                      <span className="hidden sm:inline">ย้ายมาหมวดนี้ ({selectedTagIds.length})</span>
-                      <span className="sm:hidden">ย้ายมา ({selectedTagIds.length})</span>
-                    </button>
-                  )}
-
-                  {subTagIds.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => onToggleSelectAllVisible(subTagIds)}
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
-                        allSubSelected
-                          ? 'bg-[#EEF5EE] text-[#1C4824] border-[#BAD8BF]'
-                          : 'bg-white/90 hover:bg-white text-[#524538] border-black/10'
-                      }`}
-                    >
-                      <span className="hidden sm:inline">{allSubSelected ? '✓ เลือกทั้งหมวดแล้ว' : 'เลือกทั้งหมวด'}</span>
-                      <span className="sm:hidden">{allSubSelected ? '✓ เลือกแล้ว' : 'เลือกหมวด'}</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenCreateTagInSub(subCategory)}
-                    className="p-1 rounded-lg bg-white/90 hover:bg-white text-[#3D332A] border border-black/10 cursor-pointer"
-                    title={`เพิ่มแท็กในหมวด "${subCategory}"`}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-
-                  {!isUnclassified && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRenamingSubCat(subCategory);
-                          setRenamingSubCatValue(subCategory);
-                        }}
-                        className="p-1 rounded-lg bg-white/90 hover:bg-white text-[#524538] border border-black/10 cursor-pointer"
-                        title="เปลี่ยนชื่อหมวดย่อย"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteSubCategory(tier, subCategory)}
-                        className="p-1 rounded-lg bg-white/90 hover:bg-[#FDF2F0] text-[#8A3C31] border border-black/10 cursor-pointer"
-                        title="ลบหมวดย่อยนี้ (แท็กข้างในจะถูกย้ายกลับหมวดเริ่มต้น)"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Helper banner for 'รอคัดแยก' */}
-              {isUnclassified && !isCollapsed && subTags.length > 0 && (
-                <div className="px-3 py-1.5 bg-[#FFF8EB] border-b border-[#EFE0C2] text-[11px] text-[#7D531B] flex items-center justify-between gap-2">
-                  <span>
-                    💡 แท็กเดิมทั้งหมด ({subTags.length}) รวมไว้ที่นี่ — เลือกแล้วกดย้ายเข้าหมวดย่อยของ Tier 1, 2, 3 ได้ทันที
-                  </span>
-                </div>
-              )}
-
-              {/* Tags Grid inside Sub-category */}
-              {!isCollapsed && (
-                <div className="p-2.5">
-                  {subTags.length === 0 ? (
-                    <div className="py-4 px-3 rounded-xl border border-dashed border-[#E2D5C4] bg-[#FAF8F5]/60 text-center space-y-1">
-                      <p className="text-[11px] text-[#8C7B6C]">
-                        ยังไม่มีแท็กในหมวด &ldquo;{subCategory}&rdquo; — ลากแท็กมาวางที่นี่ หรือกด{' '}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenCreateTagInSub(subCategory)}
-                          className="font-bold text-[#3D332A] underline cursor-pointer"
-                        >
-                          + เพิ่มแท็กใหม่
-                        </button>
-                      </p>
-                    </div>
-                  ) : (
-                    <div
-                      className={
-                        isExpandedGrid
-                          ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5'
-                          : 'grid grid-cols-1 gap-1.5'
-                      }
-                    >
-                      {subTags.map((tag) => (
-                        <TierSubCategoryTagCard
-                          key={tag.id}
-                          tag={tag}
-                          isSelected={selectedTagIds.includes(tag.id)}
-                          isDragging={draggingTagIds.includes(tag.id)}
-                          isInlineEditing={inlineEditingTagId === tag.id}
-                          isBatchMovingTags={isBatchMovingTags}
-                          inlineEditingName={inlineEditingName}
-                          setInlineEditingName={setInlineEditingName}
-                          stat={statByTagId[tag.id]}
-                          visibleOrderIds={visibleOrderIds}
-                          onStartDragTag={onStartDragTag}
-                          onEndDragTag={onEndDragTag}
-                          onToggleSelectTag={onToggleSelectTag}
-                          onStartInlineRename={onStartInlineRename}
-                          onCommitInlineRename={onCommitInlineRename}
-                          onCancelInlineRename={onCancelInlineRename}
-                          onOpenEditTag={handleOpenEditTag}
-                          onRequestDeleteTag={onRequestDeleteTag}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+        {groupedBySubCategory.length === 0 ? (
+          <div className="py-10 px-4 rounded-2xl border border-dashed border-[#DFD3C3] bg-white/70 text-center space-y-2">
+            <Search className="w-6 h-6 text-[#A39485] mx-auto" />
+            <div className="text-xs font-bold text-[#4D3A24]">
+              ไม่พบแท็กใน {theme.badgeText}
             </div>
-          );
-        })}
+            <p className="text-[11px] text-[#8C7B6C]">
+              ไม่มีแท็กที่ตรงกับ &ldquo;
+              {searchQuery.trim() || globalSearchQuery.trim()}&rdquo;
+            </p>
+            {(searchQuery.trim() || (globalSearchQuery.trim() && onClearAllSearch)) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (searchQuery.trim()) {
+                    onSearchQueryChange('');
+                  } else if (onClearAllSearch) {
+                    onClearAllSearch();
+                  }
+                }}
+                className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#FAF7F2] hover:bg-[#F2EBE0] text-[#524538] border border-[#E2D5C4] cursor-pointer"
+              >
+                ล้างคำค้นหา
+              </button>
+            )}
+          </div>
+        ) : (
+          groupedBySubCategory.map(({ subCategory, tags: subTags }) => (
+            <TierSubCategorySection
+              key={subCategory}
+              tier={tier}
+              theme={theme}
+              subCategory={subCategory}
+              subTags={subTags}
+              isExpandedGrid={isExpandedGrid}
+              isSearchActive={isSearchActive}
+              isCollapsed={Boolean(collapsedSubMap[subCategory])}
+              onToggleCollapse={(sub) =>
+                setCollapsedSubMap((prev) => ({
+                  ...prev,
+                  [sub]: !prev[sub],
+                }))
+              }
+              dragOverSubCat={dragOverSubCat}
+              setDragOverSubCat={setDragOverSubCat}
+              onDropOnSubCategory={handleDropOnSubCategory}
+              renamingSubCat={renamingSubCat}
+              renamingSubCatValue={renamingSubCatValue}
+              setRenamingSubCatValue={setRenamingSubCatValue}
+              onStartRenameSubCat={(sub) => {
+                setRenamingSubCat(sub);
+                setRenamingSubCatValue(sub);
+              }}
+              onCommitRenameSubCat={handleCommitSubCatRename}
+              onCancelRenameSubCat={() => setRenamingSubCat(null)}
+              onDeleteSubCategory={onDeleteSubCategory}
+              onOpenCreateTagInSub={handleOpenCreateTagInSub}
+              selectedTagIds={selectedTagIds}
+              draggingTagIds={draggingTagIds}
+              isBatchMovingTags={isBatchMovingTags}
+              onToggleSelectAllVisible={onToggleSelectAllVisible}
+              onExecuteBatchMove={onExecuteBatchMove}
+              inlineEditingTagId={inlineEditingTagId}
+              inlineEditingName={inlineEditingName}
+              setInlineEditingName={setInlineEditingName}
+              inlineDuplicateConflict={inlineDuplicateConflict}
+              statByTagId={statByTagId}
+              visibleOrderIds={visibleOrderIds}
+              onStartDragTag={onStartDragTag}
+              onEndDragTag={onEndDragTag}
+              onToggleSelectTag={onToggleSelectTag}
+              onStartInlineRename={onStartInlineRename}
+              onCommitInlineRename={onCommitInlineRename}
+              onCancelInlineRename={onCancelInlineRename}
+              onOpenEditTag={handleOpenEditTag}
+              onRequestDeleteTag={onRequestDeleteTag}
+            />
+          ))
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   Inbox,
@@ -23,8 +24,12 @@ import {
   DEFAULT_UNCLASSIFIED_SUBCATEGORY,
   EntitySubtype,
 } from '../../types/tag.types';
+import {
+  findDuplicateTagConflict,
+  matchesTagSearchQuery,
+} from '../../utils/tagDeduplicator';
 import { TagPill, getEntityIcon } from '../ui/TagPill';
-import { TIER_THEME_CONFIGS } from './three-tier/IndependentTierColumn';
+import { TIER_THEME_CONFIGS } from './constants/tierThemeConfigs';
 
 interface CascadeCategorySelectorProps {
   selectedTagIds: string[];
@@ -100,10 +105,16 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
     setNewTagSubCat(defaultSubCat);
   };
 
+  const quickAddConflict = useMemo(
+    () => (addingInTier ? findDuplicateTagConflict(newTagName, tags) : null),
+    [addingInTier, newTagName, tags]
+  );
+
   const handleCreateQuickTag = (e: React.FormEvent, tier: CategoryTier) => {
     e.preventDefault();
     const clean = newTagName.trim().replace(/^#+/, '').trim();
     if (!clean) return;
+    if (findDuplicateTagConflict(clean, tags)) return;
     const theme = TIER_THEME_CONFIGS[tier];
     const groupType = tier === 3 ? 'PERSON' : tier === 2 ? 'ACTION' : 'THEME';
     const created = createTag(
@@ -134,15 +145,12 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
   );
 
   const buildTierGroups = (tier: CategoryTier, subList: string[]) => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     const tierTags = realTags.filter((t) => {
       const tTier = t.tier === 2 || t.tier === 3 ? t.tier : 1;
       if (tTier !== tier) return false;
       if (!q) return true;
-      return (
-        t.name.toLowerCase().includes(q) ||
-        (t.subCategory || '').toLowerCase().includes(q)
-      );
+      return matchesTagSearchQuery(t, q);
     });
 
     const map: Record<string, CategoryTag[]> = {};
@@ -254,7 +262,12 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                     onChange={(e) => setNewTagName(e.target.value)}
                     placeholder={theme.examplesPlaceholder}
                     autoFocus
-                    className="flex-1 min-w-[120px] px-2 py-1 rounded-lg bg-white border border-[#D8C5A6] text-xs text-[#3D332A] focus:outline-none"
+                    aria-invalid={Boolean(quickAddConflict)}
+                    className={`flex-1 min-w-[120px] px-2 py-1 rounded-lg border text-xs focus:outline-none ${
+                      quickAddConflict
+                        ? 'bg-[#FFF8F8] border-[#C94A4A] text-[#991B1B]'
+                        : 'bg-white border-[#D8C5A6] text-[#3D332A]'
+                    }`}
                   />
                   <select
                     value={newTagSubCat}
@@ -268,6 +281,16 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                     ))}
                   </select>
                 </div>
+                {quickAddConflict && (
+                  <div
+                    role="alert"
+                    aria-live="polite"
+                    className="flex items-start gap-1.5 px-2 py-1 rounded-lg bg-[#FDF2F2] border border-[#F2C4C4] text-[11px] font-semibold text-[#B91C1C]"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 text-[#DC2626] shrink-0 mt-0.5" />
+                    <span className="leading-snug">{quickAddConflict.message}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-end gap-1.5">
                   <button
                     type="button"
@@ -278,8 +301,8 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                   </button>
                   <button
                     type="submit"
-                    disabled={!newTagName.trim()}
-                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold text-white disabled:opacity-50 ${theme.accentBtnBg} cursor-pointer`}
+                    disabled={!newTagName.trim() || Boolean(quickAddConflict)}
+                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold text-white disabled:opacity-45 disabled:cursor-not-allowed ${theme.accentBtnBg} cursor-pointer`}
                   >
                     + บันทึก & ติดแท็กนี้
                   </button>
@@ -290,10 +313,11 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
         </AnimatePresence>
 
         {/* Sub-category Sections */}
-        <div className="p-2.5 space-y-2.5 max-h-72 overflow-y-auto scrollbar-thin bg-[#FAF8F5]">
+        <div className="p-2.5 space-y-2.5 lg:max-h-72 lg:overflow-y-auto scrollbar-thin bg-[#FAF8F5]">
           {groups.map(({ subCategory, tags: subTags }) => {
             const subKey = `${tier}__${subCategory}`;
-            const isCollapsed = Boolean(collapsedSubKeyMap[subKey]);
+            const isCollapsed =
+              !searchQuery.trim() && Boolean(collapsedSubKeyMap[subKey]);
             const isUnclassified =
               subCategory === DEFAULT_UNCLASSIFIED_SUBCATEGORY;
 
@@ -321,11 +345,13 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                   }`}
                 >
                   <div className="flex items-center gap-1 min-w-0">
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#524538] transition-transform shrink-0 ${
-                        isCollapsed ? '-rotate-90' : ''
-                      }`}
-                    />
+                    <motion.span
+                      animate={{ rotate: isCollapsed ? -90 : 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="inline-flex shrink-0"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5 text-[#524538] shrink-0" />
+                    </motion.span>
                     <span className="text-[11px] font-extrabold text-[#3D332A] truncate">
                       {subCategory}
                     </span>
@@ -335,43 +361,53 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
                   </span>
                 </button>
 
-                {!isCollapsed && (
-                  <div className="p-2">
-                    {subTags.length === 0 ? (
-                      <p className="text-[11px] text-[#8C7B6C] italic text-center py-1">
-                        ยังไม่มีแท็กในหมวดนี้
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {subTags.map((tag) => {
-                          const isSelected = selectedTagIds.includes(tag.id);
-                          return (
-                            <button
-                              key={tag.id}
-                              type="button"
-                              onClick={() => handleToggleTag(tag.id)}
-                              className={`text-xs px-2.5 py-1 rounded-xl font-semibold inline-flex items-center gap-1 transition-all cursor-pointer ${
-                                isSelected
-                                  ? 'bg-[#D5EBDA] text-[#144220] font-bold border border-[#AED7B7] shadow-2xs ring-1 ring-[#C5E6CD]'
-                                  : 'bg-[#FAF8F5] text-[#4A3F31] border border-[#DFD7CA] hover:bg-[#EDF6F0] hover:border-[#C5DFCC]'
-                              }`}
-                            >
-                              {isSelected ? (
-                                <Check className="w-3 h-3 text-[#1B572A] shrink-0" />
-                              ) : (
-                                <Plus className="w-3 h-3 text-[#88A891] shrink-0" />
-                              )}
-                              <span className="text-xs shrink-0">
-                                {getEntityIcon(tag)}
-                              </span>
-                              <span>#{tag.name}</span>
-                            </button>
-                          );
-                        })}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-2">
+                        {subTags.length === 0 ? (
+                          <p className="text-[11px] text-[#8C7B6C] italic text-center py-1">
+                            ยังไม่มีแท็กในหมวดนี้
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {subTags.map((tag) => {
+                              const isSelected = selectedTagIds.includes(tag.id);
+                              return (
+                                <button
+                                  key={tag.id}
+                                  type="button"
+                                  onClick={() => handleToggleTag(tag.id)}
+                                  className={`text-xs px-2.5 py-1 rounded-xl font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-[#D5EBDA] text-[#144220] font-bold border border-[#AED7B7] shadow-2xs ring-1 ring-[#C5E6CD]'
+                                      : 'bg-[#FAF8F5] text-[#4A3F31] border border-[#DFD7CA] hover:bg-[#EDF6F0] hover:border-[#C5DFCC]'
+                                  }`}
+                                >
+                                  {isSelected ? (
+                                    <Check className="w-3 h-3 text-[#1B572A] shrink-0" />
+                                  ) : (
+                                    <Plus className="w-3 h-3 text-[#88A891] shrink-0" />
+                                  )}
+                                  <span className="text-xs shrink-0">
+                                    {getEntityIcon(tag)}
+                                  </span>
+                                  <span>#{tag.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}
@@ -467,7 +503,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ค้นหาแท็กด่วนข้ามทั้ง 3 ชั้น..."
-            className="w-full pl-9 pr-8 py-1.5 sm:py-2 text-xs sm:text-sm bg-white border border-[#DFD7CA] rounded-xl placeholder:text-[#9E9487] text-[#3A3125] focus:outline-hidden focus:ring-2 focus:ring-[#D5C2A5] focus:border-[#C2AE8F] transition-all"
+            className="w-full pl-9 pr-8 py-1.5 sm:py-2 text-xs sm:text-sm bg-white border border-[#DFD7CA] rounded-xl placeholder:text-[#9E9487] text-[#3A3125] focus:outline-hidden focus:ring-2 focus:ring-[#D5C2A5] focus:border-[#C2AE8F] transition-colors"
           />
           {searchQuery && (
             <button
@@ -511,7 +547,7 @@ export const CascadeCategorySelector: React.FC<CascadeCategorySelectorProps> = (
               key={`mob-picker-tab-${t}`}
               type="button"
               onClick={() => setMobileActiveTier(t)}
-              className={`py-1.5 px-2 rounded-lg text-xs font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+              className={`py-1.5 px-2 rounded-lg text-xs font-extrabold transition-colors flex items-center justify-center gap-1 cursor-pointer ${
                 isActive
                   ? `${tConfig.badgeBg} ${tConfig.badgeTextCls} shadow-xs`
                   : 'text-[#6A5D4F] hover:text-[#3D332A]'

@@ -15,7 +15,13 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: false,
-        includeAssets: ['favicon.png', 'favicon.svg', 'logo.png'],
+        includeAssets: [
+          'favicon.png',
+          'favicon.svg',
+          'logo.png',
+          'apple-touch-icon.png',
+          'pwa-maskable-512x512.png',
+        ],
         manifest: {
           id: '/',
           name: 'เรียงเรื่องลั่น - ระบบคลังและจัดคลิป 5 อันดับ',
@@ -28,6 +34,9 @@ export default defineConfig(() => {
           orientation: 'portrait-primary',
           scope: '/',
           start_url: '/',
+          launch_handler: {
+            client_mode: ['navigate-existing', 'auto'],
+          },
           icons: [
             {
               src: '/favicon.png',
@@ -40,6 +49,12 @@ export default defineConfig(() => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
+            },
+            {
+              src: '/pwa-maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
             },
           ],
           share_target: {
@@ -60,6 +75,7 @@ export default defineConfig(() => {
           clientsClaim: true,
           skipWaiting: true,
           navigateFallback: '/index.html',
+          navigateFallbackAllowlist: [/^\//],
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {

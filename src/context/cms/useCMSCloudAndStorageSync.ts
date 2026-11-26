@@ -29,6 +29,7 @@ import { CategoryGroup, CategoryTag, SystemSettings } from '../../types/tag.type
 import { useCMSManualSyncActions } from './useCMSManualSyncActions';
 import { useCMSSyncHealth } from './useCMSSyncHealth';
 import { evaluateEpisodeCompleteness } from '../../utils/episodeValidator';
+import { syncHistoryService } from '../../services/syncHistoryService';
 
 export function useCMSCloudAndStorageSync(
   setSelectedTagFilter: React.Dispatch<React.SetStateAction<string[]>>
@@ -728,6 +729,21 @@ export function useCMSCloudAndStorageSync(
             ? `สำรองข้อมูลขึ้น Cloud สำเร็จ (ตรงกับเครื่องนี้ 100% ลบข้อมูลเก่าส่วนเกินบน Cloud ไป ${seedResult.deletedCount} รายการ)`
             : 'สำรองข้อมูลขึ้น Cloud สำเร็จ (ตรงกับเครื่องนี้ 100%)',
       });
+
+      syncHistoryService.recordSyncSuccess({
+        timestamp: nowIso,
+        type: 'push_seed',
+        label: 'Master Push (สำรองขึ้น Cloud)',
+        upsertedCount:
+          seedResult?.upsertedCount ??
+          footage.length + episodes.length + sources.length + tags.length + categoryGroups.length,
+        deletedCount: seedResult?.deletedCount ?? 0,
+        message:
+          (seedResult?.deletedCount ?? 0) > 0
+            ? `สำรองข้อมูลขึ้น Cloud สำเร็จ (ลบข้อมูลส่วนเกินบน Cloud ${seedResult.deletedCount} รายการ)`
+            : 'สำรองข้อมูลเครื่องหลักขึ้น Cloud สำเร็จ ตรงกัน 100%',
+      });
+      syncHistoryService.resolveActiveConflicts('สำรองข้อมูลเครื่องนี้เป็นหลักขึ้น Cloud เรียบร้อยแล้ว');
     } catch (err) {
       console.error('Manual cloud sync error:', err);
       const msg = err instanceof Error ? err.message : String(err || '');

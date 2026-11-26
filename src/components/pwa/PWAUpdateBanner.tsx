@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { isBatchWriteInProgress } from '../../firebase/firestoreBatchUtils';
+import { hasPendingShareTarget } from '../../utils/platformDetector';
 
 const RELOAD_COOLDOWN_KEY = 'rrl_pwa_sw_reloaded_at';
 const RELOAD_COOLDOWN_MS = 15_000;
@@ -33,8 +34,8 @@ function markAutoReloaded(): void {
  * tab visibility return, network reconnect, and periodic intervals.
  *
  * When a new Service Worker activates (`controllerchange`) on a previously loaded client:
- * - If idle (no batch Cloud upload running), displays a brief updating banner and reloads cleanly.
- * - If a batch upload is active, displays a non-intrusive Light Pastel prompt so the user reloads when ready.
+ * - If idle (no batch Cloud upload or active Share Target import running), reloads cleanly.
+ * - Otherwise, displays a non-intrusive prompt so the user reloads when ready.
  */
 export const PWAUpdateBanner: React.FC = () => {
   const [updateMode, setUpdateMode] = useState<'none' | 'reloading' | 'ready'>('none');
@@ -60,12 +61,15 @@ export const PWAUpdateBanner: React.FC = () => {
       });
     };
 
+    const shouldDeferAutoReload = () =>
+      isBatchWriteInProgress() || hasPendingShareTarget() || !canAutoReloadNow();
+
     const handleControllerChange = () => {
       if (!hadControllerOnLoad || hasTriggeredReloadRef.current) {
         return;
       }
 
-      if (isBatchWriteInProgress() || !canAutoReloadNow()) {
+      if (shouldDeferAutoReload()) {
         setUpdateMode('ready');
         return;
       }
@@ -92,7 +96,7 @@ export const PWAUpdateBanner: React.FC = () => {
       },
       onNeedRefresh() {
         // Fallback for browsers that wait before activating the new SW
-        if (isBatchWriteInProgress() || !canAutoReloadNow()) {
+        if (shouldDeferAutoReload()) {
           setUpdateMode('ready');
         } else {
           setUpdateMode('reloading');

@@ -1,7 +1,22 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  setLogLevel,
+  doc,
+  getDocFromServer,
+  type Firestore,
+} from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
+
+// Silence Firebase's internal red console.error spam on transient WebChannel / offline reconnects
+// (Application-level errors and quota warnings are already handled via firestoreErrorHandling.ts)
+try {
+  setLogLevel('silent');
+} catch {
+  // Ignore if unsupported
+}
 
 const env = import.meta.env || {};
 
@@ -59,23 +74,32 @@ export const firestoreDatabaseId =
   envDatabaseId ||
   '(default)';
 
-export const db =
-  firestoreDatabaseId && firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firestoreDatabaseId)
-    : getFirestore(app);
+function createResilientFirestore(): Firestore {
+  const settings = {
+    experimentalAutoDetectLongPolling: true,
+  };
+  try {
+    return firestoreDatabaseId && firestoreDatabaseId !== '(default)'
+      ? initializeFirestore(app, settings, firestoreDatabaseId)
+      : initializeFirestore(app, settings);
+  } catch {
+    return firestoreDatabaseId && firestoreDatabaseId !== '(default)'
+      ? getFirestore(app, firestoreDatabaseId)
+      : getFirestore(app);
+  }
+}
+
+export const db = createResilientFirestore();
 
 // Connection test as required by Firebase Integration Skill
 export async function testFirestoreConnection(): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return false;
+  }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.info(`Connected to Firebase Firestore (${firestoreDatabaseId}) successfully.`);
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore is currently running in offline/cached mode.');
-    } else {
-      console.info(`Firestore (${firestoreDatabaseId}) handshake completed.`);
-    }
+  } catch {
     return true;
   }
 }

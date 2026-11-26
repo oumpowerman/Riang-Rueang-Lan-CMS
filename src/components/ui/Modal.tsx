@@ -9,6 +9,8 @@ interface ModalProps {
   badge?: React.ReactNode;
   headerRight?: React.ReactNode;
   maxWidthClass?: string;
+  heightClass?: string;
+  bodyClassName?: string;
   headerContent?: React.ReactNode;
   closeOnEsc?: boolean;
   children: React.ReactNode;
@@ -23,6 +25,8 @@ export const Modal: React.FC<ModalProps> = ({
   badge,
   headerRight,
   maxWidthClass = 'max-w-3xl',
+  heightClass,
+  bodyClassName = 'p-3 sm:p-4 bg-white',
   headerContent,
   closeOnEsc = true,
   children,
@@ -37,14 +41,11 @@ export const Modal: React.FC<ModalProps> = ({
       badge={badge}
       headerRight={headerRight}
       maxWidthClass={maxWidthClass}
+      heightClass={heightClass}
       headerContent={headerContent}
       closeOnEsc={closeOnEsc}
-      bodyClassName="p-3.5 sm:p-5 bg-white"
-      footer={
-        footer ? (
-          <div className="flex items-center justify-end gap-3">{footer}</div>
-        ) : undefined
-      }
+      bodyClassName={bodyClassName}
+      footer={footer}
     >
       {children}
     </BaseModal>

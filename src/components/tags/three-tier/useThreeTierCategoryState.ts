@@ -7,6 +7,12 @@ import {
   CategoryTier,
   EntitySubtype,
 } from '../../../types/tag.types';
+import {
+  DuplicateTagMergeResult,
+  findDuplicateTagConflict,
+  matchesTagSearchQuery,
+  scanDuplicateTagGroups,
+} from '../../../utils/tagDeduplicator';
 
 export const COLOR_OPTIONS = [
   'purple',
@@ -26,6 +32,9 @@ export const useThreeTierCategoryState = () => {
     setIsThreeTierManagerOpen,
     categoryGroups,
     tags,
+    sources,
+    episodes,
+    computedFootage,
     tierSubCategories,
     deleteCategoryGroup,
     createTag,
@@ -40,15 +49,24 @@ export const useThreeTierCategoryState = () => {
     batchUpdateTagsMetadata,
     batchDeleteTags,
     reorganizeTagsToDataDictionary,
+    deduplicateDuplicateTags,
     lastTagReorgUndoRecord,
     undoLastTagReorg,
     dismissTagReorgUndoRecord,
   } = useCMS();
 
-  // Column-level search filters for Tier 1, Tier 2, and Tier 3
+  // Unified cross-tier search & column-level search filters for Tier 1, Tier 2, and Tier 3
+  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [tier1SearchQuery, setTier1SearchQuery] = useState<string>('');
   const [tier2SearchQuery, setTier2SearchQuery] = useState<string>('');
   const [tier3SearchQuery, setTier3SearchQuery] = useState<string>('');
+
+  const clearAllSearches = () => {
+    setGlobalSearchQuery('');
+    setTier1SearchQuery('');
+    setTier2SearchQuery('');
+    setTier3SearchQuery('');
+  };
 
   // Multi-select & Drag-and-Drop states for bulk tag reorganization
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -75,6 +93,26 @@ export const useThreeTierCategoryState = () => {
   >(null);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
+  // Manual Duplicate Scan / Merge State
+  const [isDeduplicatingTags, setIsDeduplicatingTags] = useState(false);
+  const [dedupReportBanner, setDedupReportBanner] = useState<{
+    status: 'MERGED' | 'CLEAN';
+    stats: DuplicateTagMergeResult['stats'];
+  } | null>(null);
+
+  const duplicateGroups = useMemo(
+    () => scanDuplicateTagGroups(tags, computedFootage, sources, episodes),
+    [tags, computedFootage, sources, episodes]
+  );
+
+  const inlineDuplicateConflict = useMemo(
+    () =>
+      inlineEditingTagId
+        ? findDuplicateTagConflict(inlineEditingName, tags, inlineEditingTagId)
+        : null,
+    [inlineEditingTagId, inlineEditingName, tags]
+  );
+
   // Tags partitioned by Tier 1, Tier 2, Tier 3
   const tier1Tags = useMemo(
     () =>
@@ -92,6 +130,35 @@ export const useThreeTierCategoryState = () => {
   const tier3Tags = useMemo(
     () => tags.filter((t) => !isStagingTagId(t.id) && t.tier === 3),
     [tags]
+  );
+
+  const filteredTierCounts = useMemo(
+    () => ({
+      tier1: tier1Tags.filter(
+        (t) =>
+          matchesTagSearchQuery(t, globalSearchQuery) &&
+          matchesTagSearchQuery(t, tier1SearchQuery)
+      ).length,
+      tier2: tier2Tags.filter(
+        (t) =>
+          matchesTagSearchQuery(t, globalSearchQuery) &&
+          matchesTagSearchQuery(t, tier2SearchQuery)
+      ).length,
+      tier3: tier3Tags.filter(
+        (t) =>
+          matchesTagSearchQuery(t, globalSearchQuery) &&
+          matchesTagSearchQuery(t, tier3SearchQuery)
+      ).length,
+    }),
+    [
+      tier1Tags,
+      tier2Tags,
+      tier3Tags,
+      globalSearchQuery,
+      tier1SearchQuery,
+      tier2SearchQuery,
+      tier3SearchQuery,
+    ]
   );
 
   // Handlers for Creating & Updating Tags inside any Tier + Sub-category
@@ -242,12 +309,34 @@ export const useThreeTierCategoryState = () => {
     setInlineEditingName(tag.name);
   };
 
-  const handleCommitInlineRename = (tagId: string) => {
+  const handleCommitInlineRename = (
+    tagId: string,
+    trigger: 'enter' | 'blur' = 'enter'
+  ) => {
     const trimmed = inlineEditingName.trim().replace(/^#+/, '').trim();
-    if (trimmed) {
-      const target = tags.find((t) => t.id === tagId);
-      if (target && target.name !== trimmed) {
-        updateTag(tagId, { name: trimmed });
+    if (!trimmed) {
+      setInlineEditingTagId(null);
+      setInlineEditingName('');
+      return;
+    }
+
+    const conflict = findDuplicateTagConflict(trimmed, tags, tagId);
+    if (conflict) {
+      if (trigger === 'enter') {
+        // Keep editing active so user sees red duplicate warning tooltip
+        return;
+      }
+      // On blur, revert cleanly without saving duplicate
+      setInlineEditingTagId(null);
+      setInlineEditingName('');
+      return;
+    }
+
+    const target = tags.find((t) => t.id === tagId);
+    if (target && target.name !== trimmed) {
+      const res = updateTag(tagId, { name: trimmed });
+      if (!res.ok && trigger === 'enter') {
+        return;
       }
     }
     setInlineEditingTagId(null);
@@ -257,6 +346,20 @@ export const useThreeTierCategoryState = () => {
   const handleCancelInlineRename = () => {
     setInlineEditingTagId(null);
     setInlineEditingName('');
+  };
+
+  const handleRunDeduplicateTags = async () => {
+    if (isDeduplicatingTags) return;
+    setIsDeduplicatingTags(true);
+    try {
+      const stats = await deduplicateDuplicateTags();
+      setDedupReportBanner({
+        status: stats.mergedTagsCount > 0 ? 'MERGED' : 'CLEAN',
+        stats,
+      });
+    } finally {
+      setIsDeduplicatingTags(false);
+    }
   };
 
   // Execute Bulk Metadata Update (Color / EntityType)
@@ -318,7 +421,11 @@ export const useThreeTierCategoryState = () => {
     handleRestoreDefaultsAndSelect,
     reorganizeTagsToDataDictionary,
 
-    // Column search filters
+    // Unified cross-tier & column search filters
+    globalSearchQuery,
+    setGlobalSearchQuery,
+    clearAllSearches,
+    filteredTierCounts,
     tier1SearchQuery,
     setTier1SearchQuery,
     tier2SearchQuery,
@@ -347,9 +454,17 @@ export const useThreeTierCategoryState = () => {
     inlineEditingTagId,
     inlineEditingName,
     setInlineEditingName,
+    inlineDuplicateConflict,
     handleStartInlineRename,
     handleCommitInlineRename,
     handleCancelInlineRename,
+
+    // Duplicate Check & Merge
+    duplicateGroupsCount: duplicateGroups.length,
+    isDeduplicatingTags,
+    dedupReportBanner,
+    setDedupReportBanner,
+    handleRunDeduplicateTags,
 
     // Tag & Sub-category CRUD
     handleCreateTagInSubCategory,

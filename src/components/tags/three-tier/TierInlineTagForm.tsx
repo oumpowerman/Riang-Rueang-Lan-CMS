@@ -1,9 +1,10 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { FolderPlus, X } from 'lucide-react';
+import { AlertCircle, FolderPlus, X } from 'lucide-react';
 import { EntitySubtype } from '../../../types/tag.types';
+import { TagDuplicateConflict } from '../../../utils/tagDeduplicator';
 import { COLOR_OPTIONS } from '../constants/tagPastelPalette';
-import { TierThemeConfig } from './IndependentTierColumn';
+import { TierThemeConfig } from '../constants/tierThemeConfigs';
 
 interface TierInlineTagFormProps {
   theme: TierThemeConfig;
@@ -25,6 +26,7 @@ interface TierInlineTagFormProps {
   setTagFormColor: (val: string) => void;
   tagFormEntity: EntitySubtype;
   setTagFormEntity: (val: EntitySubtype) => void;
+  duplicateConflict?: TagDuplicateConflict | null;
   onSubmitTagForm: (e: React.FormEvent) => void;
   onCloseTagForm: () => void;
 }
@@ -47,9 +49,12 @@ export const TierInlineTagForm: React.FC<TierInlineTagFormProps> = ({
   setTagFormColor,
   tagFormEntity,
   setTagFormEntity,
+  duplicateConflict = null,
   onSubmitTagForm,
   onCloseTagForm,
 }) => {
+  const hasDuplicateError = Boolean(duplicateConflict);
+
   return (
     <>
       {/* Inline Add New Sub-category Form */}
@@ -101,7 +106,11 @@ export const TierInlineTagForm: React.FC<TierInlineTagFormProps> = ({
             onSubmit={onSubmitTagForm}
             className="overflow-hidden"
           >
-            <div className="p-3.5 rounded-xl bg-white border-2 border-[#C8B69E] space-y-3 shadow-xs">
+            <div
+              className={`p-3.5 rounded-xl bg-white border-2 space-y-3 shadow-xs ${
+                hasDuplicateError ? 'border-[#E0A4A4]' : 'border-[#C8B69E]'
+              }`}
+            >
               {/* Form Header */}
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-extrabold text-[#3D332A] truncate">
@@ -112,6 +121,7 @@ export const TierInlineTagForm: React.FC<TierInlineTagFormProps> = ({
                 <button
                   type="button"
                   onClick={onCloseTagForm}
+                  aria-label="ปิดฟอร์ม"
                   className="w-6 h-6 rounded-md flex items-center justify-center text-[#8C7B6C] hover:text-[#3D332A] hover:bg-[#FAF7F2] transition-colors cursor-pointer shrink-0"
                   title="ปิดฟอร์ม"
                 >
@@ -120,40 +130,58 @@ export const TierInlineTagForm: React.FC<TierInlineTagFormProps> = ({
               </div>
 
               {/* Row 1: Tag Name + Sub-category (Strictly Aligned Horizontal Plane) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-end">
-                <div className="min-w-0">
-                  <label className="block text-[11px] font-bold text-[#6E5F52] leading-4 mb-1 truncate whitespace-nowrap">
-                    ชื่อป้ายแท็ก (ไม่ต้องพิมพ์ #)
-                  </label>
-                  <input
-                    type="text"
-                    value={tagFormName}
-                    onChange={(e) => setTagFormName(e.target.value)}
-                    placeholder={theme.examplesPlaceholder}
-                    autoFocus
-                    className="w-full h-9 px-2.5 rounded-lg border border-[#D8C9B8] bg-white text-xs font-bold text-[#3D332A] placeholder:font-normal placeholder:text-[#A39485] focus:outline-none focus:border-[#78593A]"
-                  />
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-end">
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-bold text-[#6E5F52] leading-4 mb-1 truncate whitespace-nowrap">
+                      ชื่อป้ายแท็ก (ไม่ต้องพิมพ์ #)
+                    </label>
+                    <input
+                      type="text"
+                      value={tagFormName}
+                      onChange={(e) => setTagFormName(e.target.value)}
+                      placeholder={theme.examplesPlaceholder}
+                      autoFocus
+                      aria-invalid={hasDuplicateError}
+                      className={`w-full h-9 px-2.5 rounded-lg border text-xs font-bold placeholder:font-normal focus:outline-none ${
+                        hasDuplicateError
+                          ? 'border-[#C94A4A] bg-[#FFF8F8] text-[#991B1B] placeholder:text-[#C58A8A] focus:border-[#B91C1C]'
+                          : 'border-[#D8C9B8] bg-white text-[#3D332A] placeholder:text-[#A39485] focus:border-[#78593A]'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <label
+                      className="block text-[11px] font-bold text-[#6E5F52] leading-4 mb-1 truncate whitespace-nowrap"
+                      title="อยู่ในหมวดหมู่ย่อย (Sub-category)"
+                    >
+                      หมวดหมู่ย่อย (Sub-category)
+                    </label>
+                    <select
+                      value={tagFormSubCat}
+                      onChange={(e) => setTagFormSubCat(e.target.value)}
+                      className="w-full h-9 px-2.5 rounded-lg border border-[#D8C9B8] bg-[#FAF8F5] text-xs font-semibold text-[#3D332A] focus:outline-none focus:border-[#78593A] cursor-pointer"
+                    >
+                      {subCategories.map((sc) => (
+                        <option key={sc} value={sc}>
+                          {sc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="min-w-0">
-                  <label
-                    className="block text-[11px] font-bold text-[#6E5F52] leading-4 mb-1 truncate whitespace-nowrap"
-                    title="อยู่ในหมวดหมู่ย่อย (Sub-category)"
+                {duplicateConflict && (
+                  <div
+                    role="alert"
+                    aria-live="polite"
+                    className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#FDF2F2] border border-[#F2C4C4] text-[11px] font-semibold text-[#B91C1C]"
                   >
-                    หมวดหมู่ย่อย (Sub-category)
-                  </label>
-                  <select
-                    value={tagFormSubCat}
-                    onChange={(e) => setTagFormSubCat(e.target.value)}
-                    className="w-full h-9 px-2.5 rounded-lg border border-[#D8C9B8] bg-[#FAF8F5] text-xs font-semibold text-[#3D332A] focus:outline-none focus:border-[#78593A] cursor-pointer"
-                  >
-                    {subCategories.map((sc) => (
-                      <option key={sc} value={sc}>
-                        {sc}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <AlertCircle className="w-3.5 h-3.5 text-[#DC2626] shrink-0 mt-0.5" />
+                    <span className="leading-snug">{duplicateConflict.message}</span>
+                  </div>
+                )}
               </div>
 
               {/* Row 2: Color Swatches + Entity Type (Strictly Aligned Horizontal Plane) */}
@@ -210,8 +238,8 @@ export const TierInlineTagForm: React.FC<TierInlineTagFormProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={!tagFormName.trim()}
-                  className={`h-8 px-4 rounded-lg text-xs font-bold text-white disabled:opacity-50 ${theme.accentBtnBg} ${theme.accentBtnHover} inline-flex items-center justify-center transition-colors cursor-pointer shadow-2xs`}
+                  disabled={!tagFormName.trim() || hasDuplicateError}
+                  className={`h-8 px-4 rounded-lg text-xs font-bold text-white disabled:opacity-45 disabled:cursor-not-allowed ${theme.accentBtnBg} ${theme.accentBtnHover} inline-flex items-center justify-center transition-colors cursor-pointer shadow-2xs`}
                 >
                   {editingTagId ? 'บันทึกการแก้ไข' : 'สร้างป้ายแท็ก'}
                 </button>

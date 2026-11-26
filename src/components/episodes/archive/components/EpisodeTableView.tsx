@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   Sparkles,
   CheckCircle2,
@@ -10,18 +11,15 @@ import {
   ArrowDown,
   Play,
   Film,
-  AlertTriangle,
 } from 'lucide-react';
 import { useCMS } from '../../../../context/CMSContext';
 import { formatThaiDate } from '../../../../utils/fileNameGenerator';
 import { extractEpisodeSeriesInfo } from '../../../../utils/seriesExtractor';
-import {
-  validateEpisodeStandard,
-  evaluateEpisodeCompleteness,
-} from '../../../../utils/episodeValidator';
+import { evaluateEpisodeCompleteness } from '../../../../utils/episodeValidator';
 import { TagPill } from '../../../ui/TagPill';
 import { PaginationBar } from '../../../ui/PaginationBar';
 import { VideoThumbnailPreview } from '../../../footage/VideoThumbnailPreview';
+import { EpisodeCompletenessBadge } from './EpisodeCompletenessBadge';
 import type { Episode } from '../../../../types/episode.types';
 import type { EpisodeFootageMix } from '../hooks/useMasterArchiveMetrics';
 import type { SortOption } from '../hooks/useMasterArchiveFilter';
@@ -39,6 +37,7 @@ interface EpisodeTableViewProps {
   onToggleSortColumn?: (column: 'TITLE' | 'ID' | 'DATE') => void;
 }
 
+const SLIDE_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
   paginatedEpisodes,
@@ -53,6 +52,7 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
   onToggleSortColumn,
 }) => {
   const { tagMap, computedFootageMap, setPreviewFootageId } = useCMS();
+  const prefersReducedMotion = useReducedMotion();
 
   if (paginatedEpisodes.length === 0) {
     return (
@@ -69,7 +69,17 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl overflow-hidden shadow-2xs">
+      <motion.div
+        key={`table-page-${currentPage}`}
+        initial={prefersReducedMotion ? false : { opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={
+          prefersReducedMotion
+            ? { duration: 0 }
+            : { duration: 0.2, ease: SLIDE_EASE }
+        }
+        className="bg-[#FDFBF7] border border-[#E8DFD3] rounded-2xl overflow-hidden shadow-2xs"
+      >
         <div className="overflow-x-auto scrollbar-earth">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -77,81 +87,60 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                 {/* 1. ID Column */}
                 <th
                   onClick={() => onToggleSortColumn?.('ID')}
-                  className="py-2.5 px-3.5 w-40 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th"
-                  title="คลิกเพื่อสลับเรียงลำดับรหัส EP (ใหม่ ⇄ เก่า)"
+                  className="py-2.5 px-3.5 w-44 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th whitespace-nowrap"
+                  title="สลับเรียงลำดับรหัส EP"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>รหัส & ซีรีส์ EP</span>
+                  <div className="flex items-center gap-1">
+                    <span>รหัส &amp; ซีรีส์</span>
                     {sortBy === 'ID_ASC' ? (
-                      <span className="inline-flex items-center gap-0.5 text-[#244B2F] bg-[#E2EFE2] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#C5DEC5]">
-                        <span>เก่า→ใหม่</span>
-                        <ArrowUp className="w-3 h-3 text-[#244B2F]" />
-                      </span>
+                      <ArrowUp className="w-3.5 h-3.5 text-[#244B2F]" />
                     ) : sortBy === 'ID_DESC' ? (
-                      <span className="inline-flex items-center gap-0.5 text-[#6B4616] bg-[#FAF0DE] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#E8D4BA]">
-                        <span>ใหม่→เก่า</span>
-                        <ArrowDown className="w-3 h-3 text-[#6B4616]" />
-                      </span>
+                      <ArrowDown className="w-3.5 h-3.5 text-[#6B4616]" />
                     ) : (
                       <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-40 group-hover/th:opacity-100 transition-opacity" />
                     )}
                   </div>
                 </th>
 
-                {/* 2. Main Title Column (A:Z / Z:A) */}
+                {/* 2. Main Title Column */}
                 <th
                   onClick={() => onToggleSortColumn?.('TITLE')}
-                  className="py-2.5 px-3.5 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th"
-                  title="คลิกเพื่อสลับเรียงลำดับชื่อคลิป ก-ฮ (A:Z) หรือ ฮ-ก (Z:A)"
+                  className="py-2.5 px-3.5 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th whitespace-nowrap"
+                  title="สลับเรียงลำดับชื่อคลิป (ก-ฮ / ฮ-ก)"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>ชื่อคลิปหลัก & 5 อันดับฟุตเทจ</span>
+                  <div className="flex items-center gap-1">
+                    <span>ชื่อคลิป &amp; 5 อันดับ</span>
                     {sortBy === 'TITLE_ASC' ? (
-                      <span className="inline-flex items-center gap-0.5 text-[#1B4B67] bg-[#E3EFF6] px-1.5 py-0.2 rounded text-[10px] font-bold border border-[#C3DEEC]">
-                        <span>A:Z (ก-ฮ)</span>
-                        <ArrowUp className="w-3 h-3 text-[#1B4B67]" />
-                      </span>
+                      <ArrowUp className="w-3.5 h-3.5 text-[#1B4B67]" />
                     ) : sortBy === 'TITLE_DESC' ? (
-                      <span className="inline-flex items-center gap-0.5 text-[#1B4B67] bg-[#E3EFF6] px-1.5 py-0.2 rounded text-[10px] font-bold border border-[#C3DEEC]">
-                        <span>Z:A (ฮ-ก)</span>
-                        <ArrowDown className="w-3 h-3 text-[#1B4B67]" />
-                      </span>
+                      <ArrowDown className="w-3.5 h-3.5 text-[#1B4B67]" />
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[#8A7E70] text-[10px] font-normal group-hover/th:text-[#2D2926] bg-[#F4EFE6] px-1.5 py-0.2 rounded border border-transparent group-hover/th:border-[#DECDB8]">
-                        <span>Sort A:Z</span>
-                        <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-50 group-hover/th:opacity-100" />
-                      </span>
+                      <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-40 group-hover/th:opacity-100 transition-opacity" />
                     )}
                   </div>
                 </th>
 
                 {/* 3. Category */}
-                <th className="py-2.5 px-3.5 w-44">หมวดหมู่</th>
+                <th className="py-2.5 px-3.5 w-44 whitespace-nowrap">หมวดหมู่</th>
 
                 {/* 4. Completeness Status */}
-                <th className="py-2.5 px-3.5 w-44">ความสมบูรณ์</th>
+                <th className="py-2.5 px-3.5 w-40 whitespace-nowrap">สถานะ</th>
 
                 {/* 5. Footage Proportion */}
-                <th className="py-2.5 px-3.5 w-40">สัดส่วนฟุตเทจ</th>
+                <th className="py-2.5 px-3.5 w-36 whitespace-nowrap">สัดส่วนฟุต</th>
 
                 {/* 6. Date Column */}
                 <th
                   onClick={() => onToggleSortColumn?.('DATE')}
-                  className="py-2.5 px-3.5 w-36 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th"
-                  title="คลิกเพื่อสลับเรียงลำดับวันที่สร้าง (ล่าสุด ⇄ เก่าสุด)"
+                  className="py-2.5 px-3.5 w-32 cursor-pointer select-none hover:bg-[#F2ECE0] transition-colors group/th whitespace-nowrap"
+                  title="สลับเรียงลำดับวันที่สร้าง"
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <span>วันที่สร้าง</span>
                     {sortBy === 'DATE_DESC' ? (
-                      <span className="inline-flex items-center gap-0.5 text-[#6B4616] bg-[#FAF0DE] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#E8D4BA]">
-                        <span>ล่าสุด</span>
-                        <ArrowDown className="w-3 h-3 text-[#6B4616]" />
-                      </span>
+                      <ArrowDown className="w-3.5 h-3.5 text-[#6B4616]" />
                     ) : sortBy === 'DATE_ASC' ? (
-                      <span className="inline-flex items-center gap-0.5 text-[#244B2F] bg-[#E2EFE2] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border border-[#C5DEC5]">
-                        <span>เก่าสุด</span>
-                        <ArrowUp className="w-3 h-3 text-[#244B2F]" />
-                      </span>
+                      <ArrowUp className="w-3.5 h-3.5 text-[#244B2F]" />
                     ) : (
                       <ArrowUpDown className="w-3 h-3 text-[#A89E92] opacity-40 group-hover/th:opacity-100 transition-opacity" />
                     )}
@@ -159,14 +148,13 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                 </th>
 
                 {/* 7. Action */}
-                <th className="py-2.5 px-3.5 w-24 text-right">จัดการ</th>
+                <th className="py-2.5 px-3 w-12 text-right whitespace-nowrap" />
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EDE5D8] text-xs">
               {paginatedEpisodes.map((ep) => {
                 const mix = getEpisodeFootageMix(ep);
                 const seriesInfo = extractEpisodeSeriesInfo(ep, tagMap);
-                const validation = validateEpisodeStandard(ep);
                 const completeness = evaluateEpisodeCompleteness(ep);
 
                 return (
@@ -179,42 +167,18 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                         : 'hover:bg-[#FAF3E6]/70'
                     }`}
                   >
-                    <td className="py-2.5 px-3.5 font-mono whitespace-nowrap">
-                      <div className="font-bold text-[#6B4616] tabular-nums">
+                    <td className="py-2.5 px-3.5 whitespace-nowrap max-w-[190px]">
+                      <div className="font-mono font-bold text-[#6B4616] tabular-nums">
                         {ep.id}
                       </div>
-                      <div className="text-[11px] font-sans font-semibold text-[#244B2F] bg-[#EBF3EB] px-1.5 py-0.5 rounded-md border border-[#BBD6B9] inline-flex items-center gap-1 mt-0.5">
-                        <Sparkles className="w-2.5 h-2.5 text-[#386B46]" />
-                        <span>
-                          5 อันดับ {seriesInfo.seriesName} · EP.
-                          {seriesInfo.parsedEpisodeNo}
-                        </span>
+                      <div className="text-[11px] font-semibold text-[#244B2F] truncate mt-0.5">
+                        {seriesInfo.seriesName} · EP.{seriesInfo.parsedEpisodeNo}
                       </div>
                     </td>
 
-                    <td className="py-2.5 px-3.5 min-w-[260px]">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-[#2D2926] text-xs sm:text-sm line-clamp-1 group-hover:text-[#6B4616]">
-                          {ep.title}
-                        </span>
-
-                        {validation.hasMissingTitle && (
-                          <span className="px-1.5 py-0.2 rounded bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold">
-                            ยังไม่ตั้งชื่อ
-                          </span>
-                        )}
-
-                        {validation.hasNon5Rank && !validation.hasMissingTitle && (
-                          <span className="px-1.5 py-0.2 rounded bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold">
-                            ไม่ใช่ 5 อันดับ
-                          </span>
-                        )}
-
-                        {validation.hasIncompleteSlots && (
-                          <span className="px-1.5 py-0.2 rounded bg-[#FAF0E6] text-[#8C4616] border border-[#E5CEBA] text-[10px] font-bold">
-                            ฟุตไม่ครบ ({validation.filledSlotCount}/5)
-                          </span>
-                        )}
+                    <td className="py-2.5 px-3.5 min-w-[260px] max-w-[440px]">
+                      <div className="font-bold text-[#2D2926] text-xs sm:text-sm truncate group-hover:text-[#6B4616] transition-colors">
+                        {ep.title}
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                         {ep.rankings.map((slot) => {
@@ -232,12 +196,12 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                               }}
                               title={
                                 ft
-                                  ? `อันดับ #${slot.rank}: ${ft.id} — ${ft.title} (คลิกเพื่อดูวิดีโอตัวเต็ม)`
+                                  ? `อันดับ #${slot.rank}: ${ft.id} — ${ft.title} (คลิกดูวิดีโอ)`
                                   : `อันดับ #${slot.rank}: ${slot.footageId || 'ว่าง'}`
                               }
-                              className={`group/thumb inline-flex items-center gap-1 px-1 py-0.5 rounded-lg border transition-all ${
+                              className={`group/thumb inline-flex items-center gap-1 px-1 py-0.5 rounded-lg border transition-colors ${
                                 ft
-                                  ? 'bg-[#FAF6F0] hover:bg-[#F2ECE0] border-[#E4DDD3] hover:border-[#DEC5A0] cursor-pointer shadow-2xs hover:shadow-xs'
+                                  ? 'bg-[#FAF6F0] hover:bg-[#F2ECE0] border-[#E4DDD3] hover:border-[#DEC5A0] cursor-pointer shadow-2xs'
                                   : 'bg-[#F7F3EC] border-[#E8DFD3] text-[#A69B8D] cursor-default'
                               }`}
                             >
@@ -246,13 +210,13 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                                   <>
                                     <VideoThumbnailPreview footage={ft} size="xs" />
                                     <div className="absolute inset-0 bg-black/15 group-hover/thumb:bg-black/0 transition-colors flex items-center justify-center pointer-events-none">
-                                      <Play className="w-2 h-2 text-white drop-shadow-xs opacity-75 group-hover/thumb:opacity-100 group-hover/thumb:scale-110" />
+                                      <Play className="w-2 h-2 text-white drop-shadow-xs opacity-75 group-hover/thumb:opacity-100" />
                                     </div>
                                   </>
                                 ) : (
                                   <Film className="w-2.5 h-2.5 text-[#A69B8D]" />
                                 )}
-                                <span className="absolute top-0.2 left-0.2 px-0.5 rounded bg-black/75 text-white font-mono font-black text-[7px] leading-none pointer-events-none">
+                                <span className="absolute top-0.2 left-0.2 px-0.5 rounded bg-black/75 text-white font-mono font-black text-[7px] leading-none pointer-events-none tabular-nums">
                                   #{slot.rank}
                                 </span>
                               </div>
@@ -276,30 +240,16 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                     </td>
 
                     <td className="py-2.5 px-3.5 whitespace-nowrap">
-                      <span
-                        title={completeness.detailText}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-bold ${
-                          completeness.isComplete
-                            ? 'bg-[#E6F2E6] text-[#224A2D] border-[#A7C9A5]'
-                            : 'bg-[#FAF0E1] text-[#7A3F17] border-[#E5CFA6]'
-                        }`}
-                      >
-                        {completeness.isComplete ? (
-                          <CheckCircle2 className="w-3 h-3 text-[#2E7D32] shrink-0" />
-                        ) : (
-                          <AlertTriangle className="w-3 h-3 text-[#B56722] shrink-0" />
-                        )}
-                        <span>{completeness.shortLabel}</span>
-                      </span>
+                      <EpisodeCompletenessBadge episode={ep} />
                     </td>
 
-                    <td className="py-2.5 px-3.5 font-mono tabular-nums whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 text-[#23546E] font-bold bg-[#EDF5F9] px-1.5 py-0.5 rounded-md border border-[#C4DFED] text-[11px]">
+                    <td className="py-2.5 px-3.5 font-mono tabular-nums whitespace-nowrap text-[11px]">
+                      <span className="inline-flex items-center gap-1 text-[#23546E] font-bold">
                         <Sparkles className="w-2.5 h-2.5 text-[#2E6B8A]" />
                         <span>ใหม่ {mix.newCount}</span>
                       </span>
-                      <span className="text-[#C8BCAE] mx-1">·</span>
-                      <span className="inline-flex items-center gap-1 text-[#244B2F] font-bold bg-[#EBF3EB] px-1.5 py-0.5 rounded-md border border-[#BBD6B9] text-[11px]">
+                      <span className="text-[#CFC4B6] mx-1">·</span>
+                      <span className="inline-flex items-center gap-1 text-[#244B2F] font-bold">
                         <CheckCircle2 className="w-2.5 h-2.5 text-[#386B46]" />
                         <span>วนใช้ {mix.recycledCount}</span>
                       </span>
@@ -316,11 +266,8 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
                       </div>
                     </td>
 
-                    <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
-                      <span className="inline-flex items-center gap-0.5 font-bold text-[#785324] group-hover:text-[#5C3A0E]">
-                        <span>เปิดดู</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </span>
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <ChevronRight className="w-4 h-4 text-[#8C7A65] group-hover:text-[#5C3A0E] inline-block transition-colors" />
                     </td>
                   </tr>
                 );
@@ -328,7 +275,7 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+      </motion.div>
 
       <PaginationBar
         currentPage={currentPage}
@@ -342,3 +289,4 @@ export const EpisodeTableView: React.FC<EpisodeTableViewProps> = ({
     </div>
   );
 };
+

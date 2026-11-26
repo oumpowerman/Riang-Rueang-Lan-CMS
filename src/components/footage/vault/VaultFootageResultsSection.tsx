@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   ArrowDown,
   ArrowUp,
@@ -47,6 +47,8 @@ export interface VaultFootageResultsSectionProps {
   onSortByChange?: (sort: FootageLibrarySortBy) => void;
 }
 
+const CRISP_SLIDE_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProps> = ({
   resultsTransitionKey,
   viewMode,
@@ -68,6 +70,7 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
   sortBy,
   onSortByChange,
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const {
     selectedFootageIdsForBatch,
     setSelectedFootageIdsForBatch,
@@ -147,10 +150,13 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
       {filteredCount === 0 ? (
         <motion.div
           key={`empty-${resultsTransitionKey}`}
-          initial={{ opacity: 0, y: 12, scale: 0.98, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-          exit={{ opacity: 0, y: -8, scale: 0.98, filter: 'blur(3px)' }}
-          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
+          transition={{
+            duration: prefersReducedMotion ? 0 : 0.2,
+            ease: CRISP_SLIDE_EASE,
+          }}
           className="bg-white border border-slate-200 rounded-2xl p-10 text-center space-y-2.5"
         >
           <p className="text-sm sm:text-base font-bold text-slate-900">
@@ -169,43 +175,36 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
       ) : viewMode === 'GRID' ? (
         <motion.div
           key={`grid-${resultsTransitionKey}`}
-          initial={{ opacity: 0 }}
+          initial={prefersReducedMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.12 } }}
+          exit={
+            prefersReducedMotion
+              ? undefined
+              : { opacity: 0, transition: { duration: 0.1 } }
+          }
           className="space-y-4"
         >
           <motion.div
-            layout
+            layout={!prefersReducedMotion}
             className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5"
           >
             {paginatedFootage.map((ft, index) => (
               <motion.div
                 key={ft.id}
-                layout="position"
-                initial={{
-                  opacity: 0,
-                  y: 22,
-                  scale: 0.95,
-                  filter: 'blur(4px)',
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                  scale: 1,
-                  filter: 'blur(0px)',
-                }}
-                exit={{
-                  opacity: 0,
-                  y: -12,
-                  scale: 0.95,
-                  filter: 'blur(3px)',
-                }}
+                layout={prefersReducedMotion ? false : 'position'}
+                initial={
+                  prefersReducedMotion ? false : { opacity: 0, x: 16 }
+                }
+                animate={{ opacity: 1, x: 0 }}
+                exit={
+                  prefersReducedMotion ? undefined : { opacity: 0, x: -10 }
+                }
                 transition={{
-                  type: 'spring',
-                  stiffness: 380,
-                  damping: 26,
-                  mass: 0.78,
-                  delay: Math.min(index * 0.045, 0.32),
+                  duration: prefersReducedMotion ? 0 : 0.24,
+                  delay: prefersReducedMotion
+                    ? 0
+                    : Math.min(index * 0.025, 0.18),
+                  ease: CRISP_SLIDE_EASE,
                 }}
               >
                 <FootageCard
@@ -234,10 +233,17 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
       ) : (
         <motion.div
           key={`table-${resultsTransitionKey}`}
-          initial={{ opacity: 0, y: 10 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8, transition: { duration: 0.12 } }}
-          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          exit={
+            prefersReducedMotion
+              ? undefined
+              : { opacity: 0, y: -6, transition: { duration: 0.1 } }
+          }
+          transition={{
+            duration: prefersReducedMotion ? 0 : 0.22,
+            ease: CRISP_SLIDE_EASE,
+          }}
           className="space-y-4"
         >
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
@@ -302,21 +308,16 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                         draggable
                         onDragStartCapture={(e) => handleRowDragStart(e, ft.id)}
                         onDragEndCapture={onEndDragFootage}
-                        initial={{
-                          opacity: 0,
-                          y: 14,
-                          filter: 'blur(3px)',
-                        }}
-                        animate={{
-                          opacity: 1,
-                          y: 0,
-                          filter: 'blur(0px)',
-                        }}
+                        initial={
+                          prefersReducedMotion ? false : { opacity: 0, x: 12 }
+                        }
+                        animate={{ opacity: 1, x: 0 }}
                         transition={{
-                          type: 'spring',
-                          stiffness: 400,
-                          damping: 28,
-                          delay: Math.min(index * 0.035, 0.28),
+                          duration: prefersReducedMotion ? 0 : 0.2,
+                          delay: prefersReducedMotion
+                            ? 0
+                            : Math.min(index * 0.02, 0.16),
+                          ease: CRISP_SLIDE_EASE,
                         }}
                         onClick={(e) => {
                           if (e.shiftKey) {
@@ -325,7 +326,7 @@ export const VaultFootageResultsSection: React.FC<VaultFootageResultsSectionProp
                           }
                           onSelectForTraceability(ft.id);
                         }}
-                        className={`cursor-pointer transition-colors group ${
+                        className={`cursor-pointer group ${
                           isBeingDragged
                             ? 'bg-indigo-100/80 opacity-65'
                             : isSelected

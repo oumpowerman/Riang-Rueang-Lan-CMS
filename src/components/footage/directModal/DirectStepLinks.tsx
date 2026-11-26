@@ -1,29 +1,29 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Link2,
   FolderOpen,
   ExternalLink,
   Clipboard,
   Check,
-  ArrowRight,
-  BookmarkPlus,
 } from 'lucide-react';
-import { detectPlatformFromUrl, parseSharedInput } from '../../../utils/platformDetector';
+import {
+  detectPlatformFromUrl,
+  parseSharedInput,
+  sanitizeSharedUrl,
+} from '../../../utils/platformDetector';
 import { PlatformIcon } from './PlatformIcons';
 import { DuplicateMatch } from '../../../utils/duplicateDetector';
 import { DuplicateWarningBanner } from '../DuplicateWarningBanner';
+import { IOSShortcutGuideDrawer } from '../../pwa/IOSShortcutGuideDrawer';
 
 interface DirectStepLinksProps {
   originalUrl: string;
   setOriginalUrl: (url: string) => void;
   driveFileUrl: string;
   setDriveFileUrl: (url: string) => void;
-  previewNextId: string;
   duplicateMatch?: DuplicateMatch | null;
   onViewFootage?: (footageId: string) => void;
   onSuggestedTitle?: (suggestedTitle: string) => void;
-  onQuickSave: () => void;
-  onNext: () => void;
 }
 
 export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
@@ -31,15 +31,25 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
   setOriginalUrl,
   driveFileUrl,
   setDriveFileUrl,
-  previewNextId,
   duplicateMatch,
   onViewFootage,
   onSuggestedTitle,
-  onQuickSave,
-  onNext,
 }) => {
+  const originalInputRef = useRef<HTMLInputElement>(null);
+  const driveInputRef = useRef<HTMLInputElement>(null);
+  const [pasteFeedback, setPasteFeedback] = useState<{
+    target: 'original' | 'drive';
+    status: 'pasted' | 'blocked';
+  } | null>(null);
+
   const originalPlatform = detectPlatformFromUrl(originalUrl);
-  const hasAnyValidLink = Boolean(originalUrl.trim() || driveFileUrl.trim());
+
+  const showPasteStatus = (target: 'original' | 'drive', status: 'pasted' | 'blocked') => {
+    setPasteFeedback({ target, status });
+    window.setTimeout(() => {
+      setPasteFeedback((prev) => (prev?.target === target && prev.status === status ? null : prev));
+    }, 2200);
+  };
 
   const applySmartInput = (rawText: string, target: 'original' | 'drive') => {
     const trimmed = rawText.trim();
@@ -49,11 +59,18 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
       return;
     }
 
-    if (trimmed.includes('http') && trimmed.includes(' ')) {
+    // Handle multi-line / captioned shares from TikTok, IG Reels, Facebook, YouTube, or bare social URLs
+    if (/\s/.test(trimmed) || trimmed.includes('l.facebook.com/l.php')) {
       const parsed = parseSharedInput('', trimmed, '');
       if (parsed.url) {
-        if (target === 'original') setOriginalUrl(parsed.url);
-        else setDriveFileUrl(parsed.url);
+        const resolvedPlatform = detectPlatformFromUrl(parsed.url);
+        if (target === 'original' && resolvedPlatform?.type === 'GOOGLE_DRIVE' && !driveFileUrl.trim()) {
+          setDriveFileUrl(parsed.url);
+        } else if (target === 'original') {
+          setOriginalUrl(parsed.url);
+        } else {
+          setDriveFileUrl(parsed.url);
+        }
         if (parsed.suggestedTitle) {
           onSuggestedTitle?.(parsed.suggestedTitle);
         }
@@ -61,72 +78,84 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
       }
     }
 
-    if (target === 'original') setOriginalUrl(trimmed);
-    else setDriveFileUrl(trimmed);
+    const normalized = /^https?:\/\//i.test(trimmed)
+      ? sanitizeSharedUrl(trimmed)
+      : trimmed;
+
+    if (target === 'original') setOriginalUrl(normalized);
+    else setDriveFileUrl(normalized);
   };
 
   const handlePasteOriginal = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
+      if (text && text.trim()) {
         applySmartInput(text, 'original');
+        showPasteStatus('original', 'pasted');
+        return;
       }
     } catch {
-      // Fallback if clipboard read permission denied
+      // Clipboard API blocked on mobile/iOS without direct user paste gesture
     }
+    originalInputRef.current?.focus();
+    showPasteStatus('original', 'blocked');
   };
 
   const handlePasteDrive = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
+      if (text && text.trim()) {
         applySmartInput(text, 'drive');
+        showPasteStatus('drive', 'pasted');
+        return;
       }
     } catch {
-      // Fallback if clipboard read permission denied
+      // Clipboard API blocked on mobile/iOS without direct user paste gesture
     }
+    driveInputRef.current?.focus();
+    showPasteStatus('drive', 'blocked');
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {/* Source Link Section */}
       <div
-        className={`p-3 rounded-2xl border transition-all ${
+        className={`p-2.5 sm:p-3 rounded-xl border transition-colors ${
           originalUrl
             ? 'bg-amber-50/40 border-amber-300/80 ring-2 ring-amber-500/10'
             : 'bg-white border-stone-200 hover:border-stone-300'
         }`}
       >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <label className="text-xs sm:text-sm font-bold text-stone-800 flex items-center gap-1.5 whitespace-nowrap">
-            <Link2 className="w-4 h-4 text-amber-700 shrink-0" />
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5 whitespace-nowrap">
+            <Link2 className="w-3.5 h-3.5 text-amber-700 shrink-0" />
             <span>ลิงก์ต้นฉบับ</span>
           </label>
 
           <div className="flex items-center gap-1.5 shrink-0">
             {originalPlatform ? (
               <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${originalPlatform.badgeBg} ${originalPlatform.badgeText} border ${originalPlatform.badgeBorder}`}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${originalPlatform.badgeBg} ${originalPlatform.badgeText} border ${originalPlatform.badgeBorder}`}
               >
                 <PlatformIcon platform={originalPlatform.type} className="w-3 h-3" />
                 <span>{originalPlatform.name}</span>
               </span>
             ) : (
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-stone-100/80 border border-stone-200/70 text-stone-500">
+              <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-stone-100/80 border border-stone-200/70 text-stone-500">
                 <span title="YouTube" className="text-rose-600">
-                  <PlatformIcon platform="YOUTUBE" className="w-3.5 h-3.5" />
+                  <PlatformIcon platform="YOUTUBE" className="w-3 h-3" />
                 </span>
                 <span title="Facebook" className="text-blue-600">
-                  <PlatformIcon platform="FACEBOOK" className="w-3.5 h-3.5" />
+                  <PlatformIcon platform="FACEBOOK" className="w-3 h-3" />
                 </span>
                 <span title="TikTok" className="text-stone-900">
-                  <PlatformIcon platform="TIKTOK" className="w-3.5 h-3.5" />
+                  <PlatformIcon platform="TIKTOK" className="w-3 h-3" />
                 </span>
                 <span title="Instagram" className="text-fuchsia-600">
-                  <PlatformIcon platform="INSTAGRAM" className="w-3.5 h-3.5" />
+                  <PlatformIcon platform="INSTAGRAM" className="w-3 h-3" />
                 </span>
                 <span title="X / Twitter" className="text-stone-800">
-                  <PlatformIcon platform="TWITTER" className="w-3.5 h-3.5" />
+                  <PlatformIcon platform="TWITTER" className="w-3 h-3" />
                 </span>
               </div>
             )}
@@ -136,7 +165,7 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
                 href={originalUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-1"
+                className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5"
               >
                 <ExternalLink className="w-3 h-3" />
                 <span>เปิดดู</span>
@@ -147,36 +176,53 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
 
         <div className="relative flex items-center">
           <input
+            ref={originalInputRef}
             type="url"
             value={originalUrl}
             onChange={(e) => applySmartInput(e.target.value, 'original')}
             placeholder="วางลิงก์ TikTok / IG / YouTube / FB..."
-            className="w-full pl-3 pr-16 py-2 text-xs sm:text-sm font-mono bg-[#FAF8F5] focus:bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-all text-stone-900 placeholder:text-stone-400"
+            className="w-full pl-3 pr-16 py-2 text-xs sm:text-sm font-mono bg-[#FAF8F5] focus:bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-colors text-stone-900 placeholder:text-stone-400"
           />
           <button
             type="button"
             onClick={handlePasteOriginal}
-            className="absolute right-1.5 px-2.5 py-1 text-xs font-semibold text-stone-700 hover:text-emerald-800 bg-white hover:bg-stone-50 border border-stone-200 rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+            aria-label="วางลิงก์ต้นฉบับจากคลิปบอร์ด"
+            className="absolute right-1.5 min-h-[28px] px-2 py-0.5 text-[11px] font-semibold text-stone-700 hover:text-emerald-800 bg-white hover:bg-stone-50 border border-stone-200 rounded-md flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
           >
-            <Clipboard className="w-3 h-3" />
-            <span>วาง</span>
+            {pasteFeedback?.target === 'original' && pasteFeedback.status === 'pasted' ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-600" />
+                <span className="text-emerald-700">วางแล้ว</span>
+              </>
+            ) : (
+              <>
+                <Clipboard className="w-3 h-3" />
+                <span>วาง</span>
+              </>
+            )}
           </button>
         </div>
+
+        {pasteFeedback?.target === 'original' && pasteFeedback.status === 'blocked' && (
+          <p className="mt-1 text-[11px] text-amber-700 font-medium">
+            กดค้างที่ช่องด้านบน แล้วเลือก &quot;วาง&quot; (Paste) ได้เลยครับ
+          </p>
+        )}
       </div>
 
       {/* Google Drive Link Section */}
       <div
-        className={`p-3 rounded-2xl border transition-all ${
+        className={`p-2.5 sm:p-3 rounded-xl border transition-colors ${
           driveFileUrl
             ? 'bg-emerald-50/50 border-emerald-300/80 ring-2 ring-emerald-500/10'
             : 'bg-white border-stone-200 hover:border-stone-300'
         }`}
       >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <label className="text-xs sm:text-sm font-bold text-stone-800 flex items-center gap-1.5 whitespace-nowrap">
-            <FolderOpen className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>ลิงก์ Google Drive</span>
-            <span className="text-[11px] font-normal text-stone-400">(เว้นว่างรอฝากทีหลังได้)</span>
+        <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
+          <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5 min-w-0">
+            <FolderOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="shrink-0">ลิงก์ Google Drive</span>
+            <span className="text-[11px] font-normal text-stone-400 truncate">(รอฝากทีหลังได้)</span>
           </label>
 
           {driveFileUrl && (
@@ -184,7 +230,7 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
               href={driveFileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 shrink-0"
+              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5 shrink-0"
             >
               <ExternalLink className="w-3 h-3" />
               <span>เปิด Drive</span>
@@ -194,57 +240,45 @@ export const DirectStepLinks: React.FC<DirectStepLinksProps> = ({
 
         <div className="relative flex items-center">
           <input
+            ref={driveInputRef}
             type="url"
             value={driveFileUrl}
             onChange={(e) => applySmartInput(e.target.value, 'drive')}
             placeholder="วางลิงก์ https://drive.google.com/file/d/..."
-            className="w-full pl-3 pr-16 py-2 text-xs sm:text-sm font-mono bg-[#FAF8F5] focus:bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-all text-stone-900 placeholder:text-stone-400"
+            className="w-full pl-3 pr-16 py-2 text-xs sm:text-sm font-mono bg-[#FAF8F5] focus:bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-colors text-stone-900 placeholder:text-stone-400"
           />
           <button
             type="button"
             onClick={handlePasteDrive}
-            className="absolute right-1.5 px-2.5 py-1 text-xs font-semibold text-stone-700 hover:text-emerald-800 bg-white hover:bg-stone-50 border border-stone-200 rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+            aria-label="วางลิงก์ Google Drive จากคลิปบอร์ด"
+            className="absolute right-1.5 min-h-[28px] px-2 py-0.5 text-[11px] font-semibold text-stone-700 hover:text-emerald-800 bg-white hover:bg-stone-50 border border-stone-200 rounded-md flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
           >
-            <Clipboard className="w-3 h-3" />
-            <span>วาง</span>
+            {pasteFeedback?.target === 'drive' && pasteFeedback.status === 'pasted' ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-600" />
+                <span className="text-emerald-700">วางแล้ว</span>
+              </>
+            ) : (
+              <>
+                <Clipboard className="w-3 h-3" />
+                <span>วาง</span>
+              </>
+            )}
           </button>
         </div>
+
+        {pasteFeedback?.target === 'drive' && pasteFeedback.status === 'blocked' && (
+          <p className="mt-1 text-[11px] text-amber-700 font-medium">
+            กดค้างที่ช่องด้านบน แล้วเลือก &quot;วาง&quot; (Paste) ได้เลยครับ
+          </p>
+        )}
       </div>
 
       {/* Duplicate Footage Warning Banner */}
       <DuplicateWarningBanner match={duplicateMatch || null} onViewFootage={onViewFootage} />
 
-      {/* Bottom Action Bar: Quick Save + Next side-by-side */}
-      <div className="pt-2.5 flex items-center justify-end gap-2 border-t border-stone-200/80">
-        <button
-          type="button"
-          disabled={!hasAnyValidLink}
-          onClick={onQuickSave}
-          className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-xl border transition-all cursor-pointer ${
-            hasAnyValidLink
-              ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
-              : 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
-          }`}
-          title="บันทึกเข้าคลังทันที (ตั้งชื่อตามแพลตฟอร์มและเก็บเข้าพื้นที่พักรออัตโนมัติ)"
-        >
-          <BookmarkPlus className="w-4 h-4 shrink-0" />
-          <span>บันทึกด่วน ({previewNextId})</span>
-        </button>
-
-        <button
-          type="button"
-          disabled={!hasAnyValidLink}
-          onClick={onNext}
-          className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
-            hasAnyValidLink
-              ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs'
-              : 'bg-stone-100 text-stone-400 cursor-not-allowed'
-          }`}
-        >
-          <span>ถัดไป</span>
-          <ArrowRight className="w-4 h-4 shrink-0" />
-        </button>
-      </div>
+      {/* Collapsible iOS Shortcuts Share Sheet Setup Guide */}
+      <IOSShortcutGuideDrawer compact />
     </div>
   );
 };

@@ -33,7 +33,12 @@ import { SupabaseContentSyncModal } from './components/supabase/SupabaseContentS
 import { SupabaseConfigModal } from './components/supabase/SupabaseConfigModal';
 import { OfflineIndicator } from './components/pwa/OfflineIndicator';
 import { PWAUpdateBanner } from './components/pwa/PWAUpdateBanner';
-import { parseSharedInput } from './utils/platformDetector';
+import {
+  clearPendingShareTarget,
+  parseSharedInput,
+  readPendingShareTarget,
+  savePendingShareTarget,
+} from './utils/platformDetector';
 import { CMSProvider, useCMS } from './context/CMSContext';
 import { AuthProvider } from './context/AuthContext';
 
@@ -52,27 +57,52 @@ const MainWorkspace: React.FC = () => {
     useState<SharedFootageInitialData | null>(null);
 
   // Intercept Web Share Target launches (?share-target=1&title=...&text=...&url=...)
-  // and open the unified DirectFootageModal directly
+  // and open the unified DirectFootageModal directly, with reload-safe session backup.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const isShareTarget = params.get('share-target') === '1';
-    const rawUrl = params.get('url');
-    const rawText = params.get('text');
-    const rawTitle = params.get('title');
+    const consumeShareTargetFromLocation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const isShareTarget = params.get('share-target') === '1';
+      const rawUrl = params.get('url');
+      const rawText = params.get('text');
+      const rawTitle = params.get('title');
 
-    if (isShareTarget || rawUrl || rawText) {
-      const parsed = parseSharedInput(rawUrl, rawText, rawTitle);
-      setSharedInitialData({
-        url: parsed.url,
-        suggestedTitle: parsed.suggestedTitle,
-      });
-      setActiveTab('FOOTAGE_LIBRARY');
-      setIsDirectFootageModalOpen(true);
+      if (isShareTarget || rawUrl || rawText) {
+        const parsed = parseSharedInput(rawUrl, rawText, rawTitle);
+        savePendingShareTarget(parsed);
+        setSharedInitialData({
+          url: parsed.url,
+          suggestedTitle: parsed.suggestedTitle,
+          fallbackNote: parsed.fallbackNote,
+        });
+        setActiveTab('FOOTAGE_LIBRARY');
+        setIsDirectFootageModalOpen(true);
 
-      // Clean up the query parameters from the URL bar without reloading
-      const cleanUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, document.title, cleanUrl);
+        // Clean up query parameters without triggering a reload
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+        return true;
+      }
+      return false;
+    };
+
+    const handledFromUrl = consumeShareTargetFromLocation();
+    if (!handledFromUrl) {
+      const pending = readPendingShareTarget();
+      if (pending && (pending.url || pending.suggestedTitle || pending.fallbackNote)) {
+        setSharedInitialData({
+          url: pending.url,
+          suggestedTitle: pending.suggestedTitle,
+          fallbackNote: pending.fallbackNote,
+        });
+        setActiveTab('FOOTAGE_LIBRARY');
+        setIsDirectFootageModalOpen(true);
+      }
     }
+
+    window.addEventListener('popstate', consumeShareTargetFromLocation);
+    return () => {
+      window.removeEventListener('popstate', consumeShareTargetFromLocation);
+    };
   }, [setActiveTab, setIsDirectFootageModalOpen]);
 
   return (
@@ -123,7 +153,10 @@ const MainWorkspace: React.FC = () => {
       {/* Global Interactive Modals */}
       <DirectFootageModal
         sharedInitialData={sharedInitialData}
-        onClearSharedInitialData={() => setSharedInitialData(null)}
+        onClearSharedInitialData={() => {
+          clearPendingShareTarget();
+          setSharedInitialData(null);
+        }}
       />
       <SourceSplitterModal />
       <FootageTraceabilityModal />

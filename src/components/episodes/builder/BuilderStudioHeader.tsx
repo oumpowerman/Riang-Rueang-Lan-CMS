@@ -9,8 +9,6 @@ import {
   FileText,
 } from 'lucide-react';
 import { ActiveNavTab, CategoryMatrixStat } from '../../../context/CMSContext';
-import { EpisodeProductionTarget } from '../../../types/episode.types';
-import { CategoryGroup, CategoryTag } from '../../../types/tag.types';
 import { BuilderScopeMatchMode, BuilderStepNumber } from './builder.types';
 
 interface BuilderStudioHeaderProps {
@@ -49,10 +47,10 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
   const step1Sub = activeSeriesLabel
     ? `${activeSeriesLabel} · EP.${effectiveEpisodeNo}`
     : activeCategoryStat
-      ? selectedFacetCount > 0
-        ? `#${activeCategoryStat.tag.name} +${selectedFacetCount} (${scopeMatchMode})`
-        : `#${activeCategoryStat.tag.name}`
-      : 'ยังไม่เลือก';
+    ? selectedFacetCount > 0
+      ? `#${activeCategoryStat.tag.name} +${selectedFacetCount} (${scopeMatchMode})`
+      : `#${activeCategoryStat.tag.name}`
+    : 'ยังไม่เลือก';
 
   const steps = [
     {
@@ -78,7 +76,7 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
       sub:
         selectedCount === 5
           ? `EP.${effectiveEpisodeNo} · พร้อมบันทึก`
-          : `EP.${effectiveEpisodeNo} · รอครบ 5 คลิป`,
+          : `EP.${effectiveEpisodeNo} · รอครบ 5`,
       icon: FileText,
       isDone: false,
     },
@@ -86,45 +84,25 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Main Studio Header: Pastel Earth Tone Theme */}
+      {/* Main Studio Header */}
       <div className="bg-[#fdfbf7] border border-[#e8dfd3] rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-xs">
-        {/* Top Row: Title + Code Badge + Selection Pill */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#edf4ed] border border-[#cbe0cb] flex items-center justify-center shrink-0">
               <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-[#3a6845]" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-xl font-bold text-[#2d2926] truncate">
-                  จัดชุดคลิป 5 อันดับ
-                </h1>
-                <span className="px-2 py-0.5 rounded-lg bg-[#f3ece0] text-[#785324] border border-[#e5d8c3] text-xs font-mono font-bold tabular-nums shrink-0">
-                  {nextEpisodeId}
-                </span>
-              </div>
-              <p className="hidden sm:block text-xs text-[#716960] mt-0.5">
-                เลือกสูตรผสมด่วนหรือหยิบฟุตเทจจากคลังลง 5 อันดับให้สมบูรณ์
-              </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base sm:text-xl font-bold text-[#2d2926] truncate">
+                จัดชุดคลิป 5 อันดับ
+              </h1>
+              <span className="px-2 py-0.5 rounded-lg bg-[#f3ece0] text-[#785324] border border-[#e5d8c3] text-xs font-mono font-bold tabular-nums shrink-0">
+                {nextEpisodeId}
+              </span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs shrink-0">
-            <span
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl font-mono font-bold tabular-nums transition-colors flex items-center gap-1.5 border whitespace-nowrap ${
-                selectedCount === 5
-                  ? 'bg-[#edf4ed] text-[#285333] border-[#bad8b9] shadow-xs'
-                  : 'bg-[#fef8ed] text-[#7d5622] border-[#f0e2ca]'
-              }`}
-            >
-              {selectedCount === 5 && <CheckCircle2 className="w-3.5 h-3.5 text-[#285333] shrink-0" />}
-              <span className="hidden sm:inline">เลือกแล้ว {selectedCount}/5 อันดับ</span>
-              <span className="sm:hidden">{selectedCount}/5 อันดับ</span>
-            </span>
           </div>
         </div>
 
-        {/* Horizontal 3-Step Wizard Stepper Bar (3 columns on both mobile and desktop) */}
+        {/* Horizontal 3-Step Stepper Bar */}
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 pt-2.5 border-t border-[#eee6da]">
           {steps.map((st) => {
             const isActive = activeBuilderStep === st.num;
@@ -133,7 +111,7 @@ export const BuilderStudioHeader: React.FC<BuilderStudioHeaderProps> = ({
                 key={st.num}
                 type="button"
                 onClick={() => onSelectStep(st.num)}
-                className={`relative text-left p-2 sm:p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                className={`relative text-left p-2 sm:p-2.5 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-1 ${
                   isActive
                     ? 'bg-[#f4f7f2] border-[#93b390] ring-2 ring-[#a4c5a1]/40 shadow-xs'
                     : 'bg-[#faf7f2] hover:bg-white hover:border-[#d6cbbe] border-[#e8dfd3] text-[#4d4740]'

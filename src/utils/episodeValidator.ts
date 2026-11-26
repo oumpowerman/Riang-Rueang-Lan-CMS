@@ -264,7 +264,8 @@ export type EpisodeCompletenessFilter =
   | 'ALL'
   | 'COMPLETE'
   | 'INCOMPLETE'
-  | 'INCOMPLETE_FOOTAGE';
+  | 'INCOMPLETE_FOOTAGE'
+  | 'NEEDS_STANDARD_FIX';
 
 export interface EpisodeCompletenessResult {
   isComplete: boolean;

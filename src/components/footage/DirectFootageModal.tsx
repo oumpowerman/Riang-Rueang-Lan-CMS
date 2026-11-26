@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Copy, Check, Layers } from 'lucide-react';
+import {
+  Copy,
+  Check,
+  Layers,
+  ArrowLeft,
+  ArrowRight,
+  BookmarkPlus,
+} from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import {
   STAGING_TAG_ID,
@@ -20,6 +27,7 @@ import { DirectStepTagsAndNotes } from './directModal/DirectStepTagsAndNotes';
 export interface SharedFootageInitialData {
   url: string;
   suggestedTitle: string;
+  fallbackNote?: string;
 }
 
 interface DirectFootageModalProps {
@@ -68,9 +76,8 @@ export const DirectFootageModal: React.FC<DirectFootageModalProps> = ({
         setDriveFileUrl('');
       }
 
-      if (sharedInitialData.suggestedTitle) {
-        setTitle(sharedInitialData.suggestedTitle);
-      }
+      setTitle(sharedInitialData.suggestedTitle || '');
+      setMascotNotes(sharedInitialData.fallbackNote || '');
       setCurrentStep(1);
     }
   }, [isDirectFootageModalOpen, sharedInitialData]);
@@ -197,34 +204,108 @@ export const DirectFootageModal: React.FC<DirectFootageModalProps> = ({
     handleClose();
   };
 
-  // Distinctive 100px Horizontal Slide & Fade Carousel
+  // GPU-accelerated Horizontal Slide & Fade Carousel (zero filter/layout conflict)
   const slideVariants = {
     enter: (dir: number) => ({
-      x: dir > 0 ? 100 : -100,
+      x: dir > 0 ? 36 : -36,
       opacity: 0,
-      filter: 'blur(3px)',
     }),
     center: {
       x: 0,
       opacity: 1,
-      filter: 'blur(0px)',
       transition: {
-        x: { type: 'spring' as const, stiffness: 280, damping: 26 },
-        opacity: { duration: 0.22 },
-        filter: { duration: 0.2 },
+        x: { type: 'spring' as const, stiffness: 360, damping: 32 },
+        opacity: { duration: 0.16 },
       },
     },
     exit: (dir: number) => ({
-      x: dir < 0 ? 100 : -100,
+      x: dir < 0 ? 36 : -36,
       opacity: 0,
-      filter: 'blur(3px)',
       transition: {
-        x: { type: 'spring' as const, stiffness: 280, damping: 26 },
-        opacity: { duration: 0.18 },
-        filter: { duration: 0.16 },
+        x: { duration: 0.14, ease: [0.4, 0, 1, 1] as const },
+        opacity: { duration: 0.12 },
       },
     }),
   };
+
+  const modalFooter = (
+    <div className="w-full flex items-center justify-between gap-2">
+      {currentStep > 1 ? (
+        <button
+          type="button"
+          onClick={() => goToStep(currentStep - 1)}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg cursor-pointer shrink-0 whitespace-nowrap"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+          <span>กลับ</span>
+        </button>
+      ) : (
+        <div />
+      )}
+
+      <div className="flex items-center gap-1.5 ml-auto">
+        {currentStep < 3 && (
+          <>
+            <button
+              type="button"
+              disabled={!hasAnyLink}
+              onClick={handleQuickSave}
+              className={`inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg border cursor-pointer whitespace-nowrap ${
+                hasAnyLink
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+                  : 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+              }`}
+              title="บันทึกเข้าคลังทันที (ตั้งชื่อตามแพลตฟอร์มและเก็บเข้าพื้นที่พักรออัตโนมัติ)"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 shrink-0" />
+              <span>บันทึกด่วน</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={currentStep === 1 ? !hasAnyLink : !hasTitle}
+              onClick={() => goToStep(currentStep + 1)}
+              className={`inline-flex items-center justify-center gap-1 px-3.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer whitespace-nowrap ${
+                (currentStep === 1 ? hasAnyLink : hasTitle)
+                  ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs'
+                  : 'bg-stone-100 text-stone-400 cursor-not-allowed'
+              }`}
+            >
+              <span>ถัดไป</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </button>
+          </>
+        )}
+
+        {currentStep === 3 && (
+          <motion.button
+            type="button"
+            disabled={!canSubmit}
+            onClick={() => handleSubmit()}
+            whileHover={canSubmit ? { scale: 1.01 } : undefined}
+            whileTap={canSubmit ? { scale: 0.98 } : undefined}
+            className={`inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg shadow-2xs cursor-pointer whitespace-nowrap ${
+              canSubmit
+                ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+            }`}
+          >
+            {hasDriveUrl ? (
+              <>
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>บันทึกพร้อมใช้ ({previewNextId})</span>
+              </>
+            ) : (
+              <>
+                <BookmarkPlus className="w-3.5 h-3.5 shrink-0" />
+                <span>บันทึกเข้าคิว ({previewNextId})</span>
+              </>
+            )}
+          </motion.button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <Modal
@@ -232,31 +313,32 @@ export const DirectFootageModal: React.FC<DirectFootageModalProps> = ({
       onClose={handleClose}
       title="นำเข้าฟุตเดี่ยว"
       maxWidthClass="max-w-xl"
+      heightClass="h-[82dvh] sm:h-[600px] max-h-[90dvh] sm:max-h-[85dvh]"
       badge={
-        <div className="inline-flex items-center gap-1.5">
+        <div className="inline-flex items-center gap-1">
           <button
             type="button"
             onClick={handleCopyFileName}
             title={`คลิกเพื่อคัดลอกชื่อไฟล์: ${previewFileName}`}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100/90 hover:bg-amber-200/80 text-amber-900 border border-amber-300/80 font-mono font-bold text-xs cursor-pointer transition-all select-none"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100/90 hover:bg-amber-200/80 text-amber-900 border border-amber-300/80 font-mono tabular-nums font-bold text-[11px] cursor-pointer select-none whitespace-nowrap"
           >
             <span>{previewNextId}</span>
             {copiedFileName ? (
-              <Check className="w-3 h-3 text-emerald-700" />
+              <Check className="w-2.5 h-2.5 text-emerald-700" />
             ) : (
-              <Copy className="w-3 h-3 text-amber-700/80" />
+              <Copy className="w-2.5 h-2.5 text-amber-700/80" />
             )}
           </button>
 
           <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold border ${
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border whitespace-nowrap ${
               isInStaging
                 ? 'bg-stone-100 text-stone-700 border-stone-200'
                 : 'bg-emerald-50 text-emerald-800 border-emerald-200'
             }`}
           >
-            <Layers className="w-3 h-3 shrink-0" />
-            <span>{isInStaging ? 'พื้นที่พักรอ' : `${realTagCount} หมวดหมู่`}</span>
+            <Layers className="w-2.5 h-2.5 shrink-0" />
+            <span>{isInStaging ? 'พักรอ' : `${realTagCount} หมวด`}</span>
           </span>
         </div>
       }
@@ -268,83 +350,70 @@ export const DirectFootageModal: React.FC<DirectFootageModalProps> = ({
           canProceedToStep3={hasAnyLink && hasTitle}
         />
       }
+      footer={modalFooter}
     >
-      <div className="overflow-hidden relative">
-        <AnimatePresence initial={false} custom={direction} mode="wait">
-          {currentStep === 1 && (
-            <motion.div
-              key="step-1"
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-            >
-              <DirectStepLinks
-                originalUrl={originalUrl}
-                setOriginalUrl={setOriginalUrl}
-                driveFileUrl={driveFileUrl}
-                setDriveFileUrl={setDriveFileUrl}
-                previewNextId={previewNextId}
-                duplicateMatch={linkDuplicateMatch}
-                onViewFootage={setTraceabilityFootageId}
-                onSuggestedTitle={handleSuggestedTitle}
-                onQuickSave={handleQuickSave}
-                onNext={() => goToStep(2)}
-              />
-            </motion.div>
-          )}
+      <AnimatePresence initial={false} custom={direction} mode="wait">
+        {currentStep === 1 && (
+          <motion.div
+            key="step-1"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+          >
+            <DirectStepLinks
+              originalUrl={originalUrl}
+              setOriginalUrl={setOriginalUrl}
+              driveFileUrl={driveFileUrl}
+              setDriveFileUrl={setDriveFileUrl}
+              duplicateMatch={linkDuplicateMatch}
+              onViewFootage={setTraceabilityFootageId}
+              onSuggestedTitle={handleSuggestedTitle}
+            />
+          </motion.div>
+        )}
 
-          {currentStep === 2 && (
-            <motion.div
-              key="step-2"
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-            >
-              <DirectStepDetails
-                title={title}
-                setTitle={setTitle}
-                durationSec={durationSec}
-                setDurationSec={setDurationSec}
-                previewNextId={previewNextId}
-                previewFileName={previewFileName}
-                duplicateMatch={titleDuplicateMatch}
-                onViewFootage={setTraceabilityFootageId}
-                onBack={() => goToStep(1)}
-                onQuickSave={handleQuickSave}
-                onNext={() => goToStep(3)}
-              />
-            </motion.div>
-          )}
+        {currentStep === 2 && (
+          <motion.div
+            key="step-2"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+          >
+            <DirectStepDetails
+              title={title}
+              setTitle={setTitle}
+              durationSec={durationSec}
+              setDurationSec={setDurationSec}
+              previewFileName={previewFileName}
+              duplicateMatch={titleDuplicateMatch}
+              onViewFootage={setTraceabilityFootageId}
+              onNext={() => goToStep(3)}
+            />
+          </motion.div>
+        )}
 
-          {currentStep === 3 && (
-            <motion.div
-              key="step-3"
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-            >
-              <DirectStepTagsAndNotes
-                selectedTags={selectedTags}
-                setSelectedTags={setSelectedTags}
-                mascotNotes={mascotNotes}
-                setMascotNotes={setMascotNotes}
-                previewNextId={previewNextId}
-                hasDriveUrl={hasDriveUrl}
-                hasOriginalUrl={hasOriginalUrl}
-                canSubmit={canSubmit}
-                onBack={() => goToStep(2)}
-                onSubmit={handleSubmit}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+        {currentStep === 3 && (
+          <motion.div
+            key="step-3"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+          >
+            <DirectStepTagsAndNotes
+              selectedTags={selectedTags}
+              setSelectedTags={setSelectedTags}
+              mascotNotes={mascotNotes}
+              setMascotNotes={setMascotNotes}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Modal>
   );
 };

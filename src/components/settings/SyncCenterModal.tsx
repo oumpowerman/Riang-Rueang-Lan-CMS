@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { BaseModal } from '../ui/BaseModal';
+import { SyncHistoryCard } from './SyncHistoryCard';
 
 const COLLECTION_THAI_LABELS: Record<string, string> = {
   footages: 'ฟุตเทจ',
@@ -176,7 +177,7 @@ export const SyncCenterModal: React.FC = () => {
           <Cloud className="w-4 h-4 text-[#3B6845]" />
         )
       }
-      maxWidthClass="max-w-xl"
+      maxWidthClass="max-w-2xl"
       bodyClassName="p-4 sm:p-5 bg-[#FAF8F5] space-y-4"
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -484,7 +485,22 @@ export const SyncCenterModal: React.FC = () => {
         )}
       </div>
 
-      {/* 5. Collapsible Advanced Recovery (Safe Guarded Local-to-Cloud Push) */}
+      {/* 5. Sync History & Consistency Debugger */}
+      <SyncHistoryCard
+        currentLocalCounts={{
+          footage: drift.localFootage,
+          episodes: drift.localEpisodes,
+          sources: drift.localSources,
+        }}
+        currentCloudCounts={{
+          footage: drift.cloudFootage,
+          episodes: drift.cloudEpisodes,
+          sources: drift.cloudSources,
+        }}
+        hasActiveDrift={drift.hasDrift}
+      />
+
+      {/* 6. Collapsible Advanced Recovery (Safe Guarded Local-to-Cloud Push) */}
       <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden">
         <button
           type="button"

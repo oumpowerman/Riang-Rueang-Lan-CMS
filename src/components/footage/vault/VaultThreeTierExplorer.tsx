@@ -1,11 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Check,
   ChevronDown,
   FolderOpen,
   Rocket,
-  RotateCcw,
   Search,
   Settings,
   Sparkles,
@@ -21,9 +19,9 @@ import {
   TierSubCategoriesConfig,
 } from '../../../types/tag.types';
 import { MixRecipeId } from '../../../utils/collisionDetector';
-import { TIER_THEME_CONFIGS } from '../../tags/three-tier/IndependentTierColumn';
-import { TagPill, getEntityIcon } from '../../ui/TagPill';
+import { TagPill } from '../../ui/TagPill';
 import { TagFilterMatchMode } from './useFootageVault';
+import { VaultTierColumn, VaultTierSubCategoryGroup } from './VaultTierColumn';
 import {
   CategoryGroupOverviewItem,
   MainCategoryOverviewItem,
@@ -42,7 +40,6 @@ export interface VaultThreeTierExplorerProps {
   selectedTagFilter: string[];
   activeGroupOverview: CategoryGroupOverviewItem | null;
   activeMainCategory: MainCategoryOverviewItem | null;
-  hasHierarchySelection: boolean;
   computedFootage: ComputedFootage[];
   scopedFootageCount?: number;
   scopedUsableCount?: number;
@@ -54,7 +51,6 @@ export interface VaultThreeTierExplorerProps {
   onToggleFacetTag?: (tagId: string) => void;
   onClearMainCategoryFilter: () => void;
   onSelectAllInMainCategory: (mainTagId: string) => void;
-  onClearHierarchySelection: () => void;
   onOpenThreeTierManager: () => void;
   onLaunchEpisodeBuilder: (categoryId: string, formula: MixRecipeId) => void;
   onLaunchEpisodeFromCurrentFilter?: () => void;
@@ -68,7 +64,6 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
   tagMatchMode = 'AND',
   onChangeTagMatchMode,
   selectedTagFilter,
-  hasHierarchySelection,
   computedFootage,
   scopedFootageCount = 0,
   scopedUsableCount = 0,
@@ -76,13 +71,16 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
   onQuickAssignCategory,
   onSelectMainCategory,
   onToggleFacetTag,
-  onClearHierarchySelection,
   onOpenThreeTierManager,
   onLaunchEpisodeBuilder,
   onLaunchEpisodeFromCurrentFilter,
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const [dragOverTagId, setDragOverTagId] = useState<string | null>(null);
   const [explorerSearch, setExplorerSearch] = useState('');
+  const [cascadeTier, setCascadeTier] = useState<CategoryTier | null>(null);
+  const [expandedTierColumn, setExpandedTierColumn] =
+    useState<CategoryTier | null>(null);
   const [collapsedSubKeys, setCollapsedSubKeys] = useState<
     Record<string, boolean>
   >(() => ({
@@ -226,157 +224,51 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
     [realTags, tierSubCategories.tier3, explorerSearch, clipCountByTagId]
   );
 
-  const producibleEpisodesFromCombo = Math.floor(scopedUsableCount / 5);
-
-  const renderTierColumn = (
+  const handleToggleTierSubs = (
     tier: CategoryTier,
-    groups: { subCategory: string; tags: CategoryTag[] }[]
+    groups: VaultTierSubCategoryGroup[]
   ) => {
-    const theme = TIER_THEME_CONFIGS[tier];
-    const totalInTier = groups.reduce((acc, g) => acc + g.tags.length, 0);
+    const tierKeys = groups.map((g) => `${tier}__${g.subCategory}`);
+    const allExpandedInTier =
+      tierKeys.length > 0 && tierKeys.every((k) => !collapsedSubKeys[k]);
 
-    return (
-      <div
-        key={`vault-tier-${tier}`}
-        className="flex flex-col rounded-2xl border border-[#E5DED4] bg-white overflow-hidden shadow-2xs"
-      >
-        {/* Column Header */}
-        <div
-          className={`px-3 py-2 border-b ${theme.headerBorder} ${theme.headerBg} flex items-center justify-between gap-1.5 sm:gap-2`}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold whitespace-nowrap shrink-0 ${theme.badgeBg} ${theme.badgeTextCls}`}
-              >
-                <span className="md:hidden">T{tier}</span>
-                <span className="hidden md:inline">{theme.badgeText}</span>
-              </span>
-              <span className={`text-xs font-extrabold ${theme.accentText} truncate min-w-0`}>
-                {theme.title}
-              </span>
-            </div>
-            <p className="text-[10px] text-[#5C5042] truncate mt-0.5 hidden md:block">
-              {theme.subtitle}
-            </p>
-          </div>
-          <span className="text-[11px] font-mono font-semibold text-[#5C5042] tabular-nums shrink-0 whitespace-nowrap">
-            {totalInTier} แท็ก
-          </span>
-        </div>
+    setCascadeTier(!allExpandedInTier ? tier : null);
 
-        {/* Sub-category Frames inside Column */}
-        <div className="p-2.5 space-y-2 max-h-72 overflow-y-auto scrollbar-thin bg-[#FAF8F5]">
-          {groups.map(({ subCategory, tags: subTags }) => {
-            const subKey = `${tier}__${subCategory}`;
-            const isSearching = explorerSearch.trim().length > 0;
-            const isCollapsed = !isSearching && Boolean(collapsedSubKeys[subKey]);
-            const isUnclassified =
-              subCategory === DEFAULT_UNCLASSIFIED_SUBCATEGORY;
-
-            return (
-              <div
-                key={subKey}
-                className={`rounded-xl border overflow-hidden ${
-                  isUnclassified
-                    ? 'bg-[#FFFDF8] border-[#E8D2AE]'
-                    : 'bg-white border-[#E5DED4]'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCollapsedSubKeys((prev) => ({
-                      ...prev,
-                      [subKey]: !prev[subKey],
-                    }))
-                  }
-                  className={`w-full px-2.5 py-1.5 border-b flex items-center justify-between gap-1.5 text-left cursor-pointer ${
-                    isUnclassified
-                      ? 'bg-[#FEF6E6] border-[#E8D2AE]'
-                      : `${theme.subHeaderBg} ${theme.subHeaderBorder}`
-                  }`}
-                >
-                  <div className="flex items-center gap-1 min-w-0">
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#524538] transition-transform shrink-0 ${
-                        isCollapsed ? '-rotate-90' : ''
-                      }`}
-                    />
-                    <span className="text-[11px] font-extrabold text-[#3D332A] truncate">
-                      {subCategory}
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono font-semibold text-[#6E5F52] tabular-nums shrink-0">
-                    {subTags.length}
-                  </span>
-                </button>
-
-                {!isCollapsed && (
-                  <div className="p-2">
-                    {subTags.length === 0 ? (
-                      <p className="text-[11px] text-[#8C7B6C] italic text-center py-1">
-                        ยังไม่มีแท็กในหมวดนี้
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {subTags.map((tag) => {
-                          const isSelected = selectedTagFilter.includes(tag.id);
-                          const isDropHover = dragOverTagId === tag.id;
-                          const counts = clipCountByTagId[tag.id] || {
-                            total: 0,
-                            usable: 0,
-                          };
-
-                          return (
-                            <button
-                              key={tag.id}
-                              type="button"
-                              onClick={() => handleClickTag(tag.id)}
-                              onDragOver={(e) => handleDragOverTag(e, tag.id)}
-                              onDragLeave={(e) => handleDragLeaveTag(e, tag.id)}
-                              onDrop={(e) => handleDropOnTag(e, tag.id)}
-                              className={`text-xs px-2.5 py-1 rounded-xl font-semibold inline-flex items-center gap-1 transition-all cursor-pointer ${
-                                isDropHover
-                                  ? 'bg-[#EDF6EF] border-2 border-[#549364] text-[#164121] scale-105'
-                                  : isSelected
-                                  ? 'bg-[#D5EBDA] text-[#144220] font-bold border border-[#AED7B7] shadow-2xs ring-1 ring-[#C5E6CD]'
-                                  : 'bg-[#FAF8F5] text-[#4A3F31] border border-[#DFD7CA] hover:bg-[#EDF6F0] hover:border-[#C5DFCC]'
-                              }`}
-                              title={`#${tag.name} — พร้อมใช้ ${counts.usable} คลิป จากทั้งหมด ${counts.total} คลิป (คลิกเพื่อกรองผสม / ลากคลิปมาหย่อนเพื่อติดแท็ก)`}
-                            >
-                              {isSelected && (
-                                <Check className="w-3 h-3 text-[#1B572A] shrink-0" />
-                              )}
-                              <span className="text-xs shrink-0">
-                                {getEntityIcon(tag)}
-                              </span>
-                              <span>#{tag.name}</span>
-                              <span
-                                className={`text-[10px] font-mono px-1 rounded tabular-nums ${
-                                  isSelected
-                                    ? 'bg-[#BFE0C8] text-[#144220]'
-                                    : counts.usable >= 5
-                                    ? 'bg-[#EAF5ED] text-[#245233]'
-                                    : 'bg-[#EFECE6] text-[#786B5C]'
-                                }`}
-                              >
-                                {counts.total}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    setCollapsedSubKeys((prev) => {
+      const next = { ...prev };
+      tierKeys.forEach((k) => {
+        next[k] = allExpandedInTier;
+      });
+      return next;
+    });
   };
+
+  const handleToggleSubCategory = (subKey: string) => {
+    setCascadeTier(null);
+    setCollapsedSubKeys((prev) => ({
+      ...prev,
+      [subKey]: !prev[subKey],
+    }));
+  };
+
+  const handleToggleExpandColumn = (tier: CategoryTier) => {
+    setExpandedTierColumn((prev) => (prev === tier ? null : tier));
+  };
+
+  const handleExpandAndOpenSubCategory = (
+    tier: CategoryTier,
+    subKey: string
+  ) => {
+    setCascadeTier(null);
+    setExpandedTierColumn(tier);
+    setCollapsedSubKeys((prev) => ({
+      ...prev,
+      [subKey]: false,
+    }));
+  };
+
+  const isSearching = explorerSearch.trim().length > 0;
+  const producibleEpisodesFromCombo = Math.floor(scopedUsableCount / 5);
 
   return (
     <div className="bg-[#FAF8F5] border border-[#E5DED4] rounded-2xl shadow-2xs overflow-hidden">
@@ -406,21 +298,6 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {hasHierarchySelection && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClearHierarchySelection();
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#35593C] bg-[#EEF6F0] border border-[#CBE3CF] rounded-lg hover:bg-[#DFEFE3] cursor-pointer transition-colors whitespace-nowrap"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span className="hidden sm:inline">ล้างตัวกรอง</span>
-              <span className="sm:hidden">ล้าง</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={(e) => {
@@ -519,10 +396,21 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            initial={
+              prefersReducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }
+            }
+            animate={
+              prefersReducedMotion
+                ? { opacity: 1 }
+                : { height: 'auto', opacity: 1 }
+            }
+            exit={
+              prefersReducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }
+            }
+            transition={{
+              duration: prefersReducedMotion ? 0.08 : 0.24,
+              ease: [0.22, 1, 0.36, 1],
+            }}
             className="overflow-hidden"
           >
             <div className="border-t border-[#E5DED4] p-3.5 space-y-3 bg-[#FAF8F5]">
@@ -532,26 +420,61 @@ export const VaultThreeTierExplorer: React.FC<VaultThreeTierExplorerProps> = ({
                 <input
                   type="text"
                   value={explorerSearch}
-                  onChange={(e) => setExplorerSearch(e.target.value)}
+                  onChange={(e) => {
+                    setCascadeTier(null);
+                    setExplorerSearch(e.target.value);
+                  }}
                   placeholder="ค้นหาแท็ก (เช่น พูดผิด, พี่แจ๊ส)..."
                   className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-white border border-[#DED3C5] text-xs text-[#3D332A] placeholder:text-[#A39485] focus:outline-none focus:border-[#78593A]"
                 />
                 {explorerSearch && (
                   <button
                     type="button"
-                    onClick={() => setExplorerSearch('')}
+                    onClick={() => {
+                      setCascadeTier(null);
+                      setExplorerSearch('');
+                    }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C7B6C] hover:text-[#3D332A] cursor-pointer"
+                    aria-label="ล้างคำค้นหาแท็ก"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
-              {/* 3 Parallel Columns (Tier 1 | Tier 2 | Tier 3) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                {renderTierColumn(1, tier1Groups)}
-                {renderTierColumn(2, tier2Groups)}
-                {renderTierColumn(3, tier3Groups)}
+              {/* 3 Parallel Columns (Tier 1 | Tier 2 | Tier 3) with Expand & Compact Rail */}
+              <div className="flex flex-col lg:flex-row gap-3 items-stretch">
+                {(
+                  [
+                    { tier: 1 as CategoryTier, groups: tier1Groups },
+                    { tier: 2 as CategoryTier, groups: tier2Groups },
+                    { tier: 3 as CategoryTier, groups: tier3Groups },
+                  ] as const
+                ).map(({ tier, groups }) => (
+                  <VaultTierColumn
+                    key={`vault-tier-col-${tier}`}
+                    tier={tier}
+                    groups={groups}
+                    collapsedSubKeys={collapsedSubKeys}
+                    isCascadeActive={cascadeTier === tier && !isSearching}
+                    isSearching={isSearching}
+                    isExpandedColumn={expandedTierColumn === tier}
+                    isCompactRail={
+                      expandedTierColumn !== null && expandedTierColumn !== tier
+                    }
+                    selectedTagFilter={selectedTagFilter}
+                    dragOverTagId={dragOverTagId}
+                    clipCountByTagId={clipCountByTagId}
+                    onToggleTierSubs={handleToggleTierSubs}
+                    onToggleSubCategory={handleToggleSubCategory}
+                    onExpandAndOpenSubCategory={handleExpandAndOpenSubCategory}
+                    onToggleExpandColumn={handleToggleExpandColumn}
+                    onClickTag={handleClickTag}
+                    onDragOverTag={handleDragOverTag}
+                    onDragLeaveTag={handleDragLeaveTag}
+                    onDropOnTag={handleDropOnTag}
+                  />
+                ))}
               </div>
             </div>
           </motion.div>

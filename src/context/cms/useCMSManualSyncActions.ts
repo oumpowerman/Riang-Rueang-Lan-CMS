@@ -12,6 +12,7 @@ import {
 import { cmsRepository } from '../../services/cmsRepository';
 import { idbStorageService } from '../../services/idbStorageService';
 import { broadcastLocalCollectionsUpdated } from '../../services/multiTabSyncBus';
+import { syncHistoryService } from '../../services/syncHistoryService';
 import { INITIAL_SETTINGS } from '../../services/seedData';
 import { Episode } from '../../types/episode.types';
 import { Footage } from '../../types/footage.types';
@@ -318,6 +319,14 @@ export function useCMSManualSyncActions({
             : `ดึงข้อมูลล่าสุดสำเร็จ: อัปเดต ${upsertedCount} รายการ, ลบออก ${removedCount} รายการ`,
       };
       setLastReport(report);
+      syncHistoryService.recordSyncSuccess({
+        timestamp: report.syncedAt,
+        type: 'delta',
+        label: 'Delta Sync (ดึงข้อมูลด่วน)',
+        upsertedCount: report.upsertedCount,
+        deletedCount: report.deletedCount,
+        message: report.message,
+      });
       return report;
     } catch (err) {
       const errorText = formatSyncErrorThai(err);
@@ -472,6 +481,15 @@ export function useCMSManualSyncActions({
         message: `ดึงข้อมูลใหม่ทั้งหมดจาก Cloud สำเร็จ (ฟุตเทจ ${allFootages.length}, ตอน ${allEpisodes.length}, ต้นฉบับ ${allSources.length}, แท็ก ${normalizedCats.length})`,
       };
       setLastReport(report);
+      syncHistoryService.recordSyncSuccess({
+        timestamp: report.syncedAt,
+        type: 'full',
+        label: 'Full Pull (ดึงใหม่ทั้งหมด)',
+        upsertedCount: report.upsertedCount,
+        deletedCount: 0,
+        message: report.message,
+      });
+      syncHistoryService.resolveActiveConflicts('ดึงข้อมูลสดทั้งหมดจาก Cloud แทนที่แคชเครื่องสำเร็จ');
       return report;
     } catch (err) {
       const errorText = formatSyncErrorThai(err);

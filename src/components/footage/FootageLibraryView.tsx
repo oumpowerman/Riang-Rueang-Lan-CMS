@@ -78,7 +78,6 @@ export const FootageLibraryView: React.FC = () => {
         selectedTagFilter={vault.selectedTagFilter}
         activeGroupOverview={vault.activeGroupOverview}
         activeMainCategory={vault.activeMainCategory}
-        hasHierarchySelection={vault.hasHierarchySelection}
         computedFootage={vault.computedFootage}
         scopedFootageCount={vault.categoryScopedFootage.length}
         scopedUsableCount={vault.vaultMetrics.usable}
@@ -92,7 +91,6 @@ export const FootageLibraryView: React.FC = () => {
         onSelectAllInMainCategory={(mainTagId) =>
           vault.setSelectedTagFilter([mainTagId])
         }
-        onClearHierarchySelection={vault.handleClearHierarchySelection}
         onOpenThreeTierManager={() => vault.setIsThreeTierManagerOpen(true)}
         onLaunchEpisodeBuilder={vault.launchEpisodeBuilderForCategory}
         onLaunchEpisodeFromCurrentFilter={vault.handleLaunchEpisodeFromCurrentFilter}
@@ -103,26 +101,13 @@ export const FootageLibraryView: React.FC = () => {
         searchQuery={vault.searchQuery}
         onSearchChange={vault.setSearchQuery}
         selectedTags={vault.selectedTagFilter}
-        onToggleTag={vault.handleToggleTag}
         statusFilter={vault.statusFilter}
-        onStatusFilterChange={vault.setStatusFilter}
         flowFilter={vault.flowFilter}
-        onFlowFilterChange={vault.setFlowFilter}
         actionFilter={vault.actionFilter}
         onActionFilterChange={vault.setActionFilter}
         punchlineFilter={vault.punchlineFilter}
-        onPunchlineFilterChange={vault.setPunchlineFilter}
-        punchlineCounts={vault.punchlineCounts}
-        sortBy={vault.sortBy}
-        onSortByChange={vault.setSortBy}
-        tags={vault.tags}
-        categoryMatrix={vault.categoryMatrix}
-        untaggedCount={vault.untaggedFootages.length}
-        missingDriveCount={vault.missingDriveFootages.length}
-        duplicateCount={vault.duplicateScan.totalItemsInClusters}
         hasCustomFilter={vault.hasHierarchySelection}
         onResetFilters={vault.handleResetFilters}
-        totalResultCount={vault.filteredAndSortedFootage.length}
       />
 
       {/* 3.5 Sticky Top Staging Quick-Sort Workspace & Undo Notification Dock */}
@@ -141,7 +126,6 @@ export const FootageLibraryView: React.FC = () => {
         onSelectAllInStaging={vault.handleSelectAllInStaging}
         isAllStagingSelected={vault.isAllStagingSelected}
         onClearSelection={vault.handleClearBatchSelection}
-        onOpenFullscreenStudio={() => vault.setIsFullscreenStudioOpen(true)}
       />
 
       {/* 4. Animated Scope Results Summary, Multi-Select Toolbar & View Mode Switcher */}

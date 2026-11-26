@@ -24,6 +24,7 @@ import {
 } from '../../types/tag.types';
 import { MixRecipeId } from '../../utils/collisionDetector';
 import { DuplicateMergePlan } from '../../utils/duplicateClusterScanner';
+import { DuplicateTagMergeResult } from '../../utils/tagDeduplicator';
 import { MergeDuplicateFootagesResult } from './useCMSDuplicateMerge';
 import { SupabaseSyncFilterPreset } from '../../types/supabaseSync.types';
 import { ManualSyncReport, SyncHealthState } from './useCMSSyncHealth';
@@ -92,6 +93,9 @@ export interface TagReorgUndoRecord {
   summaryText: string;
   previousTags: CategoryTag[];
   previousFootages: Footage[];
+  previousSources?: RawSource[];
+  previousEpisodes?: Episode[];
+  deletedTagIds?: string[];
   timestamp: number;
 }
 
@@ -280,7 +284,10 @@ export interface CMSContextType {
   lastTagReorgUndoRecord: TagReorgUndoRecord | null;
   undoLastTagReorg: () => Promise<void>;
   dismissTagReorgUndoRecord: () => void;
-  updateTag: (id: string, updates: Partial<Omit<CategoryTag, 'id'>>) => void;
+  updateTag: (
+    id: string,
+    updates: Partial<Omit<CategoryTag, 'id'>>
+  ) => { ok: boolean; error?: string };
   deleteTag: (id: string) => void;
   batchDeleteTags: (
     tagIds: string[],
@@ -299,6 +306,9 @@ export interface CMSContextType {
     migratedSourcesCount: number;
     mergedExamples: string[];
   }>;
+  deduplicateDuplicateTags: (
+    onChunkProgress?: (progress: BatchChunkProgress) => void
+  ) => Promise<DuplicateTagMergeResult['stats']>;
   updateSettings: (updates: Partial<SystemSettings>) => void;
 
   // Actions: Flow A (1-to-1 Direct Footage)

@@ -169,6 +169,18 @@ export const cmsRepository = {
     safeLocalStorageSet(STORAGE_KEYS.DELETED_TAG_IDS, JSON.stringify(Array.from(current)));
   },
 
+  unmarkTagIdsDeleted(tagIds: string[]): void {
+    if (tagIds.length === 0) return;
+    const current = this.getDeletedTagIds();
+    let changed = false;
+    tagIds.forEach((id) => {
+      if (current.delete(id)) changed = true;
+    });
+    if (changed) {
+      safeLocalStorageSet(STORAGE_KEYS.DELETED_TAG_IDS, JSON.stringify(Array.from(current)));
+    }
+  },
+
   clearDeletedTagIds(): void {
     safeLocalStorageRemove(STORAGE_KEYS.DELETED_TAG_IDS);
   },

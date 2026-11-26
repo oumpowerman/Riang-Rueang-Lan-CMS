@@ -8,7 +8,6 @@ import {
   GripHorizontal,
   Inbox,
   Layers,
-  Maximize2,
   RotateCcw,
   Search,
   Sparkles,
@@ -40,7 +39,6 @@ export interface VaultStagingQuickSortBarProps {
   onSelectAllInStaging: () => void;
   isAllStagingSelected: boolean;
   onClearSelection: () => void;
-  onOpenFullscreenStudio?: () => void;
 }
 
 export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> = ({
@@ -58,7 +56,6 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
   onSelectAllInStaging,
   isAllStagingSelected,
   onClearSelection,
-  onOpenFullscreenStudio,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeGroupTab, setActiveGroupTab] = useState<string>('ALL');
@@ -301,18 +298,6 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                 </button>
               )}
 
-              {onOpenFullscreenStudio && (
-                <button
-                  type="button"
-                  onClick={onOpenFullscreenStudio}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
-                  title="เปิดโหมดคัดแยกเต็มจอ"
-                >
-                  <Maximize2 className="w-3 h-3" />
-                  <span>เต็มจอ</span>
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={() => setIsExpanded((prev) => !prev)}
@@ -496,8 +481,20 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                             </div>
 
                             {/* Tier 2 Subcategory Chips */}
-                            {item.subTags.length > 0 && isSubDrawerOpen && (
-                              <div className="flex flex-wrap gap-1 pt-1.5 border-t border-slate-200/80">
+                            <AnimatePresence initial={false}>
+                              {item.subTags.length > 0 && isSubDrawerOpen && (
+                                <motion.div
+                                  key={`subdrawer-${item.mainTag.id}`}
+                                  initial={{ height: 0, opacity: 0, y: -4 }}
+                                  animate={{ height: 'auto', opacity: 1, y: 0 }}
+                                  exit={{ height: 0, opacity: 0, y: -4 }}
+                                  transition={{
+                                    duration: 0.2,
+                                    ease: [0.16, 1, 0.3, 1],
+                                  }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="flex flex-wrap gap-1 pt-1.5 border-t border-slate-200/80">
                                 {item.subTags.map((sub) => {
                                   const isSubDragOver = dragOverTagId === sub.id;
                                   const subCount = computedFootage.filter((ft) =>
@@ -537,8 +534,10 @@ export const VaultStagingQuickSortBar: React.FC<VaultStagingQuickSortBarProps> =
                                     </button>
                                   );
                                 })}
-                              </div>
-                            )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         );
                       })}

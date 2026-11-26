@@ -1,131 +1,86 @@
-# แผนปรับปรุง Layer สตูดิโอระบบแท็ก 3 ชั้น & ปรับการ์ดแท็กไม่ให้ถูกตัดคำ
+# Relocate Category & Series Filters into Sub-Filters Drawer
 
-แผนงานนี้จัดทำขึ้นเพื่อแก้ไขปัญหาความสับสนของโครงสร้างเลเยอร์ (Layer) ใน **สตูดิโอระบบแท็ก 3 ชั้นอิสระ & ตั้งค่าเกณฑ์สีพักฟุต** รวมถึงแก้ปัญหาชื่อแท็กถูกบีบตัดคำจนอ่านไม่รู้เรื่อง (เช่น `#อาชีพ` แสดงเป็น `#อา...`) เมื่อขยายหน้าจอเต็มพื้นที่ พร้อมปรับปรุงระบบค้นหาและการจัดวางข้อมูลให้สะอาด สบายตา ตามธีม Light Pastel
+Move the two-row Category and 72-Series pill bar out of the top workspace canvas and consolidate both controls as clean dropdowns inside the collapsible Sub-Filters drawer (`ตัวกรองย่อย`), freeing vertical space so Episode Cards/Table and the Series Shelf start higher above the fold.
 
----
+## User Review & Critical Decisions
 
-### User Review & Critical Decisions
-
-> [!IMPORTANT]
-> สรุปข้อตกลงจากการสอบถามผู้ใช้งานเพื่อใช้เป็นแนวทางหลักในการพัฒนา:
-
-- **Confirmed Decision 1 (การจัดการปุ่มดินสอ & ถังขยะบนการ์ดแท็ก)**:
-  ซ่อนปุ่มดินสอ (แก้ไข) และถังขยะ (ลบ) ไว้โดยค่าเริ่มต้น และจะแสดงผลอย่างนุ่มนวลเฉพาะเมื่อผู้ใช้นำเมาส์ไปชี้ (Hover) ที่การ์ดแท็กนั้นๆ เท่านั้น เพื่อคืนพื้นที่แนวนอนกว่า 60px ให้กับชื่อแท็ก ทำให้ชื่อแท็กทุกใบสามารถแสดงผลได้เต็มคำ
-- **Confirmed Decision 2 (การจัดเลย์เอาต์คอลัมน์เมื่อขยายหน้าจอ)**:
-  ปรับการ์ดแท็กเมื่อขยายคอลัมน์เต็มพื้นที่ (`isExpandedGrid`) จากเดิมที่อัดแน่น 4 คอลัมน์ (`xl:grid-cols-4`) ให้เหลือเพียง **2 ถึง 3 คอลัมน์** (`sm:grid-cols-2 xl:grid-cols-3`) ทำให้การ์ดแต่ละใบกว้างขึ้นถึง 35-50% ชื่อแท็กยาวๆ จะไม่ถูกตัดคำอีกต่อไป
-- **Additional Layer Refinement (แก้ปัญหาความสับสนของเลเยอร์ หมวด vs แท็ก)**:
-  1. เพิ่มความชัดเจนทางสายตาของ **"กรอบหมวดย่อย" (Sub-category Frame)** ให้มีเฮดเดอร์ที่เด่นชัด แตกต่างจากตัวการ์ดแท็กด้านในอย่างสิ้นเชิง
-  2. ปรับปรุงการค้นหา (Search Query) ให้กรองตาม **ชื่อแท็กก่อน** และหากตรงกับคำอธิบาย (Description) ให้แสดงข้อความกำกับเบาๆ ไม่ให้ผู้ใช้สับสนว่าทำไมค้นหาคำว่า "นัก" แล้วขึ้นแท็ก "อาชีพ"
+> [!IMPORTANT] All three architectural and UX choices for relocating the Category and Series controls were confirmed during clarification:
+> - **Series Shelf Filtering Scope**: Remove the top Category & Series bar completely across all tabs; the Series Shelf tab filters strictly via its built-in search box (`ค้นหารายการหรือแท็ก...`).
+> - **Control Format Inside Sub-Filters**: Replace the multi-row pill strips and 72-item `กางดู` expansion with compact single-row native/styled `<select>` dropdowns for both Category (`หมวดคลัง`) and 5-Rank Series (`รายการ`), alongside Production Format and Subcategory.
+> - **Drawer Behavior on External Selection**: Keep the Sub-Filters drawer collapsed by default even when a Category or Series filter is triggered externally (from KPI cards or Series Shelf `"ดู (N)"`), communicating active selections via the badge counter on the Sub-Filters button and removable filter chips in the active strip below.
 
 ---
 
 ## 1. Overview & Core Concept
 
-### ปัญหาที่เกิดขึ้นในปัจจุบัน
-1. **ชื่อแท็กโดนตัดคำเหลือ `#อา...`**: ตัวการ์ดแท็กมีความกว้างจำกัด (~240px ในโหมด 4 คอลัมน์) แต่ต้องรองรับองค์ประกอบจำนวนมากพร้อมกัน (ติ๊กถูก + มือจับลาก + จุดสี + ไอคอน Entity + ชื่อแท็ก + ป้าย EP + ป้ายสัดส่วนฟุตเทจ 88/119 + ปุ่มดินสอ + ปุ่มถังขยะ) รวมความกว้างของไอคอนและป้ายต่างๆ กว่า 220px ทำให้พื้นที่ข้อความชื่อแท็กเหลือเพียง 20-30px
-2. **Layer ของข้อมูลดูงงและซ้ำซ้อน**: ในหน้าจอมีทั้งหมวดย่อยชื่อ `"วงการ/หมวดหลัก"` (ซึ่งข้างในมีแท็ก `#อาชีพ`) และมีหมวดย่อยว่างอีกอันชื่อ `"อาชีพ"` ซ้อนอยู่ด้านล่าง ทำให้ผู้ใช้มองแล้วสับสนว่าส่วนไหนคือหมวดหมู่ และส่วนไหนคือแท็ก
-3. **ผลการค้นหาไม่ตรงกับสิ่งที่เห็น**: ผู้ใช้พิมพ์ค้นหา `"นัก"` แต่ระบบนำไปค้นหาในฟิลด์คำอธิบาย (Description) ของแท็ก `#อาชีพ` ซึ่งมีข้อความว่า *"ตำรวจ, ทหาร, นักเรียน, ครู..."* จึงติดผลการค้นหามาด้วยโดยที่ผู้ใช้ไม่ทราบสาเหตุ
-
-### สิ่งที่ระบบจะส่งมอบ
-- การ์ดแท็กที่กว้าง สะอาด โปร่งตา แสดงชื่อแท็กเต็มคำ ไม่ตัดทอน
-- ปุ่มจัดการการ์ด (แก้ไข/ลบ) ซ่อนเรียบร้อยและปรากฏขึ้นทันทีเมื่อ Hover
-- การแยกชั้นสถาปัตยกรรม UI (Layer Hierarchy) ระหว่าง **หมวดย่อย (Container Frame)** กับ **ป้ายแท็ก (Item Card)** อย่างเด็ดขาด
-- ระบบค้นหาอัจฉริยะที่ชัดเจน ไม่ดึงผลลัพธ์ที่สร้างความสับสน
+- **What It Does**: Eliminates the persistent two-row horizontal pill bar (`หมวด` + `รายการ` with 72 items) that currently sits between the KPI strip and the main content tabs, tucking Category (`หมวดคลัง`) and Series (`รายการ`) selection cleanly inside the animated `ตัวกรองย่อย` panel inside the Episodes view.
+- **Target Audience / Persona**: Video editors and content producers browsing or filtering the Master Episode Archive who primarily search by keyword, status, or 3-tier tags—and only drill down by Category or Series on demand.
+- **Key Value**: Reclaims ~90px of prime vertical screen height, removes visual bloat of 70+ pills above every view, eliminates horizontal pill scrollbars, and makes the Series Shelf purely search-driven.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### 2.1 โครงสร้างการ์ดแท็กใหม่ (Hover Action & Elastic Typography)
-- **สถานะปกติ (Default State)**:
-  - ฝั่งซ้าย: Checkbox ติ๊กเลือก + มือจับลาก (Grip) + จุดสีพาสเทล + ไอคอนประเภท + **ชื่อแท็กแบบยาวเต็มคำ (ไม่มี `...` บัง)**
-  - ฝั่งขวา: ป้ายสถานะกะทัดรัด `17 EP` (สีเขียวพาสเทล) + ป้ายจำนวนคลิป `88/119`
-  - ไม่มีปุ่มดินสอและถังขยะโผล่มากินพื้นที่
-- **สถานะเมื่อนำเมาส์ชี้ (Hover State)**:
-  - ปุ่มแก้ไข (✏️) และปุ่มลบ (🗑️) ค่อยๆ เฟดเข้ามาทางขวาสุด (`opacity-100 translate-x-0 transition-all duration-150`)
-  - หากหน้าจอมีพื้นที่จำกัด ชื่อแท็กจะยังคงรักษาความยาวหลักไว้ได้โดยมี tooltip แสดงชื่อเต็มเสมอ
-  - ดับเบิลคลิกที่ชื่อแท็กเพื่อเปลี่ยนชื่อด่วน (Inline Rename) ได้ทันทีเหมือนเดิม
-
-### 2.2 การปรับเลย์เอาต์กริดในโหมดขยาย (Expanded Column Math)
-```
-[ โหมดเดิม (4 คอลัมน์ - บีบแคบ) ]
-┌───────────┬───────────┬───────────┬───────────┐
-│#นักพากย์  │#พนักงาน   │#อา...     │(การ์ด 4)  │  <-- การ์ดแต่ละใบกว้างเพียง 240px
-└───────────┴───────────┴───────────┴───────────┘
-
-[ โหมดใหม่ (2-3 คอลัมน์ - หน้ากว้าง หายใจสะดวก) ]
-┌───────────────────────────┬───────────────────────────┬───────────────────────────┐
-│ ☑ ⠿ 🟣 🎯 #นักพากย์ 5/5   │ ☑ ⠿ 🔵 🎯 #พนักงาน 2/3    │ ☑ ⠿ 🟣 👤 #อาชีพ 88/119   │  <-- กว้าง 360-440px
-└───────────────────────────┴───────────────────────────┴───────────────────────────┘
-```
-
-### 2.3 การจัดระเบียบ Visual Layer (Layer Hierarchy)
-- **ชั้นที่ 1 (Tier Header Bar)**: สีประจำ Tier (Tier 1 สีน้ำเงินนุ่ม `#EEF5FB`, Tier 2 สีอำพัน `#FEF6E8`, Tier 3 สีเขียวมรกต `#EDF6F0`) พร้อมสถิติจำนวนแท็กทั้งหมด
-- **ชั้นที่ 2 (Sub-category Frame)**:
-  - ใช้พื้นหลังและการตัดขอบแบบมีมิติ (Soft Card Frame) เช่น หมวด `"รอคัดแยก"` มีไอคอนกล่อง Inbox สีส้มอ่อน พร้อมแถบคำแนะนำสีครีม
-  - หมวดย่อยทั่วไปมีไอคอนโฟลเดอร์ และปุ่มจัดการระดับหมวด `[+ เพิ่มแท็ก] [✏️ แก้ไขชื่อหมวด] [🗑️ ลบหมวดย่อย]` ชัดเจน
-- **ชั้นที่ 3 (Tag Items)**: การ์ดสีขาวนวลลอยตัวอยู่ภายในกรอบหมวด มีเงาอ่อนระดับ 2xs สัมผัสเบาสบายตา
+- **Key User Flows**:
+  1. **Default Episodes View**: Displays only the compact KPI header, optional Standard-Fix warning strip, and unified Search/Filter toolbar—pushing Episode Cards/Table directly into the primary viewport.
+  2. **Drilling Down via Sub-Filters (`ตัวกรองย่อย`)**: Clicking `ตัวกรองย่อย` smoothly slides down a compact grid containing 4 single-row controls: `หมวดคลัง` (Dropdown with item/EP counts), `รายการ` (Dropdown showing scoped series filtered by selected Category + EP counts), `รูปแบบ` (Segmented toggle), and `หมวดย่อย` (Conditional dropdown).
+  3. **Selecting Category Filters Cascade**: Changing `หมวดคลัง` updates the options inside the `รายการ` dropdown automatically and resets an incompatible series selection to `ทั้งหมด`.
+  4. **External Selection & Active Chips**: Clicking a KPI card (`ผลิตสูงสุด` / `ผลิตน้อยสุด`) or clicking `ดู (N)` from a Series Shelf card applies the filter while leaving `ตัวกรองย่อย` collapsed. The `ตัวกรองย่อย (N)` button badge increments to reflect active sub-filters, and removable filter chips (`หมวด: ...`, `รายการ: ...`) slide into the active strip below for instant 1-click clearing.
+  5. **Series Shelf Tab**: Contains only its unified toolbar (`ค้นหารายการหรือแท็ก...`, total summary count, and `ดูหมวด 0 ตอน` toggle) above the responsive 3-column shelf cards—unaffected by any Category filter chosen on the Episodes tab.
+- **Visual Identity & Theme**:
+  - *Palette*: Warm parchment/linen neutrals (`#FDFBF7`, `#FAF6EE`, `#E8DFD3` 1px borders) with restrained forest green (`#224A2D`) and warm amber-brown (`#6B4616`) active accents.
+  - *Typography & Layout*: Single-row `whitespace-nowrap` control labels paired with crisp `tabular-nums` EP counts inside dropdown options (`คนไทยเป็นคนตลก (33)`) and uncluttered whitespace alignment.
+- **Interactive Feedback & Motion**:
+  - Smooth Framer Motion `height: 0 <-> auto` + `opacity` slide-down/up for the `ตัวกรองย่อย` container and active chip row (`ease: [0.16, 1, 0.3, 1]`, respecting `useReducedMotion()`).
+  - Rotating chevron indicator driven purely by Framer Motion without CSS transform conflicts.
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-### Decision 1: การซ่อนปุ่มดินสอและถังขยะไว้ใน Hover
-- **เหตุผล**: ผู้ใช้เปิดหน้าคลังแท็กมาเพื่อ "ดูภาพรวม คัดแยก และจัดหมวดหมู่" เป็นหลัก ไม่ได้ทำการลบหรือแก้ไขชื่อแท็กตลอดเวลา การมีปุ่มขยะและดินสอค้างอยู่ทุกใบตลอด 24 ชั่วโมงทำให้หน้าจอดูรกและกินพื้นที่ถึง 30% ของการ์ด
-- **การรองรับ Mobile / Touch Screen**: บนอุปกรณ์สัมผัสที่ไม่มีการ Hover ปุ่มแก้ไขและลบจะแสดงผลอัตโนมัติ หรือแตะที่การ์ดเพื่อเรียก Action Bar ด้านล่าง
+- **Decision 1: Remove Category Filtering from Series Shelf**
+  - *Chosen Approach*: Ignore `selectedGroupId` when computing Shelf cards so the Shelf always searches across the full catalog via its own search input.
+  - *Why*: With no visible Category control on the Shelf tab, silently inheriting a hidden Category filter from the Episodes tab would confuse users into thinking series disappeared.
+  - *Alternatives Considered*: Keeping a slim Category pill bar or dropdown inside Shelf (passed over per user preference for search-only Shelf).
 
-### Decision 2: การปรับจำนวนคอลัมน์จาก 4 เหลือ 2-3
-- **เหตุผล**: แท็กในภาษาไทยมักมีความยาวมากกว่าภาษาอังกฤษ (เช่น `#ไวรัล มีมฮิต ติดตำนาน`, `#ปลาสวาย & สัตว์น้ำ`) การจัด 4 คอลัมน์ในพื้นที่หน้าจอเดสก์ท็อปขนาด 1200-1440px ไม่เพียงพอต่อความยาวข้อความภาษาไทย การใช้ 3 คอลัมน์บนจอใหญ่ และ 2 คอลัมน์บนจอขนาดกลาง ช่วยให้ชื่อแท็กทุกตัวอ่านออกได้ทันทีโดยไม่ต้องเอาเมาส์ชี้ดู tooltip
+- **Decision 2: Native Dropdowns vs. Custom Popover Menu for Category & 72 Series**
+  - *Chosen Approach*: Clean styled `<select>` dropdowns matching the existing Subcategory selector inside `ตัวกรองย่อย`.
+  - *Why*: Zero z-index stacking bugs, keyboard/mobile native wheel friendliness for 72+ series options, zero extra DOM height when closed, and instant cross-filtering by Category.
+  - *Alternatives Considered*: Keeping 72 wrap-able pills inside `ตัวกรองย่อย` (too tall when expanded) or custom searchable comboboxes (unnecessary when main Search already supports smart series/tag search).
 
-### Decision 3: การปรับปรุงระบบ Search ในคอลัมน์
-- **ปัญหาเดิม**: ค้นหาคำว่า `"นัก"` แต่เจอแท็ก `"อาชีพ"` เพราะคำอธิบายแท็กมีคำว่า `"นักเรียน"`
-- **วิธีแก้**:
-  1. ให้ความสำคัญกับชื่อแท็กก่อน (Name Priority Match)
-  2. หากชื่อแท็กไม่ตรง แต่ตรงกับ Description ให้มีป้ายข้อความบอกเบาๆ ใต้ชื่อ เช่น `(ตรงกับคำอธิบาย: ...นักเรียน...)` หรือเปิดตัวเลือกสลับโหมดค้นหา "เฉพาะชื่อแท็ก" เพื่อความแม่นยำ
-
----
-
-## 4. Technical Architecture & Component Structure
-
-### Architecture Diagram
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   ThreeTierCategoryManagerModal                        │
-│ ┌────────────────────────────────────────────────────────────────────┐ │
-│ │                  IndependentTierColumn (Tier 1/2/3)                │ │
-│ │ ┌────────────────────────────────────────────────────────────────┐ │ │
-│ │ │ Column Search Bar (Refined matching: Name primary)             │ │ │
-│ │ └────────────────────────────────────────────────────────────────┘ │ │
-│ │ ┌────────────────────────────────────────────────────────────────┐ │ │
-│ │ │ Sub-category Group Frame (Layer 2)                             │ │ │
-│ │ │ ├─ Header: Folder Icon, Title, Counter, SubCategory Actions    │ │ │
-│ │ │ └─ Grid Container: sm:grid-cols-2 xl:grid-cols-3 (Layer 3)     │ │ │
-│ │ │    ├─ TierSubCategoryTagCard (Item 1)                          │ │ │
-│ │ │    │  ├─ Left: Checkbox + Grip + Dot + EntityIcon + Full Title │ │ │
-│ │ │    │  └─ Right: [EP Badge] [Ratio Badge]                       │ │ │
-│ │ │    │           └─ Hover Actions: [✏️ Edit] [🗑️ Delete] (Smooth) │ │ │
-│ │ │    ├─ TierSubCategoryTagCard (Item 2)                          │ │ │
-│ │ │    └─ ...                                                      │ │ │
-│ │ └────────────────────────────────────────────────────────────────┘ │ │
-│ └────────────────────────────────────────────────────────────────────┘ │
-│ ┌────────────────────────────────────────────────────────────────────┐ │
-│ │ ThreeTierBatchMoveBar (Docked Bulk Action Bar)                     │ │
-│ └────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### Components to be Updated:
-1. **`src/components/tags/three-tier/TierSubCategoryTagCard.tsx`**:
-   - ปรับแต่งปุ่มดินสอ (Edit) และปุ่มถังขยะ (Delete) ให้มีคลาส `opacity-0 group-hover:opacity-100 transition-opacity duration-150`
-   - เพิ่มคลาส `min-w-0 flex-1` ให้กับกล่องชื่อแท็ก และเพิ่ม `title={tag.name}` ที่สมบูรณ์
-   - จัดระยะห่าง (gap & padding) ใหม่ให้สมดุลตามหลัก Spatial Math ของ Frontend Design Constitution
-2. **`src/components/tags/three-tier/IndependentTierColumn.tsx`**:
-   - ปรับกริดการ์ดเมื่อขยาย (`isExpandedGrid`) จาก `sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4` เป็น `sm:grid-cols-2 xl:grid-cols-3`
-   - ปรับปรุงการกรองคำค้นหา (Search Query) ให้ตรงจุด และจัดการแสดงผลชื่อหมวดหมู่ไม่ให้เกิดความสับสน
+- **Decision 3: User-Controlled Sub-Filters Open State**
+  - *Chosen Approach*: Remove automatic forced expansion when `activeSecondaryCount > 0`; display a numeric badge on `ตัวกรองย่อย` instead and show removable pills in the Active Filter Strip.
+  - *Why*: Prevents UI layout jump when clicking KPI cards or navigating from the Series Shelf.
 
 ---
 
-### แผนการดำเนินงานเมื่อได้รับคำสั่ง "Proceed"
-1. ปรับปรุง `TierSubCategoryTagCard.tsx` ให้ปุ่มแก้ไข/ลบซ่อนอยู่และแสดงเฉพาะตอน Hover พร้อมขยายพื้นที่แสดงชื่อแท็ก
-2. ปรับปรุงกริดใน `IndependentTierColumn.tsx` เป็น 2-3 คอลัมน์ และปรับเงื่อนไขการค้นหา
-3. ตรวจสอบความถูกต้องด้วย `compile_applet` และ `lint_applet` เพื่อให้มั่นใจว่าระบบทำงานได้อย่างสมบูรณ์ 100% ปราศจากข้อผิดพลาด
+## 4. Technical Architecture & Data Strategy
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Master Episode Archive Coordinator                                   │
+│  ├─ Overview Header (Tab Switcher: Episodes | Shelf + 4 KPI Cards)   │
+│  ├─ Compact Standard-Fix Strip                                       │
+│  └─ Animated Tab Viewport                                            │
+│      ├─ [Episodes Tab]                                               │
+│      │   ├─ Filter Controls                                          │
+│      │   │   ├─ Search Input + [3-Tier Tags] + [Sub-Filters (N)]     │
+│      │   │   ├─ Slide-Down Sub-Filters Panel (User-Toggled)          │
+│      │   │   │   ├─ Category <select> (archiveCategoryStats)         │
+│      │   │   │   ├─ Series <select>   (categoriesInGroup)            │
+│      │   │   │   ├─ Format Segmented  (ALL | Variety | Subcategory)  │
+│      │   │   │   └─ Subcategory <select> (when available)            │
+│      │   │   ├─ Status Dropdown + Count + Sort + Cards/Table Switch  │
+│      │   │   └─ Active Filter Chips Strip (always shows active state)│
+│      │   ├─ 3-Tier Tag Filter Drawer                                 │
+│      │   └─ Episode Cards Grid / Table View                          │
+│      └─ [Series Shelf Tab]                                           │
+│          └─ Shelf Toolbar (Search Only + 0 EP Toggle) + Series Cards │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+- **State & Data Flow**:
+  - `selectedGroupId` and `categoryFilter` remain managed in the archive filter hook; `categoriesInGroup` dynamically scopes the `รายการ` `<select>` options whenever `selectedGroupId` changes, and `useMemo` for Shelf items computes strictly from `categoryRanking` + `unproducedSeriesRanking` + `queryTokens` without filtering by `selectedGroupId`.
+  - Changing `หมวดคลัง` calls `onGroupChange(nextGroupId)` and resets `onCategoryChange('ALL')` so invalid cross-group selections cannot persist.
+  - `activeSecondaryCount` aggregates `(selectedGroupId !== 'ALL') + (categoryFilter !== 'ALL') + (subcategoryFilter !== 'ALL') + (productionTargetFilter !== 'ALL')` to badge the `ตัวกรองย่อย` trigger without forcing the drawer open.
+  - The standalone navigation pill bar component (`SeriesNavigationFilterBar`) becomes obsolete and can be cleanly removed once wired.

@@ -1,6 +1,6 @@
 {
-  "summary": "แผนปรับปรุง Layer สตูดิโอระบบแท็ก 3 ชั้น: แก้ปัญหาชื่อแท็กถูกบีบตัดคำ (#อา...), ซ่อนปุ่มแก้ไข/ลบไว้แสดงเฉพาะตอน Hover, และจัดระเบียบโครงสร้างเลเยอร์การ์ดแท็กในโหมดขยายหน้าจอ",
-  "updatedAt": "2026-11-25T05:11:20.441143720Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Plan to relocate the permanent 2-row Category & Series bar from above the Master Archive tabs into the collapsible Sub-filters drawer as compact dropdowns, keeping Series Shelf search-only and preserving chip-based active state feedback.",
+  "updatedAt":  "2026-11-26T18:50:18.064353564Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Tags } from 'lucide-react';
+import { CheckCircle2, GitMerge, Tags, X } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { CategoryTier } from '../../types/tag.types';
 import { BaseModal } from '../ui/BaseModal';
@@ -43,7 +43,11 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     handleRestoreDefaultsAndSelect,
     reorganizeTagsToDataDictionary,
 
-    // Column search filters
+    // Unified cross-tier & column search filters
+    globalSearchQuery,
+    setGlobalSearchQuery,
+    clearAllSearches,
+    filteredTierCounts,
     tier1SearchQuery,
     setTier1SearchQuery,
     tier2SearchQuery,
@@ -71,9 +75,17 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     inlineEditingTagId,
     inlineEditingName,
     setInlineEditingName,
+    inlineDuplicateConflict,
     handleStartInlineRename,
     handleCommitInlineRename,
     handleCancelInlineRename,
+
+    // Duplicate Check & Merge
+    duplicateGroupsCount,
+    isDeduplicatingTags,
+    dedupReportBanner,
+    setDedupReportBanner,
+    handleRunDeduplicateTags,
 
     // Tag & Sub-category CRUD
     handleCreateTagInSubCategory,
@@ -100,7 +112,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
   const [activeStudioTab, setActiveStudioTab] =
     useState<UnifiedTagStudioTab>(threeTierStudioTab || 'STUDIO_3TIER');
   const [showConceptBanner, setShowConceptBanner] = useState(false);
-  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const unifiedSearchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isJunkTagCleanupOpen, setIsJunkTagCleanupOpen] = useState(false);
   const [isTagRulesDictionaryOpen, setIsTagRulesDictionaryOpen] =
@@ -114,6 +126,13 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
   const isExpandedCleanView = isBulkFocusMode || isFullScreen;
 
   const [mobileActiveTier, setMobileActiveTier] = useState<CategoryTier>(1);
+
+  const hasAnySearchActive = Boolean(
+    globalSearchQuery.trim() ||
+      tier1SearchQuery.trim() ||
+      tier2SearchQuery.trim() ||
+      tier3SearchQuery.trim()
+  );
 
   React.useEffect(() => {
     if (isThreeTierManagerOpen && threeTierStudioTab) {
@@ -149,15 +168,15 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     setIsThreeTierManagerOpen(false);
   };
 
-  const handleJumpToTag = (tier: CategoryTier, tagName: string) => {
-    setMobileActiveTier(tier);
-    if (tier === 1) {
-      setTier1SearchQuery(tagName);
-    } else if (tier === 2) {
-      setTier2SearchQuery(tagName);
-    } else {
-      setTier3SearchQuery(tagName);
+  const handleFocusUnifiedSearch = () => {
+    if (activeStudioTab !== 'STUDIO_3TIER') {
+      setActiveStudioTab('STUDIO_3TIER');
+      setThreeTierStudioTab('STUDIO_3TIER');
     }
+    window.setTimeout(() => {
+      unifiedSearchInputRef.current?.focus();
+      unifiedSearchInputRef.current?.select();
+    }, 60);
   };
 
   const handleRequestClearAllClips = () => {
@@ -196,8 +215,8 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
             greenReadyDays={settings.greenReadyDays ?? 21}
             showConceptBanner={showConceptBanner}
             onToggleConceptBanner={() => setShowConceptBanner((prev) => !prev)}
-            showGlobalSearch={showGlobalSearch}
-            onToggleGlobalSearch={() => setShowGlobalSearch((prev) => !prev)}
+            showGlobalSearch={Boolean(globalSearchQuery.trim())}
+            onToggleGlobalSearch={handleFocusUnifiedSearch}
             onRequestWipe={() => setShowWipeConfirm(true)}
             onRestoreDefaults={handleRestoreDefaultsAndSelect}
             onRequestClearAllClips={handleRequestClearAllClips}
@@ -213,6 +232,9 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
             isBulkFocusMode={isBulkFocusMode}
             onOpenJunkTagCleanup={() => setIsJunkTagCleanupOpen(true)}
             onOpenTagRulesDictionary={() => setIsTagRulesDictionaryOpen(true)}
+            duplicateGroupsCount={duplicateGroupsCount}
+            isDeduplicatingTags={isDeduplicatingTags}
+            onRunDeduplicateTags={handleRunDeduplicateTags}
           />
         }
         headerContent={
@@ -235,17 +257,73 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className="flex-1 min-h-0 flex flex-col overflow-hidden"
             >
-              {/* Quick Search & Unified KPI Summary Bar (Hidden in Expanded / Bulk Focus Mode to keep it clean) */}
-              {!isExpandedCleanView && (
-                <ThreeTierQuickSearchAndSummaryBar
-                  categoryGroups={categoryGroups}
-                  tags={tags}
-                  categoryMatrix={categoryMatrix}
-                  onJumpToTag={handleJumpToTag}
-                  isSearchOpen={showGlobalSearch}
-                  onCloseSearch={() => setShowGlobalSearch(false)}
-                />
-              )}
+              {/* Always-Ready Unified Cross-Tier Search & Live Match Summary Bar */}
+              <ThreeTierQuickSearchAndSummaryBar
+                globalSearchQuery={globalSearchQuery}
+                onGlobalSearchQueryChange={setGlobalSearchQuery}
+                hasAnySearchActive={hasAnySearchActive}
+                onClearAllSearches={clearAllSearches}
+                totalCounts={{
+                  tier1: tier1Tags.length,
+                  tier2: tier2Tags.length,
+                  tier3: tier3Tags.length,
+                }}
+                matchCounts={filteredTierCounts}
+                onSelectTierTab={(tier) => setMobileActiveTier(tier)}
+                searchInputRef={unifiedSearchInputRef}
+              />
+
+              {/* Duplicate Tag Scan / Merge Result Banner */}
+              <AnimatePresence initial={false}>
+                {dedupReportBanner && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden shrink-0 border-b border-[#BAD8BF] bg-[#EEF5EE]"
+                  >
+                    <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-[#1C4824]">
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        {dedupReportBanner.status === 'MERGED' ? (
+                          <GitMerge className="w-4 h-4 text-[#2D623C] shrink-0 mt-0.5" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 text-[#2D623C] shrink-0 mt-0.5" />
+                        )}
+                        <div className="min-w-0 space-y-0.5">
+                          {dedupReportBanner.status === 'MERGED' ? (
+                            <>
+                              <div className="font-extrabold">
+                                รวมแท็กซ้ำเรียบร้อยแล้ว{' '}
+                                <span className="tabular-nums">
+                                  ({dedupReportBanner.stats.duplicateGroupCount} กลุ่ม · ลบตัวซ้ำ {dedupReportBanner.stats.mergedTagsCount} แท็ก · อัปเดต {dedupReportBanner.stats.migratedFootagesCount} ฟุต / {dedupReportBanner.stats.migratedEpisodesCount} EP)
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-[#2D5E36] truncate">
+                                รวมเข้าเป็น:{' '}
+                                {dedupReportBanner.stats.mergedSummaries
+                                  .map((s) => `#${s.winnerName}`)
+                                  .join(', ')}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="font-bold">
+                              ตรวจเช็กเรียบร้อย: ไม่พบแท็กชื่อซ้ำในระบบ (แท็กทั้งหมดไม่ซ้ำกัน 100%)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDedupReportBanner(null)}
+                        aria-label="ปิดแถบสรุปผลตรวจแท็กซ้ำ"
+                        className="p-1 rounded-lg text-[#2D623C] hover:bg-[#DCECE0] cursor-pointer shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Mobile Tier Segmented Switcher (md:hidden) */}
               <div className="md:hidden px-3 py-2 bg-[#F5EFE6] border-b border-[#E2D5C4] shrink-0">
@@ -267,7 +345,9 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                           : 'bg-white/60 text-[#524538]'
                       }`}
                     >
-                      {tier1Tags.length}
+                      {hasAnySearchActive
+                        ? `${filteredTierCounts.tier1}/${tier1Tags.length}`
+                        : tier1Tags.length}
                     </span>
                   </button>
 
@@ -288,7 +368,9 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                           : 'bg-white/60 text-[#524538]'
                       }`}
                     >
-                      {tier2Tags.length}
+                      {hasAnySearchActive
+                        ? `${filteredTierCounts.tier2}/${tier2Tags.length}`
+                        : tier2Tags.length}
                     </span>
                   </button>
 
@@ -309,7 +391,9 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                           : 'bg-white/60 text-[#524538]'
                       }`}
                     >
-                      {tier3Tags.length}
+                      {hasAnySearchActive
+                        ? `${filteredTierCounts.tier3}/${tier3Tags.length}`
+                        : tier3Tags.length}
                     </span>
                   </button>
                 </div>
@@ -339,9 +423,12 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     tier={1}
                     subCategories={tierSubCategories.tier1}
                     tagsInTier={tier1Tags}
+                    allTags={tags}
                     categoryMatrix={categoryMatrix}
+                    globalSearchQuery={globalSearchQuery}
                     searchQuery={tier1SearchQuery}
                     onSearchQueryChange={setTier1SearchQuery}
+                    onClearAllSearch={clearAllSearches}
                     selectedTagIds={selectedTagIds}
                     draggingTagIds={draggingTagIds}
                     isBatchMovingTags={isBatchMovingTags}
@@ -353,6 +440,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     inlineEditingTagId={inlineEditingTagId}
                     inlineEditingName={inlineEditingName}
                     setInlineEditingName={setInlineEditingName}
+                    inlineDuplicateConflict={inlineDuplicateConflict}
                     onStartInlineRename={handleStartInlineRename}
                     onCommitInlineRename={handleCommitInlineRename}
                     onCancelInlineRename={handleCancelInlineRename}
@@ -396,9 +484,12 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     tier={2}
                     subCategories={tierSubCategories.tier2}
                     tagsInTier={tier2Tags}
+                    allTags={tags}
                     categoryMatrix={categoryMatrix}
+                    globalSearchQuery={globalSearchQuery}
                     searchQuery={tier2SearchQuery}
                     onSearchQueryChange={setTier2SearchQuery}
+                    onClearAllSearch={clearAllSearches}
                     selectedTagIds={selectedTagIds}
                     draggingTagIds={draggingTagIds}
                     isBatchMovingTags={isBatchMovingTags}
@@ -410,6 +501,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     inlineEditingTagId={inlineEditingTagId}
                     inlineEditingName={inlineEditingName}
                     setInlineEditingName={setInlineEditingName}
+                    inlineDuplicateConflict={inlineDuplicateConflict}
                     onStartInlineRename={handleStartInlineRename}
                     onCommitInlineRename={handleCommitInlineRename}
                     onCancelInlineRename={handleCancelInlineRename}
@@ -450,9 +542,12 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     tier={3}
                     subCategories={tierSubCategories.tier3}
                     tagsInTier={tier3Tags}
+                    allTags={tags}
                     categoryMatrix={categoryMatrix}
+                    globalSearchQuery={globalSearchQuery}
                     searchQuery={tier3SearchQuery}
                     onSearchQueryChange={setTier3SearchQuery}
+                    onClearAllSearch={clearAllSearches}
                     selectedTagIds={selectedTagIds}
                     draggingTagIds={draggingTagIds}
                     isBatchMovingTags={isBatchMovingTags}
@@ -464,6 +559,7 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
                     inlineEditingTagId={inlineEditingTagId}
                     inlineEditingName={inlineEditingName}
                     setInlineEditingName={setInlineEditingName}
+                    inlineDuplicateConflict={inlineDuplicateConflict}
                     onStartInlineRename={handleStartInlineRename}
                     onCommitInlineRename={handleCommitInlineRename}
                     onCancelInlineRename={handleCancelInlineRename}

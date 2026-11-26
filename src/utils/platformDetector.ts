@@ -1,5 +1,3 @@
-import React from 'react';
-
 export type DetectedPlatform =
   | 'TIKTOK'
   | 'FACEBOOK'
@@ -20,6 +18,140 @@ export interface PlatformMeta {
   domainPattern: string;
 }
 
+export interface ParsedSharePayload {
+  url: string;
+  suggestedTitle: string;
+  fallbackNote: string;
+}
+
+export const PENDING_SHARE_STORAGE_KEY = 'rrl_pending_share_target';
+
+export function savePendingShareTarget(payload: ParsedSharePayload): void {
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
+  try {
+    window.sessionStorage.setItem(
+      PENDING_SHARE_STORAGE_KEY,
+      JSON.stringify({ ...payload, savedAt: Date.now() })
+    );
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
+}
+
+export function readPendingShareTarget(): ParsedSharePayload | null {
+  if (typeof window === 'undefined' || !window.sessionStorage) return null;
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_SHARE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ParsedSharePayload> & { savedAt?: number };
+    // Expire stale orphaned payload after 30 minutes
+    if (parsed.savedAt && Date.now() - parsed.savedAt > 30 * 60 * 1000) {
+      window.sessionStorage.removeItem(PENDING_SHARE_STORAGE_KEY);
+      return null;
+    }
+    return {
+      url: typeof parsed.url === 'string' ? parsed.url : '',
+      suggestedTitle: typeof parsed.suggestedTitle === 'string' ? parsed.suggestedTitle : '',
+      fallbackNote: typeof parsed.fallbackNote === 'string' ? parsed.fallbackNote : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingShareTarget(): void {
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
+  try {
+    window.sessionStorage.removeItem(PENDING_SHARE_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function hasPendingShareTarget(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('share-target') === '1' || params.has('url') || params.has('text')) {
+    return true;
+  }
+  return readPendingShareTarget() !== null;
+}
+
+const KNOWN_BARE_SOCIAL_URL_REGEX =
+  /(?:^|\s)((?:www\.|m\.|vt\.|vm\.|l\.|lm\.)?(?:tiktok\.com|instagram\.com|instagr\.am|facebook\.com|fb\.watch|fb\.com|fb\.me|youtube\.com|youtu\.be|music\.youtube\.com|drive\.google\.com|twitter\.com|x\.com|threads\.net|threads\.com)\/[^\s"'<>]+)/i;
+
+export function sanitizeSharedUrl(raw: string): string {
+  const cleaned = raw
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+    .replace(/[),.;!?'"\]>]+$/g, '');
+
+  if (!cleaned) return '';
+
+  const withScheme = /^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
+
+  try {
+    const parsed = new URL(withScheme);
+    // Unwrap Facebook outbound link tracker (l.facebook.com/l.php?u=...)
+    if (
+      (parsed.hostname === 'l.facebook.com' || parsed.hostname === 'lm.facebook.com') &&
+      parsed.pathname === '/l.php'
+    ) {
+      const target = parsed.searchParams.get('u');
+      if (target && /^https?:\/\//i.test(target)) {
+        return target;
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return withScheme;
+  }
+}
+
+const GENERIC_PLATFORM_TITLES = new Set([
+  'youtube',
+  'youtube shorts',
+  'instagram',
+  'instagram reel',
+  'tiktok',
+  'tiktok - make your day',
+  'facebook',
+  'fb',
+  'watch on facebook',
+  'watch this video on facebook',
+  'watch this reel on instagram',
+  'log into facebook',
+  'create an account or log in to instagram',
+  'x',
+  'twitter',
+  'threads',
+  'google drive',
+]);
+
+function cleanSharedTitle(raw: string): string {
+  let value = raw
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '')
+    .replace(KNOWN_BARE_SOCIAL_URL_REGEX, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!value) return '';
+
+  // Strip noisy trailing/leading platform wrappers added by mobile apps
+  value = value
+    .replace(/\s*[-|•·]\s*(YouTube|TikTok|Instagram|Facebook|Threads|X|Twitter)\s*$/i, '')
+    .replace(/\s+on\s+(Instagram|Facebook|TikTok|YouTube)\s*$/i, '')
+    .replace(/^(TikTok|Instagram|Facebook)\s*[•·:-]\s*/i, '')
+    .replace(/^Watch\s+(?:this\s+)?(?:reel|video)\s+(?:by\s+[^\s]+\s+)?on\s+(?:Instagram|Facebook)\s*[:\-–]?\s*/i, '')
+    .trim();
+
+  if (!value || value === '...' || value === '…') return '';
+  if (GENERIC_PLATFORM_TITLES.has(value.toLowerCase())) return '';
+
+  return value;
+}
+
 export function detectPlatformFromUrl(url?: string | null): PlatformMeta | null {
   if (!url) return null;
   const trimmed = url.trim().toLowerCase();
@@ -37,10 +169,15 @@ export function detectPlatformFromUrl(url?: string | null): PlatformMeta | null 
     };
   }
 
-  if (trimmed.includes('facebook.com') || trimmed.includes('fb.watch') || trimmed.includes('fb.com')) {
+  if (
+    trimmed.includes('facebook.com') ||
+    trimmed.includes('fb.watch') ||
+    trimmed.includes('fb.com') ||
+    trimmed.includes('fb.me')
+  ) {
     return {
       type: 'FACEBOOK',
-      name: trimmed.includes('reel') ? 'FB Reels' : 'Facebook',
+      name: trimmed.includes('reel') || trimmed.includes('/share/r/') ? 'FB Reels' : 'Facebook',
       badgeBg: 'bg-blue-50',
       badgeBorder: 'border-blue-200',
       badgeText: 'text-blue-800',
@@ -61,7 +198,7 @@ export function detectPlatformFromUrl(url?: string | null): PlatformMeta | null 
     };
   }
 
-  if (trimmed.includes('instagram.com')) {
+  if (trimmed.includes('instagram.com') || trimmed.includes('instagr.am')) {
     return {
       type: 'INSTAGRAM',
       name: trimmed.includes('reel') ? 'IG Reels' : 'Instagram',
@@ -73,15 +210,21 @@ export function detectPlatformFromUrl(url?: string | null): PlatformMeta | null 
     };
   }
 
-  if (trimmed.includes('twitter.com') || trimmed.includes('x.com')) {
+  if (
+    trimmed.includes('twitter.com') ||
+    trimmed.includes('x.com') ||
+    trimmed.includes('threads.net') ||
+    trimmed.includes('threads.com')
+  ) {
+    const isThreads = trimmed.includes('threads.');
     return {
       type: 'TWITTER',
-      name: 'X (Twitter)',
+      name: isThreads ? 'Threads' : 'X (Twitter)',
       badgeBg: 'bg-stone-100',
       badgeBorder: 'border-stone-300',
       badgeText: 'text-stone-800',
       hoverColor: 'hover:border-stone-400',
-      domainPattern: 'x.com',
+      domainPattern: isThreads ? 'threads.net' : 'x.com',
     };
   }
 
@@ -115,43 +258,42 @@ export function detectPlatformFromUrl(url?: string | null): PlatformMeta | null 
 }
 
 /**
- * Extracts the first HTTP/HTTPS URL and cleans up any remaining caption/title text
- * shared by YouTube, TikTok, Instagram, or Facebook mobile apps.
+ * Extracts the first HTTP/HTTPS (or bare social domain) URL and cleans up any remaining
+ * caption/title text shared by YouTube, TikTok, Instagram, Facebook, or X mobile apps.
  */
 export function parseSharedInput(
   rawUrl?: string | null,
   rawText?: string | null,
   rawTitle?: string | null
-): { url: string; suggestedTitle: string } {
-  const combined = [rawUrl || '', rawText || ''].join(' ').trim();
-  const urlMatch = combined.match(/https?:\/\/[^\s"'<>]+/i);
-  const extractedUrl = urlMatch ? urlMatch[0].trim() : (rawUrl || '').trim();
+): ParsedSharePayload {
+  const candidates = [rawUrl || '', rawText || '', rawTitle || ''];
+  const combined = candidates.join(' ').trim();
 
-  const textWithoutUrl = (rawText || '')
-    .replace(/https?:\/\/[^\s"'<>]+/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const fullUrlMatch = combined.match(/https?:\/\/[^\s"'<>]+/i);
+  let extractedUrl = fullUrlMatch ? sanitizeSharedUrl(fullUrlMatch[0]) : '';
 
-  const cleanTitle = (rawTitle || '')
-    .replace(/https?:\/\/[^\s"'<>]+/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  let suggestedTitle = '';
-  if (
-    cleanTitle &&
-    !['youtube', 'instagram', 'tiktok', 'facebook', 'x', 'twitter'].includes(
-      cleanTitle.toLowerCase()
-    )
-  ) {
-    suggestedTitle = cleanTitle;
-  } else if (textWithoutUrl) {
-    suggestedTitle = textWithoutUrl;
+  if (!extractedUrl) {
+    const bareMatch = combined.match(KNOWN_BARE_SOCIAL_URL_REGEX);
+    if (bareMatch && bareMatch[1]) {
+      extractedUrl = sanitizeSharedUrl(bareMatch[1]);
+    }
   }
+
+  const cleanedTitle = cleanSharedTitle(rawTitle || '');
+  const cleanedText = cleanSharedTitle(rawText || '');
+
+  const suggestedTitle = (cleanedTitle || cleanedText).slice(0, 120);
+  const fallbackNote =
+    !extractedUrl && (cleanedText || cleanedTitle)
+      ? (cleanedText || cleanedTitle).slice(0, 300)
+      : cleanedTitle && cleanedText && cleanedTitle !== cleanedText
+        ? cleanedText.slice(0, 300)
+        : '';
 
   return {
     url: extractedUrl,
-    suggestedTitle: suggestedTitle.slice(0, 120),
+    suggestedTitle,
+    fallbackNote,
   };
 }
 

@@ -43,6 +43,7 @@ interface BuilderStep4MetadataFormProps {
   onChangeCustomSeriesName: (val: string) => void;
   onChangeEpisodeNo: (epNo: number) => void;
   onResetAutoEpisodeNo: () => void;
+  onJumpToStep1?: () => void;
   publishDate: string;
   onChangePublishDate: (val: string) => void;
   publishSlot: PublishSlot;
@@ -98,6 +99,7 @@ export const BuilderStep4MetadataForm: React.FC<
   onChangeCustomSeriesName,
   onChangeEpisodeNo,
   onResetAutoEpisodeNo,
+  onJumpToStep1,
   publishDate,
   onChangePublishDate,
   publishSlot,
@@ -125,7 +127,7 @@ export const BuilderStep4MetadataForm: React.FC<
       layout="position"
       transition={{ duration: 0.28, ease: SLIDE_EASE }}
       onSubmit={onSubmitEpisode}
-      className={`rounded-2xl border p-4 sm:p-5 transition-colors duration-200 ${
+      className={`rounded-2xl border p-4 sm:p-5 ${
         isOpen
           ? 'border-[#bad8b9] bg-[#f9fbf8]'
           : 'border-[#e8dfd3] bg-[#fdfbf7] shadow-xs hover:border-[#bad8b9]'
@@ -140,7 +142,7 @@ export const BuilderStep4MetadataForm: React.FC<
           }`}
         >
           <span
-            className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-colors ${
+            className={`px-2.5 py-1 rounded-lg font-bold shrink-0 ${
               isOpen
                 ? 'bg-[#3b6845] text-white'
                 : 'bg-[#edf4ed] text-[#2b5435]'
@@ -152,7 +154,7 @@ export const BuilderStep4MetadataForm: React.FC<
           {isOpen ? (
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-[#2d2926]">
-                ข้อมูลตอน & บันทึก
+                ข้อมูลตอน &amp; บันทึก
               </h2>
               <p className="text-[11px] font-mono text-[#787066] truncate">
                 {previewMasterFileName}
@@ -166,7 +168,7 @@ export const BuilderStep4MetadataForm: React.FC<
               className="flex flex-wrap items-center gap-2 min-w-0"
             >
               <span className="font-bold text-[#2d2926] truncate max-w-md">
-                {title || 'ยังไม่ได้ระบุชื่อคลิป'}
+                {title || 'ยังไม่ระบุชื่อคลิป'}
               </span>
               <span className="text-[#c7bdb2]">·</span>
               <span className="font-mono tabular-nums text-[#787066]">
@@ -182,23 +184,18 @@ export const BuilderStep4MetadataForm: React.FC<
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={onToggleOptionalMaster}
-            className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-[#554d44] bg-[#f4eee4] hover:bg-[#eae1d4] rounded-xl transition-colors cursor-pointer border border-[#e2d8cb]"
+            className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-[#554d44] bg-[#f4eee4] hover:bg-[#eae1d4] rounded-xl cursor-pointer border border-[#e2d8cb]"
           >
             {isOptionalMasterOpen ? (
               <>
                 <ChevronUp className="w-3.5 h-3.5" />
-                <span>ซ่อนข้อมูลเสริม</span>
+                <span>ซ่อนลิงก์/บทพากย์</span>
               </>
             ) : (
               <>
+                <Plus className="w-3 h-3" />
+                <span>ลิงก์ &amp; บทพากย์</span>
                 <ChevronDown className="w-3.5 h-3.5" />
-                <span className="inline-flex items-center gap-1">
-                  <Plus className="w-3 h-3" />
-                  <span className="sm:hidden">ลิงก์ & บทพากย์</span>
-                  <span className="hidden sm:inline">
-                    ลิงก์ Drive / YouTube / FB & บทเปิด-ปิด
-                  </span>
-                </span>
               </>
             )}
           </motion.button>
@@ -208,13 +205,13 @@ export const BuilderStep4MetadataForm: React.FC<
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={onToggle}
-            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
+            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer border ${
               selectedCount === 5
                 ? 'bg-[#3b6845] hover:bg-[#2c5234] text-white border-[#3b6845]'
                 : 'bg-[#f4eee4] hover:bg-[#eae1d4] text-[#4d4740] border-[#e2d8cb]'
             }`}
           >
-            <span>{selectedCount === 5 ? 'เปิดบันทึกคลิป' : 'ตั้งค่าชื่อคลิป'}</span>
+            <span>{selectedCount === 5 ? 'เปิดบันทึก' : 'ตั้งค่าตอน'}</span>
             <motion.span
               animate={{ rotate: isOpen ? 180 : 0 }}
               transition={{ duration: 0.25 }}
@@ -244,7 +241,7 @@ export const BuilderStep4MetadataForm: React.FC<
               transition={{ duration: 0.24, ease: 'easeOut' }}
               className="pt-4 space-y-4"
             >
-              {/* Interactive Series Selector & Editable EP Number Panel */}
+              {/* Compact Series Summary + Editable EP Stepper */}
               <BuilderSeriesSelectorBar
                 variant="step3"
                 seriesCatalog={seriesCatalog}
@@ -265,6 +262,7 @@ export const BuilderStep4MetadataForm: React.FC<
                 onChangeCustomSeriesName={onChangeCustomSeriesName}
                 onChangeEpisodeNo={onChangeEpisodeNo}
                 onResetAutoEpisodeNo={onResetAutoEpisodeNo}
+                onJumpToStep1={onJumpToStep1}
               />
 
               {/* Core Required Episode Fields */}
@@ -272,7 +270,7 @@ export const BuilderStep4MetadataForm: React.FC<
                 <div className="md:col-span-7">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                     <label className="block text-xs font-bold text-[#38332d]">
-                      ชื่อคลิป 5 อันดับ *
+                      ชื่อคลิป *
                     </label>
                     {isTitleManuallyEdited &&
                       standardizedTitlePreview &&
@@ -285,7 +283,7 @@ export const BuilderStep4MetadataForm: React.FC<
                           title={standardizedTitlePreview}
                         >
                           <RotateCcw className="w-3 h-3" />
-                          <span>ใช้ชื่อมาตรฐาน ({effectiveSeriesName} · EP.{effectiveEpisodeNo})</span>
+                          <span>ใช้ชื่อมาตรฐาน (EP.{effectiveEpisodeNo})</span>
                         </button>
                       )}
                   </div>
@@ -301,7 +299,7 @@ export const BuilderStep4MetadataForm: React.FC<
 
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold text-[#38332d] mb-1">
-                    วันที่คิวโพสต์
+                    วันที่โพสต์
                   </label>
                   <input
                     type="date"
@@ -313,7 +311,7 @@ export const BuilderStep4MetadataForm: React.FC<
 
                 <div className="md:col-span-3">
                   <label className="block text-xs font-bold text-[#38332d] mb-1">
-                    รอบเวลาอ้างอิง
+                    รอบเวลา
                   </label>
                   <select
                     value={publishSlot}
@@ -328,7 +326,7 @@ export const BuilderStep4MetadataForm: React.FC<
                 </div>
               </div>
 
-              {/* Collapsible Optional Master Video Links & Intro/Outro Mascot Scripts */}
+              {/* Collapsible Optional Links & Mascot Scripts */}
               <AnimatePresence initial={false}>
                 {isOptionalMasterOpen && (
                   <motion.div
@@ -343,7 +341,7 @@ export const BuilderStep4MetadataForm: React.FC<
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Folder className="w-3.5 h-3.5 text-[#7b5d3a]" />
-                            <span>ลิงก์ไฟล์ตัวเต็มใน Google Drive</span>
+                            <span>Google Drive</span>
                           </label>
                           <input
                             type="url"
@@ -351,14 +349,14 @@ export const BuilderStep4MetadataForm: React.FC<
                             onChange={(e) =>
                               onChangeMasterDriveUrl(e.target.value)
                             }
-                            placeholder="https://drive.google.com/file/d/MASTER-..."
+                            placeholder="https://drive.google.com/..."
                             className="w-full px-3 py-1.5 text-xs bg-[#faf7f2] border border-[#e8dfd3] rounded-lg focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
                           />
                         </div>
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Video className="w-3.5 h-3.5 text-[#a34c3c]" />
-                            <span>ลิงก์ YouTube</span>
+                            <span>YouTube</span>
                           </label>
                           <input
                             type="url"
@@ -371,7 +369,7 @@ export const BuilderStep4MetadataForm: React.FC<
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Video className="w-3.5 h-3.5 text-[#3b6845]" />
-                            <span>ลิงก์ Facebook</span>
+                            <span>Facebook</span>
                           </label>
                           <input
                             type="url"
@@ -386,7 +384,7 @@ export const BuilderStep4MetadataForm: React.FC<
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Video className="w-3.5 h-3.5 text-[#2563EB]" />
-                            <span>ลิงก์ TikTok</span>
+                            <span>TikTok</span>
                           </label>
                           <input
                             type="url"
@@ -394,14 +392,14 @@ export const BuilderStep4MetadataForm: React.FC<
                             onChange={(e) =>
                               onChangeTiktokUrl && onChangeTiktokUrl(e.target.value)
                             }
-                            placeholder="https://www.tiktok.com/@juijui.j/video/..."
+                            placeholder="https://www.tiktok.com/..."
                             className="w-full px-3 py-1.5 text-xs bg-[#faf7f2] border border-[#e8dfd3] rounded-lg focus:outline-none focus:bg-white focus:border-[#3b6845] text-[#2d2926]"
                           />
                         </div>
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Video className="w-3.5 h-3.5 text-[#D946EF]" />
-                            <span>ลิงก์ Instagram</span>
+                            <span>Instagram</span>
                           </label>
                           <input
                             type="url"
@@ -419,7 +417,7 @@ export const BuilderStep4MetadataForm: React.FC<
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Mic className="w-3.5 h-3.5 text-[#b37731]" />
-                            <span>บทพากย์มาสคอตเปิดคลิป (Intro)</span>
+                            <span>บทเปิด (Intro)</span>
                           </label>
                           <input
                             type="text"
@@ -433,7 +431,7 @@ export const BuilderStep4MetadataForm: React.FC<
                         <div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold text-[#47413a] mb-1">
                             <Mic className="w-3.5 h-3.5 text-[#b37731]" />
-                            <span>บทพากย์มาสคอตปิดท้ายคลิป (Outro)</span>
+                            <span>บทปิด (Outro)</span>
                           </label>
                           <input
                             type="text"
@@ -451,20 +449,16 @@ export const BuilderStep4MetadataForm: React.FC<
               </AnimatePresence>
 
               {/* Submit Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                <div className="text-xs font-semibold text-[#47413a]">
-                  สถานะชุดจัดอันดับ:{' '}
-                  <span className="font-mono font-bold tabular-nums text-[#2d2926]">
-                    {selectedCount}/5 อันดับ
-                  </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3 pt-1">
+                <div className="text-xs font-semibold">
                   {selectedCount < 5 ? (
-                    <span className="text-[#a34c3c] ml-2">
-                      (ขาดอีก {5 - selectedCount} อันดับ)
+                    <span className="text-[#a34c3c] font-mono tabular-nums">
+                      ขาดอีก {5 - selectedCount} อันดับ
                     </span>
                   ) : (
-                    <span className="text-[#2b5435] ml-2 inline-flex items-center gap-1">
+                    <span className="text-[#2b5435] inline-flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 text-[#3b6845]" />
-                      <span>ครบ 5 อันดับ พร้อมบันทึก</span>
+                      <span>ครบ 5 อันดับ</span>
                     </span>
                   )}
                 </div>
@@ -474,10 +468,10 @@ export const BuilderStep4MetadataForm: React.FC<
                   whileHover={{ scale: selectedCount === 5 ? 1.02 : 1 }}
                   whileTap={{ scale: selectedCount === 5 ? 0.97 : 1 }}
                   disabled={selectedCount < 5}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-[#3b6845] hover:bg-[#2c5234] disabled:opacity-40 rounded-xl shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-[#3b6845] hover:bg-[#2c5234] disabled:opacity-40 rounded-xl shadow-xs whitespace-nowrap cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>บันทึกคลิป 5 อันดับ ({nextEpisodeId})</span>
+                  <span>บันทึกคลิป ({nextEpisodeId})</span>
                 </motion.button>
               </div>
             </motion.div>

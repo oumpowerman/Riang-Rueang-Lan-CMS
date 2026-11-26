@@ -17,7 +17,6 @@ export const EpisodeBuilderView: React.FC = () => {
     computedFootageMap,
     settings,
     setActiveTab,
-    setIsThreeTierManagerOpen,
 
     nextEpisodeId,
     activeBuilderStep,
@@ -203,7 +202,6 @@ export const EpisodeBuilderView: React.FC = () => {
         onSelectCategory={handleSelectCategory}
         onToggleFacetTag={handleToggleFacetTag}
         onClearFacetTags={handleClearFacetTags}
-        onOpenThreeTierManager={() => setIsThreeTierManagerOpen(true)}
         seriesCatalog={seriesCatalog}
         seriesMode={seriesMode}
         activeExistingSeries={activeExistingSeries}
@@ -332,6 +330,7 @@ export const EpisodeBuilderView: React.FC = () => {
         onChangeCustomSeriesName={updateCustomSeriesName}
         onChangeEpisodeNo={setEpisodeNo}
         onResetAutoEpisodeNo={resetAutoEpisodeNo}
+        onJumpToStep1={() => setActiveBuilderStep(1)}
         publishDate={publishDate}
         onChangePublishDate={setPublishDate}
         publishSlot={publishSlot}

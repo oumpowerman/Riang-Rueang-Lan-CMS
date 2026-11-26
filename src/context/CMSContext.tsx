@@ -4,6 +4,7 @@ import { idbStorageService } from '../services/idbStorageService';
 import { cmsRepository } from '../services/cmsRepository';
 import { evaluateEpisodeCompleteness } from '../utils/episodeValidator';
 import { extractEpisodeSeriesInfo } from '../utils/seriesExtractor';
+import { hasDuplicateTags, scanDuplicateTagGroups } from '../utils/tagDeduplicator';
 import {
   ActiveNavTab,
   BuilderPreselectRequest,
@@ -200,10 +201,64 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFootage,
     sources,
     setSources,
+    episodes,
+    setEpisodes,
     setSelectedTagFilter: navigationState.setSelectedTagFilter,
     settings,
     setSettings,
   });
+
+  // 4.5 Automatic Duplicate Tag Merge when Cloud Sync settles & duplicate names exist
+  const lastAutoDedupSigRef = useRef<string>('');
+  const isAutoDedupRunningRef = useRef<boolean>(false);
+  const deduplicateRef = useRef(categoryActions.deduplicateDuplicateTags);
+  deduplicateRef.current = categoryActions.deduplicateDuplicateTags;
+
+  useEffect(() => {
+    if (
+      !isCloudSynced ||
+      isSeedingToCloud ||
+      isClearingClips ||
+      isAutoDedupRunningRef.current ||
+      firestoreService.isBatchWriteInProgress() ||
+      !hasDuplicateTags(tags)
+    ) {
+      return;
+    }
+
+    const dupGroups = scanDuplicateTagGroups(tags, footage, sources, episodes);
+    if (dupGroups.length === 0) return;
+
+    const sig = dupGroups
+      .map((g) => `${g.winner.id}:${g.losers.map((l) => l.id).join(',')}`)
+      .sort()
+      .join('|');
+    if (sig === lastAutoDedupSigRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      if (
+        isAutoDedupRunningRef.current ||
+        firestoreService.isBatchWriteInProgress()
+      ) {
+        return;
+      }
+      isAutoDedupRunningRef.current = true;
+      lastAutoDedupSigRef.current = sig;
+      void deduplicateRef.current().finally(() => {
+        isAutoDedupRunningRef.current = false;
+      });
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    isCloudSynced,
+    isSeedingToCloud,
+    isClearingClips,
+    tags,
+    footage,
+    sources,
+    episodes,
+  ]);
 
   // 5. Actions: Footage Ingestion (Flow A 1:1 & Flow B 1:N) & CRUD
   const footageActions = useCMSFootageActions({
