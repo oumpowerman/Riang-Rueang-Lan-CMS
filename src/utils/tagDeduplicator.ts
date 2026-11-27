@@ -11,7 +11,6 @@ import {
   DEFAULT_UNCLASSIFIED_SUBCATEGORY,
 } from '../types/tag.types';
 import {
-  resolveTagByDataDictionary,
   STANDARD_DICTIONARY_TAGS,
   stripForbiddenHumorSuffixes,
 } from './tagDictionaryRules';
@@ -45,8 +44,7 @@ export function matchesTagSearchQuery(
   return (
     tag.name.toLowerCase().includes(q) ||
     tag.id.toLowerCase().includes(q) ||
-    (tag.subCategory || '').toLowerCase().includes(q) ||
-    (tag.description || '').toLowerCase().includes(q)
+    (tag.subCategory || '').toLowerCase().includes(q)
   );
 }
 
@@ -56,7 +54,7 @@ export function isCanonicalDictionaryTagId(tagId: string): boolean {
 }
 
 export interface TagDuplicateConflict {
-  reason: 'EXACT' | 'HUMOR_STRIPPED' | 'DICTIONARY_ALIAS';
+  reason: 'EXACT' | 'HUMOR_STRIPPED';
   normalizedInput: string;
   resolvedTargetName: string;
   conflictingTag: CategoryTag;
@@ -74,7 +72,6 @@ function formatTagLocationHint(tag: CategoryTag): string {
  * Covers:
  * 1. Exact normalized matches (case-insensitive, '#' & whitespace normalized)
  * 2. Forbidden humor-suffix stripped matches (e.g. "โควิดฮา" -> "โควิด")
- * 3. Data Dictionary alias matches resolving to an already-existing canonical tag
  */
 export function findDuplicateTagConflict(
   rawName: string,
@@ -116,24 +113,6 @@ export function findDuplicateTagConflict(
         resolvedTargetName: humorMatch.name,
         conflictingTag: humorMatch,
         message: `หลังตัดคำลงท้ายแล้วจะซ้ำกับ #${humorMatch.name} ที่มีอยู่แล้วใน ${formatTagLocationHint(humorMatch)}`,
-      };
-    }
-  }
-
-  // 3. Dictionary alias match (only check when NOT renaming an existing tag to avoid blocking benign custom edits, or check both cleanly)
-  const resolved = resolveTagByDataDictionary(rawName);
-  if (resolved.length === 1 && resolved[0].dictionarySpecId) {
-    const specKey = normalizeTagCompareKey(resolved[0].name);
-    const aliasMatch = activeTags.find(
-      (t) => normalizeTagCompareKey(t.name) === specKey
-    );
-    if (aliasMatch) {
-      return {
-        reason: 'DICTIONARY_ALIAS',
-        normalizedInput,
-        resolvedTargetName: aliasMatch.name,
-        conflictingTag: aliasMatch,
-        message: `ชื่อนี้ตรงกับคำพ้องของแท็กมาตรฐาน #${aliasMatch.name} ที่มีอยู่แล้วใน ${formatTagLocationHint(aliasMatch)}`,
       };
     }
   }

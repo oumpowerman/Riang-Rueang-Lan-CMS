@@ -352,7 +352,7 @@ export const TagRulesDictionaryModal: React.FC<
                         {spec.aliases.length > 0 && (
                           <div className="sm:max-w-xs md:max-w-sm shrink-0 flex flex-wrap items-center gap-1">
                             <span className="text-[10px] font-bold text-[#8C7B6C] mr-0.5">
-                              ยุบรวมคำพ้อง:
+                              แท็กย่อยที่สร้างแยกเดี่ยวได้:
                             </span>
                             {spec.aliases.map((alias) => (
                               <span

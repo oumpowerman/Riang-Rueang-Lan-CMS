@@ -17,7 +17,6 @@ import {
 import { IndependentTierColumn } from './three-tier/IndependentTierColumn';
 import { ThreeTierBatchMoveBar } from './three-tier/ThreeTierBatchMoveBar';
 import { ThreeTierConfirmModals } from './three-tier/ThreeTierConfirmModals';
-import { needsDictionaryCleanup } from '../../utils/reorganizeTagsToDictionary';
 
 export const ThreeTierCategoryManagerModal: React.FC = () => {
   const {
@@ -28,7 +27,6 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
     setIsClearClipsModalOpen,
     threeTierStudioTab,
     setThreeTierStudioTab,
-    isCloudSynced,
   } = useCMS();
 
   const {
@@ -139,29 +137,6 @@ export const ThreeTierCategoryManagerModal: React.FC = () => {
       setActiveStudioTab(threeTierStudioTab);
     }
   }, [isThreeTierManagerOpen, threeTierStudioTab]);
-
-  // Safely run initial dictionary cleanup once when Cloud sync is ready, avoiding interfering with live user edits
-  const hasRunInitialCleanRef = React.useRef(false);
-  React.useEffect(() => {
-    if (!isCloudSynced || hasRunInitialCleanRef.current || tags.length <= 1) {
-      return;
-    }
-    hasRunInitialCleanRef.current = true;
-    if (!needsDictionaryCleanup(tags, settings.tierSubCategories)) {
-      return;
-    }
-
-    reorganizeTagsToDataDictionary()
-      .catch((err) => {
-        console.warn('Auto dictionary cleanup error:', err);
-        hasRunInitialCleanRef.current = false;
-      });
-  }, [
-    isCloudSynced,
-    tags,
-    settings.tierSubCategories,
-    reorganizeTagsToDataDictionary,
-  ]);
 
   const handleClose = () => {
     if (isBatchMovingTags) return;

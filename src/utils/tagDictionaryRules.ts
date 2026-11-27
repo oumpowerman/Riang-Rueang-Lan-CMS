@@ -154,7 +154,7 @@ export function stripForbiddenHumorSuffixes(rawTagName: string): {
   };
 }
 
-// Lookup index for instant dictionary & synonym resolution
+// Lookup index for exact canonical dictionary tag names only (no automatic alias/synonym collapsing)
 const dictionaryByNormalizedKey = new Map<string, DictionaryTagSpec[]>();
 
 function registerDictionaryLookup() {
@@ -163,25 +163,6 @@ function registerDictionaryLookup() {
   for (const spec of STANDARD_DICTIONARY_TAGS) {
     const mainKey = normalizeLookupKey(spec.name);
     dictionaryByNormalizedKey.set(mainKey, [spec]);
-
-    for (const alias of spec.aliases) {
-      const aliasKey = normalizeLookupKey(alias);
-      if (!aliasKey) continue;
-      const existing = dictionaryByNormalizedKey.get(aliasKey) || [];
-      if (!existing.some((item) => item.id === spec.id)) {
-        dictionaryByNormalizedKey.set(aliasKey, [...existing, spec]);
-      }
-    }
-  }
-
-  // Special compound alias: "ร้องเต้น" -> resolves to both "#ร้องเพลง" and "#เต้น"
-  const singSpec = STANDARD_DICTIONARY_TAGS.find((t) => t.name === 'ร้องเพลง');
-  const danceSpec = STANDARD_DICTIONARY_TAGS.find((t) => t.name === 'เต้น');
-  if (singSpec && danceSpec) {
-    dictionaryByNormalizedKey.set(normalizeLookupKey('ร้องเต้น'), [
-      singSpec,
-      danceSpec,
-    ]);
   }
 }
 
@@ -200,9 +181,9 @@ export interface ResolvedTagRuleResult {
 }
 
 /**
- * ตรวจสอบชื่อแท็กตามกฎเหล็กและ Data Dictionary:
+ * ตรวจสอบชื่อแท็กตามกฎเหล็ก:
  * 1. ตัดคำว่า "ฮา / ฮาๆ / สุดฮา" ออกอัตโนมัติตามกฎข้อ 2
- * 2. หากตรงกับแท็กมาตรฐานหรือคำพ้อง (เช่น #ดารา, #คนดัง, #พระ, #รายการผี) จะแปลงเข้าแท็กหลักและจัด Tier + หมวดย่อยให้อัตโนมัติ
+ * 2. ไม่บังคับยุบรวมคำพ้อง (เช่น #นักเรียน, #ตำรวจ, #พระ, #หมา, #แมว สามารถสร้างแยกเป็นแท็กเดี่ยวได้อิสระ)
  */
 export function resolveTagByDataDictionary(
   rawTagName: string,
@@ -213,25 +194,18 @@ export function resolveTagByDataDictionary(
   if (!cleanedName) return [];
 
   const lookupKey = normalizeLookupKey(cleanedName);
-  const directMatches = dictionaryByNormalizedKey.get(lookupKey);
-
-  // Also check raw key before stripping (in case an alias literally had a suffix)
-  const rawLookupKey = normalizeLookupKey(rawTagName);
-  const matchedSpecs =
-    directMatches || dictionaryByNormalizedKey.get(rawLookupKey);
+  const matchedSpecs = dictionaryByNormalizedKey.get(lookupKey);
 
   if (matchedSpecs && matchedSpecs.length > 0) {
     return matchedSpecs.map((spec) => ({
       name: spec.name,
       tier: spec.tier,
-      subCategory: spec.subCategory,
+      subCategory: fallbackSubCategory || spec.subCategory,
       color: spec.color,
       entityType: spec.entityType,
       description: spec.description,
       dictionarySpecId: spec.id,
-      wasMappedFromAlias:
-        normalizeLookupKey(spec.name) !== rawLookupKey ||
-        matchedSpecs.length > 1,
+      wasMappedFromAlias: false,
       wasStrippedHumor: wasStripped,
     }));
   }
