@@ -25,6 +25,7 @@ import {
   safeLocalStorageRemove,
   safeLocalStorageSet,
 } from './idbStorageService';
+import { VERSION_STORAGE_KEYS } from '../constants/appVersion';
 
 const STORAGE_KEYS = {
   GROUPS: 'rrl_cms_category_groups_v1',
@@ -528,6 +529,32 @@ export const cmsRepository = {
   setLastCloudSyncTimestamp(ts: string): void {
     safeLocalStorageSet(STORAGE_KEYS.LAST_CLOUD_SYNC_TS, ts);
     void idbStorageService.setMeta('last_cloud_sync_ts', ts);
+  },
+
+  getLocalSchemaEpoch(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem(VERSION_STORAGE_KEYS.LOCAL_SCHEMA_EPOCH) || null;
+    } catch {
+      return null;
+    }
+  },
+
+  setLocalSchemaEpoch(epoch: string): void {
+    safeLocalStorageSet(VERSION_STORAGE_KEYS.LOCAL_SCHEMA_EPOCH, epoch);
+  },
+
+  getLocalForceSyncEpoch(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem(VERSION_STORAGE_KEYS.LOCAL_FORCE_SYNC_EPOCH) || null;
+    } catch {
+      return null;
+    }
+  },
+
+  setLocalForceSyncEpoch(epoch: string): void {
+    safeLocalStorageSet(VERSION_STORAGE_KEYS.LOCAL_FORCE_SYNC_EPOCH, epoch);
   },
 };
 

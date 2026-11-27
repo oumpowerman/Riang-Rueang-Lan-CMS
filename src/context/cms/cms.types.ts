@@ -436,6 +436,7 @@ export interface CMSContextType {
   syncHealth: SyncHealthState;
   manualDeltaRefresh: () => Promise<ManualSyncReport>;
   manualFullPullFromCloud: () => Promise<ManualSyncReport>;
+  broadcastForceSyncAll: () => Promise<ManualSyncReport>;
   flushOutboxNow: () => Promise<OutboxFlushResult>;
   clearOutboxNow: () => Promise<void>;
 }

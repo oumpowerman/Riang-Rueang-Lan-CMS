@@ -6,6 +6,7 @@ import {
   sanitizeForFirestore,
 } from './firestoreBatchUtils';
 import { isQuotaExhaustedError, markFirestoreQuotaExhausted } from './firestoreErrorHandling';
+import { APP_VERSION } from '../constants/appVersion';
 
 export type SyncCollectionKey =
   | 'footages'
@@ -28,6 +29,9 @@ export interface SyncPulseMetadata {
   recentDeletes?: DeletedTombstoneRecord[];
   clipsWipedAt?: string;
   categoriesWipedAt?: string;
+  minRequiredAppVersion?: string;
+  forceFullSyncEpoch?: string;
+  totalCategories?: number;
 }
 
 export interface SyncPulseEmitPayload {
@@ -236,6 +240,7 @@ async function flushPendingSyncPulse(): Promise<void> {
     lastMutationAt: nowIso,
     lastMutationBy: CLIENT_INSTANCE_ID,
     lastMutationType: mutationLabel || 'mutation',
+    minRequiredAppVersion: APP_VERSION,
   };
 
   if (upsertedCols.length > 0) {
@@ -312,6 +317,29 @@ async function flushPendingSyncPulse(): Promise<void> {
     }
     console.warn('SyncPulse emit warning:', err);
   }
+}
+
+/**
+ * Broadcasts a global Force-Sync & Minimum-Version signal to all connected browsers (Chrome, Edge, Safari, Mobile).
+ * Every open tab receiving this pulse will immediately invalidate its local cache and pull 100% fresh data from Cloud,
+ * and any tab running an older code bundle will be prompted/forced to reload into the latest version.
+ */
+export async function broadcastForceSyncToAllDevices(): Promise<string> {
+  const nowIso = new Date().toISOString();
+  const docRef = doc(db, 'system_settings', 'archive_summary_stats');
+  await setDoc(
+    docRef,
+    sanitizeForFirestore({
+      minRequiredAppVersion: APP_VERSION,
+      forceFullSyncEpoch: nowIso,
+      lastMutationAt: nowIso,
+      lastMutationBy: CLIENT_INSTANCE_ID,
+      lastMutationType: 'admin:force_sync_all',
+      updatedAt: nowIso,
+    }),
+    { merge: true }
+  );
+  return nowIso;
 }
 
 /**

@@ -7,11 +7,18 @@ import {
   CloudOff,
   Database,
   Download,
+  Radio,
   RefreshCw,
+  RotateCcw,
   Trash2,
   UploadCloud,
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
+import {
+  APP_BUILD_LABEL,
+  APP_VERSION,
+  hardReloadAndPurgeBrowserCaches,
+} from '../../constants/appVersion';
 import { BaseModal } from '../ui/BaseModal';
 import { SyncHistoryCard } from './SyncHistoryCard';
 
@@ -50,6 +57,7 @@ export const SyncCenterModal: React.FC = () => {
     syncHealth,
     manualDeltaRefresh,
     manualFullPullFromCloud,
+    broadcastForceSyncAll,
     flushOutboxNow,
     clearOutboxNow,
     seedToCloud,
@@ -60,6 +68,8 @@ export const SyncCenterModal: React.FC = () => {
   const [confirmClearOutbox, setConfirmClearOutbox] = useState(false);
   const [showAdvancedPush, setShowAdvancedPush] = useState(false);
   const [confirmPushSeed, setConfirmPushSeed] = useState(false);
+  const [isBroadcastingForceSync, setIsBroadcastingForceSync] = useState(false);
+  const [isHardReloading, setIsHardReloading] = useState(false);
   const [outboxNotice, setOutboxNotice] = useState<{
     ok: boolean;
     text: string;
@@ -75,16 +85,33 @@ export const SyncCenterModal: React.FC = () => {
     }
   }, [isSyncCenterModalOpen]);
 
-  const { status, isOnline, isQuotaExhausted, isManualSyncing, lastSyncedAt, outbox, drift, lastReport } =
-    syncHealth;
+  const {
+    status,
+    isOnline,
+    isQuotaExhausted,
+    isManualSyncing,
+    lastSyncedAt,
+    appVersion,
+    cloudRequiredVersion,
+    isOutdatedVersion,
+    outbox,
+    drift,
+    lastReport,
+  } = syncHealth;
 
-  const isBusy = isManualSyncing || outbox.isFlushing || isSeedingToCloud;
+  const isBusy =
+    isManualSyncing ||
+    outbox.isFlushing ||
+    isSeedingToCloud ||
+    isBroadcastingForceSync ||
+    isHardReloading;
 
   const estimatedFullPullReads =
     (drift.cloudFootage ?? drift.localFootage) +
     (drift.cloudEpisodes ?? drift.localEpisodes) +
     (drift.cloudSources ?? drift.localSources) +
-    150;
+    (drift.cloudCategories ?? drift.localCategories) +
+    20;
 
   const handleSmartDelta = async () => {
     setConfirmFullPull(false);
@@ -96,6 +123,22 @@ export const SyncCenterModal: React.FC = () => {
     setConfirmFullPull(false);
     setOutboxNotice(null);
     await manualFullPullFromCloud();
+  };
+
+  const handleBroadcastForceSyncAll = async () => {
+    setConfirmFullPull(false);
+    setOutboxNotice(null);
+    setIsBroadcastingForceSync(true);
+    try {
+      await broadcastForceSyncAll();
+    } finally {
+      setIsBroadcastingForceSync(false);
+    }
+  };
+
+  const handleHardReloadBrowser = async () => {
+    setIsHardReloading(true);
+    await hardReloadAndPurgeBrowserCaches(cloudRequiredVersion || APP_VERSION);
   };
 
   const handleFlushOutbox = async () => {
@@ -149,6 +192,13 @@ export const SyncCenterModal: React.FC = () => {
       cloud: drift.cloudSources,
       diff: drift.cloudSources === null ? null : drift.sourceDiff,
     },
+    {
+      key: 'categories',
+      label: 'หมวดหมู่ / แท็ก 3 ชั้น',
+      local: drift.localCategories,
+      cloud: drift.cloudCategories,
+      diff: drift.cloudCategories === null ? null : drift.categoryDiff,
+    },
   ];
 
   const statusText =
@@ -158,6 +208,8 @@ export const SyncCenterModal: React.FC = () => {
       ? 'ออฟไลน์ (ใช้ข้อมูลในเครื่อง)'
       : isQuotaExhausted
       ? 'ติดเพดานโควตา Firestore รายวัน'
+      : isOutdatedVersion
+      ? `เบราว์เซอร์นี้ยังเป็นเวอร์ชันเก่า (v${appVersion} -> ล่าสุด v${cloudRequiredVersion})`
       : outbox.count > 0
       ? `มี ${outbox.count} รายการรอส่งขึ้น Cloud`
       : drift.hasDrift
@@ -168,8 +220,8 @@ export const SyncCenterModal: React.FC = () => {
     <BaseModal
       isOpen={isSyncCenterModalOpen}
       onClose={() => setIsSyncCenterModalOpen(false)}
-      title="ศูนย์ซิงก์ข้อมูล Cloud"
-      subtitle="ตรวจสอบยอดเทียบในเครื่องกับ Cloud, จัดการคิวส่งซ้ำอัตโนมัติ และเลือกระดับการรีเฟรช"
+      title="ศูนย์ซิงก์ข้อมูล Cloud & จัดการเวอร์ชันเบราว์เซอร์"
+      subtitle="ตรวจสอบยอดเทียบในเครื่องกับ Cloud, บังคับทุกเบราว์เซอร์ (Chrome / Edge / มือถือ) ซิงก์ตรงกัน 100%"
       icon={
         !isOnline || isQuotaExhausted ? (
           <CloudOff className="w-4 h-4 text-rose-600" />
@@ -181,8 +233,8 @@ export const SyncCenterModal: React.FC = () => {
       bodyClassName="p-4 sm:p-5 bg-[#FAF8F5] space-y-4"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <div className="text-xs text-[#7D6E61] truncate">
-            ซิงก์อัตโนมัติข้ามแท็บบนเครื่องเดียวกันเปิดทำงานอยู่ (0 Read)
+          <div className="text-xs text-[#7D6E61] truncate font-mono tabular-nums">
+            {APP_BUILD_LABEL} · ซิงก์ข้ามแท็บอัตโนมัติ (0 Read)
           </div>
           <button
             type="button"
@@ -194,13 +246,75 @@ export const SyncCenterModal: React.FC = () => {
         </div>
       }
     >
-      {/* 1. Clean Metadata Status Line (Zero-Pill) */}
+      {/* 1. Clean Metadata Status Line */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600 px-0.5">
         <span className="font-semibold text-slate-800">{statusText}</span>
         <span aria-hidden="true" className="text-slate-300">·</span>
         <span className="font-mono tabular-nums text-slate-500">
           ซิงก์ล่าสุด {formatDateTimeThai(lastSyncedAt)}
         </span>
+      </div>
+
+      {/* 1.5 Browser Version & Cross-Browser Force-Sync Control Card */}
+      <div
+        className={`rounded-2xl border p-3.5 space-y-2.5 ${
+          isOutdatedVersion
+            ? 'bg-amber-50/90 border-amber-300'
+            : 'bg-white border-slate-200/80'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>ควบคุมเวอร์ชัน & บังคับซิงก์ข้ามเบราว์เซอร์ (Chrome / Edge / มือถือ)</span>
+          </div>
+          <span className="text-[11px] font-mono tabular-nums font-semibold text-slate-600">
+            เครื่องนี้ v{appVersion}
+            {cloudRequiredVersion ? ` · Cloud v${cloudRequiredVersion}` : ''}
+          </span>
+        </div>
+
+        <p className="text-[11px] text-slate-600 leading-snug">
+          หากเปิด Chrome กับ Edge แล้วข้อมูลหรือแท็กไม่ตรงกัน หรือเบราว์เซอร์เก่าติดแคชไม่ยอมอัปเดตเวอร์ชัน สามารถกดสั่งบังคับทุกเบราว์เซอร์ดึงข้อมูลจาก Cloud ใหม่พร้อมกัน หรือล้างแคชเบราว์เซอร์นี้ได้ทันที
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+          <button
+            type="button"
+            onClick={handleBroadcastForceSyncAll}
+            disabled={isBusy || !isOnline}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold transition-colors cursor-pointer"
+          >
+            <Radio
+              className={`w-3.5 h-3.5 shrink-0 ${
+                isBroadcastingForceSync ? 'animate-spin' : ''
+              }`}
+            />
+            <span className="truncate">
+              {isBroadcastingForceSync
+                ? 'กำลังส่งสัญญาณซิงก์ทุกเครื่อง...'
+                : 'สั่งทุกเบราว์เซอร์ดึง Cloud ใหม่พร้อมกัน'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleHardReloadBrowser}
+            disabled={isBusy}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 disabled:opacity-50 text-slate-800 border border-slate-200 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <RotateCcw
+              className={`w-3.5 h-3.5 shrink-0 ${
+                isHardReloading ? 'animate-spin' : ''
+              }`}
+            />
+            <span className="truncate">
+              {isHardReloading
+                ? 'กำลังล้างแคชและรีโหลด...'
+                : 'ล้างแคชเบราว์เซอร์นี้ & อัปเดตเวอร์ชัน'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Offline or Quota Advisory Banner */}

@@ -5,6 +5,7 @@ import { cmsRepository } from '../services/cmsRepository';
 import { evaluateEpisodeCompleteness } from '../utils/episodeValidator';
 import { extractEpisodeSeriesInfo } from '../utils/seriesExtractor';
 import { hasDuplicateTags, scanDuplicateTagGroups } from '../utils/tagDeduplicator';
+import { APP_VERSION } from '../constants/appVersion';
 import {
   ActiveNavTab,
   BuilderPreselectRequest,
@@ -68,6 +69,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncHealth,
     manualDeltaRefresh,
     manualFullPullFromCloud,
+    broadcastForceSyncAll,
     flushOutboxNow,
     clearOutboxNow,
   } = useCMSCloudAndStorageSync(navigationState.setSelectedTagFilter);
@@ -139,6 +141,8 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         untaggedFootageCount: analytics.untaggedFootages.length,
         missingDriveCount: analytics.missingDriveFootages.length,
         totalSources: sources.length,
+        totalCategories: tags.length,
+        minRequiredAppVersion: APP_VERSION,
         updatedAt: new Date().toISOString(),
       };
 
@@ -156,6 +160,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         nextStats.untaggedFootageCount,
         nextStats.missingDriveCount,
         nextStats.totalSources,
+        nextStats.totalCategories,
       ].join('|');
 
       if (sig === lastSyncedSummarySigRef.current) return;
@@ -180,6 +185,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     analytics.missingDriveFootages.length,
     analytics.tagMap,
     sources.length,
+    tags.length,
     hasFullCloudEpisodesRef,
     hasFullCloudFootageRef,
     localMutationVersion,
@@ -314,6 +320,7 @@ export const CMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         syncHealth,
         manualDeltaRefresh,
         manualFullPullFromCloud,
+        broadcastForceSyncAll,
         flushOutboxNow,
         clearOutboxNow,
       }}

@@ -19,6 +19,7 @@ import { Footage } from '../../types/footage.types';
 import { RawSource } from '../../types/source.types';
 import { CategoryGroup, CategoryTag, SystemSettings } from '../../types/tag.types';
 import { ManualSyncReport } from './useCMSSyncHealth';
+import { APP_SCHEMA_EPOCH, APP_VERSION } from '../../constants/appVersion';
 
 const MANUAL_DELTA_MIN_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours safety lookback
 
@@ -107,11 +108,16 @@ export function useCMSManualSyncActions({
           freshServerCounts &&
           (cloudSummary.totalFootage !== freshServerCounts.totalFootage ||
             cloudSummary.totalEpisodes !== freshServerCounts.totalEpisodes ||
-            cloudSummary.totalSources !== freshServerCounts.totalSources)
+            cloudSummary.totalSources !== freshServerCounts.totalSources ||
+            (typeof freshServerCounts.totalCategories === 'number' &&
+              cloudSummary.totalCategories !== freshServerCounts.totalCategories))
         ) {
           cloudSummary.totalFootage = freshServerCounts.totalFootage;
           cloudSummary.totalEpisodes = freshServerCounts.totalEpisodes;
           cloudSummary.totalSources = freshServerCounts.totalSources;
+          if (typeof freshServerCounts.totalCategories === 'number') {
+            cloudSummary.totalCategories = freshServerCounts.totalCategories;
+          }
           void firestoreService.saveArchiveSummaryStats(cloudSummary);
         }
 
@@ -122,6 +128,7 @@ export function useCMSManualSyncActions({
             totalEpisodes: cloudSummary.totalEpisodes,
             totalFootage: cloudSummary.totalFootage,
             totalSources: cloudSummary.totalSources,
+            totalCategories: cloudSummary.totalCategories,
             fetchedAt: cloudSummary.updatedAt || startedIso,
           });
         }
@@ -398,6 +405,13 @@ export function useCMSManualSyncActions({
       setEpisodes(allEpisodes);
       setSources(allSources);
 
+      // Clear browser-local deleted tag/group tombstones so authoritative Cloud tags are 100% restored
+      cmsRepository.clearDeletedTagIds();
+      cmsRepository.clearDeletedGroupIds();
+      if (allCats.length > 0) {
+        cmsRepository.setCategoriesWiped(false);
+      }
+
       const normalizedCats =
         allCats.length > 0
           ? cmsRepository.normalizeAndRepairTags(allCats, allCats.length <= 1)
@@ -437,6 +451,8 @@ export function useCMSManualSyncActions({
         totalEpisodes: allEpisodes.length,
         totalFootage: allFootages.length,
         totalSources: allSources.length,
+        totalCategories: normalizedCats.length,
+        minRequiredAppVersion: APP_VERSION,
         updatedAt: new Date().toISOString(),
       };
 
@@ -448,10 +464,15 @@ export function useCMSManualSyncActions({
         totalEpisodes: allEpisodes.length,
         totalFootage: allFootages.length,
         totalSources: allSources.length,
+        totalCategories: normalizedCats.length,
         fetchedAt: new Date().toISOString(),
       });
 
       cmsRepository.setLastCloudSyncTimestamp(syncedIso);
+      cmsRepository.setLocalSchemaEpoch(APP_SCHEMA_EPOCH);
+      if (cloudSummary?.forceFullSyncEpoch) {
+        cmsRepository.setLocalForceSyncEpoch(cloudSummary.forceFullSyncEpoch);
+      }
       setLastSyncedAt(syncedIso);
       markFirestoreQuotaExhausted(false);
       setIsCloudConnected(true);
@@ -524,11 +545,31 @@ export function useCMSManualSyncActions({
     hasFullCloudSourcesRef,
   ]);
 
+  /**
+   * Broadcasts a remote Force-Sync signal + minRequiredAppVersion to Firestore so every open or
+   * returning browser (Chrome, Edge, Safari, Mobile) automatically purges stale cache and pulls fresh Cloud data.
+   */
+  const broadcastForceSyncAll = useCallback(async (): Promise<ManualSyncReport> => {
+    const epoch = await firestoreService.broadcastForceSyncToAllDevices();
+    cmsRepository.setLocalForceSyncEpoch(epoch);
+    const report = await manualFullPullFromCloud();
+    if (report.ok) {
+      const broadcastReport: ManualSyncReport = {
+        ...report,
+        message: `ส่งสัญญาณบังคับซิงก์และอัปเดตเวอร์ชัน (${APP_VERSION}) ไปยังทุกเบราว์เซอร์/ทุกเครื่องสำเร็จ (${report.message})`,
+      };
+      setLastReport(broadcastReport);
+      return broadcastReport;
+    }
+    return report;
+  }, [manualFullPullFromCloud]);
+
   return {
     isManualSyncing,
     lastReport,
     setLastReport,
     manualDeltaRefresh,
     manualFullPullFromCloud,
+    broadcastForceSyncAll,
   };
 }

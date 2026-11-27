@@ -72,6 +72,7 @@ import {
   type DeletedTombstoneRecord,
   type SyncCollectionKey,
   type SyncPulseMetadata,
+  broadcastForceSyncToAllDevices,
   emitSyncPulse,
   extractDeletedIdsSince,
   fetchArchiveSummaryStatsOnce,
@@ -148,6 +149,7 @@ export {
   type DeletedTombstoneRecord,
   type SyncCollectionKey,
   type SyncPulseMetadata,
+  broadcastForceSyncToAllDevices,
   emitSyncPulse,
   extractDeletedIdsSince,
   fetchArchiveSummaryStatsOnce,
@@ -167,6 +169,7 @@ export interface ServerCollectionCounts {
   totalEpisodes: number;
   totalFootage: number;
   totalSources: number;
+  totalCategories?: number;
   fetchedAt: string;
 }
 
@@ -443,15 +446,17 @@ export const firestoreService = {
    */
   async fetchServerCollectionCounts(): Promise<ServerCollectionCounts | null> {
     try {
-      const [epCountSnap, ftCountSnap, srcCountSnap] = await Promise.all([
+      const [epCountSnap, ftCountSnap, srcCountSnap, catCountSnap] = await Promise.all([
         getCountFromServer(collection(db, 'episodes')),
         getCountFromServer(collection(db, 'footages')),
         getCountFromServer(collection(db, 'sources')),
+        getCountFromServer(collection(db, 'categories')),
       ]);
       return {
         totalEpisodes: epCountSnap.data().count,
         totalFootage: ftCountSnap.data().count,
         totalSources: srcCountSnap.data().count,
+        totalCategories: catCountSnap.data().count,
         fetchedAt: new Date().toISOString(),
       };
     } catch (err) {
@@ -515,6 +520,7 @@ export const firestoreService = {
   // ==========================================
   // CRUD OPERATIONS (WITH OFFLINE OUTBOX QUEUE)
   // ==========================================
+  broadcastForceSyncToAllDevices,
   fetchArchiveSummaryStatsOnce: () =>
     fetchArchiveSummaryStatsOnce<ArchiveSummaryStats>(),
   fetchSettingsOnce,

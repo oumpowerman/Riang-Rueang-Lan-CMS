@@ -26,11 +26,20 @@ export const NavbarSyncButton: React.FC<NavbarSyncButtonProps> = ({
   compact = false,
 }) => {
   const { syncHealth, setIsSyncCenterModalOpen } = useCMS();
-  const { status, outbox, drift, isOnline, isQuotaExhausted, lastSyncedAt } =
-    syncHealth;
+  const {
+    status,
+    outbox,
+    drift,
+    isOnline,
+    appVersion,
+    cloudRequiredVersion,
+    isOutdatedVersion,
+    lastSyncedAt,
+  } = syncHealth;
 
   const isSpinning = status === 'syncing';
   const hasAttention =
+    isOutdatedVersion ||
     status === 'drift_detected' ||
     status === 'outbox_pending' ||
     status === 'offline_or_quota';
@@ -39,7 +48,7 @@ export const NavbarSyncButton: React.FC<NavbarSyncButtonProps> = ({
   let label = 'ซิงก์แล้ว';
   let toneClass =
     'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 hover:text-emerald-900 border-emerald-200/90 hover:border-emerald-300';
-  let tooltip = `ข้อมูลในเครื่องตรงกับ Cloud สมบูรณ์ (ซิงก์ล่าสุด ${formatShortTime(
+  let tooltip = `ระบบ v${appVersion} · ข้อมูลในเครื่องตรงกับ Cloud สมบูรณ์ (ซิงก์ล่าสุด ${formatShortTime(
     lastSyncedAt
   )}) — คลิกเพื่อดูศูนย์ซิงก์ข้อมูล`;
 
@@ -47,7 +56,7 @@ export const NavbarSyncButton: React.FC<NavbarSyncButtonProps> = ({
     label = 'กำลังซิงก์...';
     toneClass =
       'bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 hover:text-indigo-800 border-indigo-200/90';
-    tooltip = 'กำลังส่ง/ดึงข้อมูลกับ Cloud...';
+    tooltip = `ระบบ v${appVersion} · กำลังส่ง/ดึงข้อมูลกับ Cloud...`;
   } else if (status === 'offline_or_quota') {
     label = !isOnline ? 'ออฟไลน์' : 'เต็มโควตา';
     toneClass =
@@ -55,6 +64,11 @@ export const NavbarSyncButton: React.FC<NavbarSyncButtonProps> = ({
     tooltip = !isOnline
       ? 'อุปกรณ์กำลังออฟไลน์ — คลิกเพื่อดูสถานะคิวรอส่ง'
       : 'ติดเพดานโควตา Firestore รายวัน — คลิกเพื่อดูรายละเอียดและคิวรอส่ง';
+  } else if (isOutdatedVersion) {
+    label = `อัปเดต v${cloudRequiredVersion}`;
+    toneClass =
+      'bg-amber-50 hover:bg-amber-100/80 text-amber-800 hover:text-amber-900 border-amber-200';
+    tooltip = `เบราว์เซอร์นี้ยังเป็น v${appVersion} (เวอร์ชันล่าสุดคือ v${cloudRequiredVersion}) — คลิกเพื่อล้างแคชและอัปเดตทันที`;
   } else if (status === 'outbox_pending') {
     label = `รอส่ง ${outbox.count}`;
     toneClass =
@@ -81,7 +95,7 @@ export const NavbarSyncButton: React.FC<NavbarSyncButtonProps> = ({
     if (status === 'outbox_pending') {
       return <UploadCloud className={`${sizeClass} shrink-0 text-amber-600`} />;
     }
-    if (status === 'drift_detected') {
+    if (status === 'drift_detected' || isOutdatedVersion) {
       return (
         <AlertTriangle className={`${sizeClass} shrink-0 text-amber-600`} />
       );
@@ -127,6 +141,9 @@ export const NavbarSyncButton: React.FC<NavbarSyncButtonProps> = ({
     >
       {renderIcon('w-4 h-4')}
       <span className="font-medium tracking-tight">{label}</span>
+      <span className="text-[10px] font-mono tabular-nums opacity-70">
+        v{appVersion}
+      </span>
     </button>
   );
 };

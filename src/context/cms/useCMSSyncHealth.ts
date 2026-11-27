@@ -14,6 +14,7 @@ import {
 } from '../../firebase/firestoreService';
 import { cmsRepository } from '../../services/cmsRepository';
 import { syncHistoryService } from '../../services/syncHistoryService';
+import { APP_VERSION, compareAppVersions } from '../../constants/appVersion';
 
 export type SyncHealthStatus =
   | 'synced'
@@ -33,6 +34,9 @@ export interface SyncDriftSummary {
   localSources: number;
   cloudSources: number | null;
   sourceDiff: number;
+  localCategories: number;
+  cloudCategories: number | null;
+  categoryDiff: number;
   totalAbsDiff: number;
 }
 
@@ -52,6 +56,9 @@ export interface SyncHealthState {
   isQuotaExhausted: boolean;
   isManualSyncing: boolean;
   lastSyncedAt: string | null;
+  appVersion: string;
+  cloudRequiredVersion: string | null;
+  isOutdatedVersion: boolean;
   outbox: OutboxQueueSnapshot;
   drift: SyncDriftSummary;
   lastReport: ManualSyncReport | null;
@@ -61,6 +68,7 @@ interface UseCMSSyncHealthParams {
   localFootageCount: number;
   localEpisodesCount: number;
   localSourcesCount: number;
+  localCategoriesCount: number;
   archiveSummaryStats: ArchiveSummaryStats | null;
   serverCounts?: ServerCollectionCounts | null;
   isIdbHydrated: boolean;
@@ -77,6 +85,7 @@ export function useCMSSyncHealth({
   localFootageCount,
   localEpisodesCount,
   localSourcesCount,
+  localCategoriesCount,
   archiveSummaryStats,
   serverCounts,
   isIdbHydrated,
@@ -150,20 +159,33 @@ export function useCMSSyncHealth({
         : typeof archiveSummaryStats?.totalSources === 'number'
         ? archiveSummaryStats.totalSources
         : null;
+    const cloudCategories =
+      typeof serverCounts?.totalCategories === 'number'
+        ? serverCounts.totalCategories
+        : typeof archiveSummaryStats?.totalCategories === 'number'
+        ? archiveSummaryStats.totalCategories
+        : null;
 
     const footageDiff = cloudFootage === null ? 0 : cloudFootage - localFootageCount;
     const episodeDiff = cloudEpisodes === null ? 0 : cloudEpisodes - localEpisodesCount;
     const sourceDiff = cloudSources === null ? 0 : cloudSources - localSourcesCount;
+    const categoryDiff =
+      cloudCategories === null ? 0 : cloudCategories - localCategoriesCount;
     const totalAbsDiff =
-      Math.abs(footageDiff) + Math.abs(episodeDiff) + Math.abs(sourceDiff);
+      Math.abs(footageDiff) +
+      Math.abs(episodeDiff) +
+      Math.abs(sourceDiff) +
+      Math.abs(categoryDiff);
 
     return {
       cloudFootage,
       cloudEpisodes,
       cloudSources,
+      cloudCategories,
       footageDiff,
       episodeDiff,
       sourceDiff,
+      categoryDiff,
       totalAbsDiff,
       hasRawMismatch: totalAbsDiff > 0,
     };
@@ -171,12 +193,15 @@ export function useCMSSyncHealth({
     serverCounts?.totalFootage,
     serverCounts?.totalEpisodes,
     serverCounts?.totalSources,
+    serverCounts?.totalCategories,
     archiveSummaryStats?.totalFootage,
     archiveSummaryStats?.totalEpisodes,
     archiveSummaryStats?.totalSources,
+    archiveSummaryStats?.totalCategories,
     localFootageCount,
     localEpisodesCount,
     localSourcesCount,
+    localCategoriesCount,
   ]);
 
   // 3. Debounce drift alert by 3 seconds & suppress during active mutations/outbox
@@ -224,9 +249,19 @@ export function useCMSSyncHealth({
       localSources: localSourcesCount,
       cloudSources: rawDrift.cloudSources,
       sourceDiff: rawDrift.sourceDiff,
+      localCategories: localCategoriesCount,
+      cloudCategories: rawDrift.cloudCategories,
+      categoryDiff: rawDrift.categoryDiff,
       totalAbsDiff: rawDrift.totalAbsDiff,
     }),
-    [settledDrift, rawDrift, localFootageCount, localEpisodesCount, localSourcesCount]
+    [
+      settledDrift,
+      rawDrift,
+      localFootageCount,
+      localEpisodesCount,
+      localSourcesCount,
+      localCategoriesCount,
+    ]
   );
 
   // 3.6 Log detected conflict or mark resolved in Sync History
@@ -262,6 +297,11 @@ export function useCMSSyncHealth({
     isManualSyncing,
   ]);
 
+  const cloudRequiredVersion = archiveSummaryStats?.minRequiredAppVersion || null;
+  const isOutdatedVersion = Boolean(
+    cloudRequiredVersion && compareAppVersions(APP_VERSION, cloudRequiredVersion) < 0
+  );
+
   const status: SyncHealthStatus = useMemo(() => {
     if (isManualSyncing || outbox.isFlushing || isSeedingToCloud || isClearingClips) {
       return 'syncing';
@@ -272,7 +312,7 @@ export function useCMSSyncHealth({
     if (outbox.count > 0) {
       return 'outbox_pending';
     }
-    if (drift.hasDrift) {
+    if (drift.hasDrift || isOutdatedVersion) {
       return 'drift_detected';
     }
     return 'synced';
@@ -285,6 +325,7 @@ export function useCMSSyncHealth({
     isOnline,
     isQuotaExhausted,
     drift.hasDrift,
+    isOutdatedVersion,
   ]);
 
   const effectiveLastSyncedAt =
@@ -297,6 +338,9 @@ export function useCMSSyncHealth({
       isQuotaExhausted,
       isManualSyncing,
       lastSyncedAt: effectiveLastSyncedAt,
+      appVersion: APP_VERSION,
+      cloudRequiredVersion,
+      isOutdatedVersion,
       outbox,
       drift,
       lastReport,
@@ -307,6 +351,8 @@ export function useCMSSyncHealth({
       isQuotaExhausted,
       isManualSyncing,
       effectiveLastSyncedAt,
+      cloudRequiredVersion,
+      isOutdatedVersion,
       outbox,
       drift,
       lastReport,

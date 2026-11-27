@@ -12,10 +12,7 @@ import {
   updateCachedSyncPulse,
 } from '../../firebase/firestoreService';
 import { cmsRepository } from '../../services/cmsRepository';
-import {
-  idbStorageService,
-  safeLocalStorageSet,
-} from '../../services/idbStorageService';
+import { idbStorageService } from '../../services/idbStorageService';
 import {
   broadcastLocalCollectionsUpdated,
   MultiTabCollectionKey,
@@ -26,15 +23,20 @@ import { Episode } from '../../types/episode.types';
 import { Footage } from '../../types/footage.types';
 import { RawSource } from '../../types/source.types';
 import { CategoryGroup, CategoryTag, SystemSettings } from '../../types/tag.types';
+import { useCMSAdminCloudActions } from './useCMSAdminCloudActions';
 import { useCMSManualSyncActions } from './useCMSManualSyncActions';
 import { useCMSSyncHealth } from './useCMSSyncHealth';
-import { evaluateEpisodeCompleteness } from '../../utils/episodeValidator';
-import { syncHistoryService } from '../../services/syncHistoryService';
+import {
+  APP_SCHEMA_EPOCH,
+  APP_VERSION,
+  compareAppVersions,
+  hardReloadAndPurgeBrowserCaches,
+  VERSION_STORAGE_KEYS,
+} from '../../constants/appVersion';
 
 export function useCMSCloudAndStorageSync(
   setSelectedTagFilter: React.Dispatch<React.SetStateAction<string[]>>
 ) {
-  // Ensure one-time local production check runs before state initialization
   cmsRepository.ensureProductionCleanSlate();
 
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>(() =>
@@ -46,16 +48,12 @@ export function useCMSCloudAndStorageSync(
   const [episodes, setEpisodes] = useState<Episode[]>(() => cmsRepository.getEpisodes());
   const [settings, setSettings] = useState<SystemSettings>(() => cmsRepository.getSettings());
 
-  // Server-Side Counts & Central Summary Document (for instant 10,000+ row totals)
   const [serverCounts, setServerCounts] = useState<ServerCollectionCounts | null>(null);
   const [archiveSummaryStats, setArchiveSummaryStats] =
     useState<ArchiveSummaryStats | null>(null);
 
-  // Cloud Realtime State
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isCloudSynced, setIsCloudSynced] = useState(false);
-  const [isSeedingToCloud, setIsSeedingToCloud] = useState(false);
-  const [isClearingClips, setIsClearingClips] = useState(false);
   const [isIdbHydrated, setIsIdbHydrated] = useState(false);
   const [localMutationVersion, setLocalMutationVersion] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() =>
@@ -66,7 +64,6 @@ export function useCMSCloudAndStorageSync(
   const isApplyingMultiTabRef = useRef<boolean>(false);
   const onIdbHydratedRef = useRef<(() => void) | null>(null);
 
-  // Track IndexedDB hydration and authoritative Cloud snapshot state
   const isIdbHydratedRef = useRef<boolean>(false);
   const hasFullCloudSourcesRef = useRef<boolean>(false);
   const hasFullCloudFootageRef = useRef<boolean>(false);
@@ -78,6 +75,8 @@ export function useCMSCloudAndStorageSync(
   footageCountRef.current = footage.length;
   const sourcesCountRef = useRef<number>(sources.length);
   sourcesCountRef.current = sources.length;
+  const tagsCountRef = useRef<number>(tags.length);
+  tagsCountRef.current = tags.length;
 
   // 1. Zero-Wait Local Hydration from IndexedDB on startup
   useEffect(() => {
@@ -141,25 +140,13 @@ export function useCMSCloudAndStorageSync(
 
       const jobs: Promise<void>[] = [];
       if (cols.has('footage')) {
-        jobs.push(
-          cmsRepository.loadFootageAsync().then((loaded) => {
-            setFootage(loaded);
-          })
-        );
+        jobs.push(cmsRepository.loadFootageAsync().then((loaded) => setFootage(loaded)));
       }
       if (cols.has('episodes')) {
-        jobs.push(
-          cmsRepository.loadEpisodesAsync().then((loaded) => {
-            setEpisodes(loaded);
-          })
-        );
+        jobs.push(cmsRepository.loadEpisodesAsync().then((loaded) => setEpisodes(loaded)));
       }
       if (cols.has('sources')) {
-        jobs.push(
-          cmsRepository.loadSourcesAsync().then((loaded) => {
-            setSources(loaded);
-          })
-        );
+        jobs.push(cmsRepository.loadSourcesAsync().then((loaded) => setSources(loaded)));
       }
       if (cols.has('tags')) {
         setTags(cmsRepository.getTags());
@@ -186,9 +173,8 @@ export function useCMSCloudAndStorageSync(
     };
   }, []);
 
-  // 2. Authoritative Firestore Realtime Subscriptions + Progressive First-Window Loader
+  // 2. Authoritative Firestore Realtime Subscriptions + Smart Schema & Count Reconciliation
   useEffect(() => {
-    // Fetch instant server collection counts via getCountFromServer()
     firestoreService
       .fetchServerCollectionCounts()
       .then((counts) => {
@@ -207,8 +193,6 @@ export function useCMSCloudAndStorageSync(
       console.warn(`Firestore ${sourceName} subscription note:`, err?.message || err);
     };
 
-    // Immediately record our own emitted pulse timestamp so our tab ignores its own echo
-    // and marks that THIS device made a real mutation eligible to refresh archive_summary_stats KPIs.
     const unsubPulseEmitted = registerOnPulseEmitted((mutationIso) => {
       cmsRepository.setLastCloudSyncTimestamp(mutationIso);
       setLastSyncedAt(mutationIso);
@@ -222,7 +206,6 @@ export function useCMSCloudAndStorageSync(
     ): boolean => {
       const versions = cloudSummary.collectionVersions;
       if (!versions || Object.keys(versions).length === 0) {
-        // Legacy summary document without per-collection versions -> check all 5 collections safely
         return true;
       }
       const colVersion = versions[col];
@@ -230,7 +213,6 @@ export function useCMSCloudAndStorageSync(
     };
 
     const performSmartSync = async (cloudSummary: ArchiveSummaryStats) => {
-      // Wait for IndexedDB hydration before deciding whether this machine has local cache
       if (
         !isIdbHydratedRef.current ||
         isWipingCloudRef.current ||
@@ -246,23 +228,71 @@ export function useCMSCloudAndStorageSync(
       isDeltaSyncing = true;
 
       try {
+        // 0a. Automatic Minimum App Version Enforcement across Chrome / Edge / Mobile:
+        // If Cloud requires a newer version than this tab's loaded JS bundle, purge SW/caches & hard-reload once.
+        if (
+          cloudSummary.minRequiredAppVersion &&
+          compareAppVersions(APP_VERSION, cloudSummary.minRequiredAppVersion) < 0
+        ) {
+          const lastReloadedFor =
+            typeof window !== 'undefined'
+              ? localStorage.getItem(VERSION_STORAGE_KEYS.LAST_HARD_RELOAD_VERSION)
+              : null;
+          if (lastReloadedFor !== cloudSummary.minRequiredAppVersion) {
+            void hardReloadAndPurgeBrowserCaches(cloudSummary.minRequiredAppVersion);
+            return;
+          }
+        }
+
         const localSyncTs = cmsRepository.getLastCloudSyncTimestamp();
         const hasLocalFootage = footageCountRef.current > 0;
         const hasLocalEpisodes = episodesCountRef.current > 0;
         const isFreshMachine = !hasLocalFootage && !hasLocalEpisodes;
         const cloudMutationTs = cloudSummary.lastMutationAt || cloudSummary.updatedAt;
 
-        // Populate serverCounts directly from the summary stats (zero extra getCountFromServer reads)
-        setServerCounts({
+        setServerCounts((prev) => ({
           totalEpisodes: cloudSummary.totalEpisodes,
           totalFootage: cloudSummary.totalFootage,
           totalSources: cloudSummary.totalSources,
+          totalCategories:
+            typeof cloudSummary.totalCategories === 'number'
+              ? cloudSummary.totalCategories
+              : prev?.totalCategories,
           fetchedAt: cloudSummary.updatedAt || new Date().toISOString(),
-        });
+        }));
 
-        // 0. Self-echo guard: this pulse originated from THIS exact browser tab -> 0 reads!
-        if (
+        // Check schema epoch, remote force-sync broadcast, and count mismatch (even when localSyncTs exists!)
+        const needsSchemaUpgrade =
+          cmsRepository.getLocalSchemaEpoch() !== APP_SCHEMA_EPOCH;
+        const hasRemoteForceSync = Boolean(
+          cloudSummary.forceFullSyncEpoch &&
+            cloudSummary.forceFullSyncEpoch !== cmsRepository.getLocalForceSyncEpoch()
+        );
+        const hasCountMismatch =
           !isFreshMachine &&
+          ((typeof cloudSummary.totalFootage === 'number' &&
+            footageCountRef.current !== cloudSummary.totalFootage) ||
+            (typeof cloudSummary.totalEpisodes === 'number' &&
+              episodesCountRef.current !== cloudSummary.totalEpisodes) ||
+            (typeof cloudSummary.totalSources === 'number' &&
+              sourcesCountRef.current !== cloudSummary.totalSources) ||
+            (typeof cloudSummary.totalCategories === 'number' &&
+              tagsCountRef.current !== cloudSummary.totalCategories));
+
+        const isAdminSeedMutation =
+          cloudSummary.lastMutationType === 'admin:seed' ||
+          cloudSummary.lastMutationType === 'admin:force_sync';
+
+        const requiresAuthoritativeFullPull =
+          isFreshMachine ||
+          needsSchemaUpgrade ||
+          hasRemoteForceSync ||
+          hasCountMismatch ||
+          isAdminSeedMutation;
+
+        // 0b. Self-echo guard: only skip if local counts & schema epoch are already 100% in sync
+        if (
+          !requiresAuthoritativeFullPull &&
           cloudSummary.lastMutationBy === CLIENT_INSTANCE_ID &&
           cloudMutationTs
         ) {
@@ -275,9 +305,9 @@ export function useCMSCloudAndStorageSync(
           return;
         }
 
-        // 1. Exact timestamp match and local cache has data -> 0 collection reads!
+        // 1. Exact timestamp match AND no count/schema mismatch -> 0 collection reads!
         if (
-          !isFreshMachine &&
+          !requiresAuthoritativeFullPull &&
           localSyncTs &&
           cloudMutationTs &&
           localSyncTs >= cloudMutationTs
@@ -290,24 +320,9 @@ export function useCMSCloudAndStorageSync(
           return;
         }
 
-        // 2. Legacy device upgrade check: if local cache exists WITHOUT localSyncTs (e.g. upgrading
-        // from an older Vercel build), NEVER blindly skip syncing!
-        // If local totals differ from Cloud totals -> run authoritative full pull once.
-        // If totals match -> fall through to a safe 24-hour delta pull to catch recent edits.
-        const legacyCountMismatch =
-          !isFreshMachine &&
-          !localSyncTs &&
-          ((typeof cloudSummary.totalFootage === 'number' &&
-            footageCountRef.current !== cloudSummary.totalFootage) ||
-            (typeof cloudSummary.totalEpisodes === 'number' &&
-              episodesCountRef.current !== cloudSummary.totalEpisodes) ||
-            (typeof cloudSummary.totalSources === 'number' &&
-              sourcesCountRef.current !== cloudSummary.totalSources));
-
-        const isAdminSeedMutation = cloudSummary.lastMutationType === 'admin:seed';
-
-        // 3. Cold brand-new machine OR legacy cache with count mismatch OR remote admin master seed -> Full authoritative fetch across all 5 collections
-        if (isFreshMachine || legacyCountMismatch || isAdminSeedMutation) {
+        // 2. Authoritative Full Pull across all 5 collections whenever machine is fresh,
+        // upgraded to a new APP_SCHEMA_EPOCH, received a remote Force-Sync signal, or has ANY count mismatch!
+        if (requiresAuthoritativeFullPull) {
           const [allFootages, allEpisodes, allSources, allCats, allGroups] =
             await Promise.all([
               firestoreService.fetchFootagesDelta(),
@@ -317,35 +332,59 @@ export function useCMSCloudAndStorageSync(
               firestoreService.fetchCategoryGroupsDelta(),
             ]);
 
-          if (allFootages.length > 0 || legacyCountMismatch || isAdminSeedMutation) {
+          const shouldReplaceEvenIfEmpty =
+            hasCountMismatch ||
+            needsSchemaUpgrade ||
+            hasRemoteForceSync ||
+            isAdminSeedMutation;
+
+          if (allFootages.length > 0 || shouldReplaceEvenIfEmpty) {
+            footageCountRef.current = allFootages.length;
             setFootage(allFootages);
-            cmsRepository.saveFootage(allFootages);
+            void idbStorageService.saveFootage(allFootages, true);
             hasFullCloudFootageRef.current = true;
           }
-          if (allEpisodes.length > 0 || legacyCountMismatch || isAdminSeedMutation) {
+          if (allEpisodes.length > 0 || shouldReplaceEvenIfEmpty) {
+            episodesCountRef.current = allEpisodes.length;
             setEpisodes(allEpisodes);
-            cmsRepository.saveEpisodes(allEpisodes);
+            void idbStorageService.saveEpisodes(allEpisodes, true);
             hasFullCloudEpisodesRef.current = true;
           }
-          if (allSources.length > 0 || legacyCountMismatch || isAdminSeedMutation) {
+          if (allSources.length > 0 || shouldReplaceEvenIfEmpty) {
+            sourcesCountRef.current = allSources.length;
             setSources(allSources);
-            cmsRepository.saveSources(allSources);
+            void idbStorageService.saveSources(allSources, true);
             hasFullCloudSourcesRef.current = true;
           }
-          if (allCats.length > 0 || isAdminSeedMutation) {
-            const normalizedCats = cmsRepository.normalizeAndRepairTags(
-              allCats,
-              allCats.length <= 1
-            );
+          if (allCats.length > 0 || shouldReplaceEvenIfEmpty) {
+            // Purge stale browser-local deleted tag/group tombstones so Chrome & Edge always converge 1:1
+            cmsRepository.clearDeletedTagIds();
+            cmsRepository.clearDeletedGroupIds();
+            if (allCats.length > 0) {
+              cmsRepository.setCategoriesWiped(false);
+            }
+            const normalizedCats =
+              allCats.length > 0
+                ? cmsRepository.normalizeAndRepairTags(allCats, allCats.length <= 1)
+                : [];
+            tagsCountRef.current = normalizedCats.length;
             setTags(normalizedCats);
             cmsRepository.saveTags(normalizedCats);
           }
-          if (allGroups.length > 0 || isAdminSeedMutation) {
-            setCategoryGroups(allGroups);
-            cmsRepository.saveCategoryGroups(allGroups);
+          if (allGroups.length > 0 || shouldReplaceEvenIfEmpty) {
+            const sortedGroups = [...allGroups].sort(
+              (a, b) => (a.order ?? 99) - (b.order ?? 99)
+            );
+            setCategoryGroups(sortedGroups);
+            cmsRepository.saveCategoryGroups(sortedGroups);
           }
+
           const resolvedTs = cloudMutationTs || new Date().toISOString();
           cmsRepository.setLastCloudSyncTimestamp(resolvedTs);
+          cmsRepository.setLocalSchemaEpoch(APP_SCHEMA_EPOCH);
+          if (cloudSummary.forceFullSyncEpoch) {
+            cmsRepository.setLocalForceSyncEpoch(cloudSummary.forceFullSyncEpoch);
+          }
           setLastSyncedAt(resolvedTs);
           setIsCloudConnected(true);
           setIsCloudSynced(true);
@@ -625,6 +664,7 @@ export function useCMSCloudAndStorageSync(
     setLastReport,
     manualDeltaRefresh,
     manualFullPullFromCloud,
+    broadcastForceSyncAll,
   } = useCMSManualSyncActions({
     setCategoryGroups,
     setTags,
@@ -642,10 +682,41 @@ export function useCMSCloudAndStorageSync(
     hasFullCloudSourcesRef,
   });
 
+  const {
+    isSeedingToCloud,
+    isClearingClips,
+    seedToCloud,
+    clearAllClips,
+    resetDemoData,
+  } = useCMSAdminCloudActions({
+    tags,
+    footage,
+    episodes,
+    settings,
+    categoryGroups,
+    sources,
+    setSources,
+    setFootage,
+    setEpisodes,
+    setSettings,
+    setSelectedTagFilter,
+    setServerCounts,
+    setArchiveSummaryStats,
+    setLastSyncedAt,
+    setLocalMutationVersion,
+    setIsCloudSynced,
+    setLastReport,
+    hasFullCloudEpisodesRef,
+    hasFullCloudFootageRef,
+    hasFullCloudSourcesRef,
+    isWipingCloudRef,
+  });
+
   const { syncHealth, flushOutboxNow, clearOutboxNow } = useCMSSyncHealth({
     localFootageCount: footage.length,
     localEpisodesCount: episodes.length,
     localSourcesCount: sources.length,
+    localCategoriesCount: tags.length,
     archiveSummaryStats,
     serverCounts,
     isIdbHydrated,
@@ -655,111 +726,6 @@ export function useCMSCloudAndStorageSync(
     lastSyncedAt,
     lastReport,
   });
-
-  const seedToCloud = async () => {
-    setIsSeedingToCloud(true);
-    try {
-      const seedResult = await firestoreService.seedInitialDatabase(
-        tags,
-        footage,
-        episodes,
-        settings,
-        categoryGroups,
-        sources
-      );
-      const nowIso = new Date().toISOString();
-      cmsRepository.setLastCloudSyncTimestamp(nowIso);
-      setLastSyncedAt(nowIso);
-      setLocalMutationVersion((v) => v + 1);
-      setIsCloudSynced(true);
-
-      hasFullCloudEpisodesRef.current = true;
-      hasFullCloudFootageRef.current = true;
-      hasFullCloudSourcesRef.current = true;
-
-      setServerCounts({
-        totalFootage: footage.length,
-        totalEpisodes: episodes.length,
-        totalSources: sources.length,
-        fetchedAt: nowIso,
-      });
-
-      let completeEpisodesCount = 0;
-      let incompleteEpisodesCount = 0;
-      let incompleteFootageEpisodesCount = 0;
-      for (const ep of episodes) {
-        const comp = evaluateEpisodeCompleteness(ep);
-        if (comp.isComplete) completeEpisodesCount++;
-        else incompleteEpisodesCount++;
-        if (!comp.hasFullFiveSlots) incompleteFootageEpisodesCount++;
-      }
-
-      const updatedSummary: ArchiveSummaryStats = {
-        totalEpisodes: episodes.length,
-        completeEpisodesCount,
-        incompleteEpisodesCount,
-        incompleteFootageEpisodesCount,
-        distinctSeriesCount: 0,
-        totalFootage: footage.length,
-        usedFootageCount: 0,
-        readyFootageCount: footage.length,
-        newFootageCount: footage.length,
-        coolingFootageCount: 0,
-        untaggedFootageCount: footage.filter((f) => !f.tags || f.tags.length === 0).length,
-        missingDriveCount: footage.filter((f) => !f.driveFileUrl).length,
-        totalSources: sources.length,
-        updatedAt: nowIso,
-        lastMutationAt: nowIso,
-        lastMutationBy: CLIENT_INSTANCE_ID,
-        lastMutationType: 'admin:seed',
-      };
-      setArchiveSummaryStats(updatedSummary);
-      void idbStorageService.setMeta('archive_summary_stats', updatedSummary);
-
-      setLastReport({
-        mode: 'push_seed',
-        upsertedCount:
-          seedResult?.upsertedCount ??
-          footage.length + episodes.length + sources.length + tags.length + categoryGroups.length,
-        deletedCount: seedResult?.deletedCount ?? 0,
-        syncedAt: nowIso,
-        ok: true,
-        message:
-          (seedResult?.deletedCount ?? 0) > 0
-            ? `สำรองข้อมูลขึ้น Cloud สำเร็จ (ตรงกับเครื่องนี้ 100% ลบข้อมูลเก่าส่วนเกินบน Cloud ไป ${seedResult.deletedCount} รายการ)`
-            : 'สำรองข้อมูลขึ้น Cloud สำเร็จ (ตรงกับเครื่องนี้ 100%)',
-      });
-
-      syncHistoryService.recordSyncSuccess({
-        timestamp: nowIso,
-        type: 'push_seed',
-        label: 'Master Push (สำรองขึ้น Cloud)',
-        upsertedCount:
-          seedResult?.upsertedCount ??
-          footage.length + episodes.length + sources.length + tags.length + categoryGroups.length,
-        deletedCount: seedResult?.deletedCount ?? 0,
-        message:
-          (seedResult?.deletedCount ?? 0) > 0
-            ? `สำรองข้อมูลขึ้น Cloud สำเร็จ (ลบข้อมูลส่วนเกินบน Cloud ${seedResult.deletedCount} รายการ)`
-            : 'สำรองข้อมูลเครื่องหลักขึ้น Cloud สำเร็จ ตรงกัน 100%',
-      });
-      syncHistoryService.resolveActiveConflicts('สำรองข้อมูลเครื่องนี้เป็นหลักขึ้น Cloud เรียบร้อยแล้ว');
-    } catch (err) {
-      console.error('Manual cloud sync error:', err);
-      const msg = err instanceof Error ? err.message : String(err || '');
-      setLastReport({
-        mode: 'push_seed',
-        upsertedCount: 0,
-        deletedCount: 0,
-        syncedAt: new Date().toISOString(),
-        ok: false,
-        message: `อัปโหลดข้อมูลขึ้น Cloud ไม่สำเร็จ (${msg.slice(0, 100)})`,
-        error: msg,
-      });
-    } finally {
-      setIsSeedingToCloud(false);
-    }
-  };
 
   useEffect(() => {
     if (isApplyingMultiTabRef.current) return;
@@ -809,58 +775,6 @@ export function useCMSCloudAndStorageSync(
     broadcastLocalCollectionsUpdated(['settings']);
   }, [settings]);
 
-  const clearAllClips = async () => {
-    setIsClearingClips(true);
-    isWipingCloudRef.current = true;
-    try {
-      cmsRepository.clearAllClips();
-      setSources([]);
-      setFootage([]);
-      setEpisodes([]);
-      setSelectedTagFilter([]);
-      setServerCounts({
-        totalEpisodes: 0,
-        totalFootage: 0,
-        totalSources: 0,
-        fetchedAt: new Date().toISOString(),
-      });
-
-      // Also reset sync timestamps on savedDriveFolders while keeping folder URLs & names intact
-      setSettings((prev) => {
-        const cleanedFolders = (prev.savedDriveFolders || []).map((f) => ({
-          ...f,
-          lastSyncTimestamp: undefined,
-          totalClipsInFolder: 0,
-        }));
-        const nextSettings = {
-          ...prev,
-          savedDriveFolders: cleanedFolders,
-        };
-        safeLocalStorageSet(
-          'rrl_drive_saved_folders_v1',
-          JSON.stringify(cleanedFolders)
-        );
-        firestoreService.saveSettings(nextSettings).catch(() => {});
-        return nextSettings;
-      });
-
-      await firestoreService.clearAllClipsFromCloud();
-      cmsRepository.markCloudClipsWiped();
-      setLocalMutationVersion((v) => v + 1);
-      setIsCloudSynced(true);
-      broadcastLocalCollectionsUpdated(['footage', 'episodes', 'sources', 'settings']);
-    } catch (err) {
-      console.warn('Firestore clearAllClips error:', err);
-    } finally {
-      isWipingCloudRef.current = false;
-      setIsClearingClips(false);
-    }
-  };
-
-  const resetDemoData = () => {
-    void clearAllClips();
-  };
-
   return {
     categoryGroups,
     setCategoryGroups,
@@ -890,6 +804,7 @@ export function useCMSCloudAndStorageSync(
     syncHealth,
     manualDeltaRefresh,
     manualFullPullFromCloud,
+    broadcastForceSyncAll,
     flushOutboxNow,
     clearOutboxNow,
   };
